@@ -1,0 +1,9 @@
+{
+  "allowed_fonts": ["Montserrat", "SourceSans3", "SourceSansPro"],
+  "safe_zone_mm": 10,
+  "error_ppi": 150,
+  "warning_ppi": 300,
+  "free_space_fraction": 0.25,
+  "distortion_tolerance": 0.02,
+  "page_size_pt": [595.28, 841.89]
+}
