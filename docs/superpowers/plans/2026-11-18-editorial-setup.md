@@ -55,9 +55,9 @@
 
 ## Ondas
 Ordem obrigatória da instrução da Paula: Editor-Chefe, Diagramador, Editor Científico, Auditor Científico, Auditor Gráfico.
-- Onda 1 primeiro (1.1, 1.2, 1.3, depois os manuais 1.4 e 1.5).
 - Onda 2 pode começar junto com o 1.2 (só código de PDF e o teste do ChatGPT, sem papel novo).
-- Onda 3 só depois do 1.4 (ensaio do Editor-Chefe aprovado) e do 1.5 (apresentação à Paula). O 2.4 (teste no ChatGPT, com a Paula) não trava a onda 3: o Diagramador roda localmente, e o resultado do 2.4 entra no 3.5 e na onda 6. Dentro da onda 3, a ordem é a dos números.
+- Onda 1: 1.1, 1.2, 1.3 e 1.6, depois o manual 1.4. O 1.5 (apresentação à Paula) não trava mais a construção: em 18/11/2026 o Alify pediu para construir tudo e vai mandar o repositório à Paula, com a spec (seção 13) junto.
+- Onda 3 só depois do 1.4 (ensaio do Editor-Chefe aprovado). O 2.4 (teste no ChatGPT, com a Paula) não trava a onda 3: o Diagramador roda localmente, e o resultado do 2.4 entra no 3.5 e na onda 6. Dentro da onda 3, a ordem é a dos números.
 - Ondas 4, 5 e 6 na ordem.
 
 ### Onda 1: base e Editor-Chefe
@@ -95,11 +95,27 @@ Critérios de aceite:
 - `SKILL.md`: missão, quando acionar, entradas, processo numerado (ler a ficha, identificar a fase concluída e a próxima, delegar com pedido estruturado, receber o bloco de retorno, aplicar o portão, atualizar a ficha, preparar o pacote para a pessoa), limites e retorno; menos de 500 linhas.
 - Portão: passa com 90 ou mais e nenhum eliminatório; nota dada por quem não produziu; até 3 voltas; na terceira reprovação entrega o melhor resultado, a nota de cada volta e as pendências; nota da fase 3 marcada "provisória: manual ausente" enquanto `diagramador/references/manual-clinic.md` disser "aguardando o manual".
 - No chat sem subagente: roda os papéis em sequência e manda a auditoria científica para conversa nova, montando o "pacote de auditoria".
+- Tabela de gatilhos no `SKILL.md` (pedido do Alify em 18/11/2026: "todos os agentes precisam se chamar nas suas devidas atividades"): para cada evento, quem é acionado. Material do Board recebido → `editor-cientifico`; manuscrito entregue → `auditor-cientifico`; nota da fase 1 de 90 ou mais → pacote para o João; aprovação do João registrada → `diagramador`; PDF composto → `auditor-grafico`; espaço livre acima do limite → `imagens`, depois `diagramador` para inserir; nota da fase 3 e 4 de 90 ou mais → pacote para a Paula; reprovação → volta a quem produziu; terceira reprovação → pessoa. Os papéis nunca se chamam entre si: todo retorno volta ao Editor-Chefe, que aciona o próximo.
+- No Claude Code e no Codex o Editor-Chefe roda na conversa principal (`/editor-chefe`), porque subagente não abre subagente; os demais papéis rodam como subagentes.
 - `references/fluxo.md` (tabela 6.1 da spec), `references/ficha-projeto.md` (todos os campos da seção 7, custos inclusive), `references/rubricas/fase-1-ampliacao.md` e `references/rubricas/fase-3-4-diagramacao.md` (pesos e eliminatórios da seção 6.2).
 - `agents/editorial/editor-chefe.md` no molde da casa: `name`, `description`, `tools`, `model: opus`, `effort: medium`, `maxTurns: 60`, `skills: [editor-chefe]`; corpo curto que manda seguir a skill.
 - `tests/cenarios/editor-chefe.md`: roteiro do critério 2 da spec, para o cartão 1.4.
 - `package.py --sync` rodado.
 Verificação: uv run --locked python scripts/package.py --check && grep -q "90" skills/editor-chefe/SKILL.md && test -s skills/editor-chefe/references/rubricas/fase-3-4-diagramacao.md
+
+#### Cartão 1.6: Hooks do plugin do Claude Code
+Função: backend
+Objetivo: travas automáticas do time no Claude Code e no Cowork, pedidas pelo Alify em 18/11/2026 ("com os respectivos hooks").
+Arquivos permitidos: hooks/hooks.json, hooks/editorial_guard.py, hooks/subagent_return.py, tests/test_hooks.py
+Critérios de aceite:
+- `hooks/hooks.json` no formato de hooks de plugin do Claude Code, com três ganchos, todos em Python só com a biblioteca padrão:
+  - `PreToolUse` em `Write`, `Edit` e `MultiEdit` (`editorial_guard.py`): nega escrita dentro de `originais/` de um projeto e em arquivo listado como versão aprovada na `ficha.md` do projeto (linha `aprovado:` com o caminho), com a mensagem em português "versão aprovada não muda; gere uma versão nova";
+  - `SubagentStop` (`subagent_return.py`): quando o subagente é um dos cinco papéis do time, confere que a última mensagem tem o bloco de `retorno.md` (linha `Status:` com um dos quatro valores); sem o bloco, pede uma vez para o papel devolver o bloco, e na segunda deixa passar com aviso, para nunca prender o agente;
+  - `Stop` (`subagent_return.py --stop`): na conversa do Editor-Chefe, lembra de entregar a ficha atualizada quando houve fase concluída sem atualização da ficha.
+- Os hooks falham abertos: erro de leitura ou de JSON deixa passar e escreve o aviso no stderr.
+- Testes, com o JSON de entrada de cada evento simulado: `test_guard_blocks_originais`, `test_guard_blocks_approved_version`, `test_guard_allows_new_version`, `test_return_missing_asks_once`, `test_return_present_passes`, `test_hook_fails_open_on_bad_json`.
+- No ChatGPT e no claude.ai não há hook: as mesmas regras ficam no texto das skills (tabela de gatilhos do Editor-Chefe e limites de cada papel).
+Verificação: uv run --locked pytest tests/test_hooks.py -q
 
 #### Cartão 1.4 (manual, sessão de execução): Ensaio do Editor-Chefe
 Objetivo: provar o critério 2 da spec (critério de aceite da fase 1 da instrução da Paula) no Claude Code, com o plugin carregado do checkout.
@@ -320,5 +336,5 @@ Critérios de aceite: `docs/medicoes/2026-11-instalacao.md` com plataforma, plan
 ## Status
 - Feito: spec (forma A, aprovada pelo Alify em 18/11/2026); pesquisa de plataformas e de diagramação; repositório `clinic-cursos/editorial-setup` criado (privado); issue CLI-514; PR #1 com fontes, pesquisa, spec e plano; revisão final de 18/11 com os achados aplicados.
 - Em andamento: nada.
-- Travado: 1.5 (apresentação à Paula) espera o Alify; 2.4 e 6.3 esperam a Paula, sem travar a construção; 3.6 espera o Alify; o manual de diagramação (a Paula manda depois) e o design system dos documentos (Alify, Paula e Julie) ainda não existem: o 3.5 nasce com o lugar do manual e o 3.1 com os valores visuais em `tokens.css`, e cada um vira um cartão novo quando chegar; a onda 3 espera 1.4 e 1.5.
-- Próximo passo: sessão de execução (Sonnet, skill `start`, "executa o plano docs/superpowers/plans/2026-11-18-editorial-setup.md") com os cartões 1.1, 1.2, 1.3 e a onda 2; o Alify apresenta a seção 13 da spec à Paula (1.5), e a Paula roda o teste do ChatGPT (2.4) quando puder, depois do 2.3.
+- Travado: 1.5 (apresentação à Paula) fica com o Alify, junto com o envio do repositório, sem travar a construção; 2.4 e 6.3 esperam a Paula, sem travar a construção; 3.6 espera o Alify; o manual de diagramação (a Paula manda depois) e o design system dos documentos (Alify, Paula e Julie) ainda não existem: o 3.5 nasce com o lugar do manual e o 3.1 com os valores visuais em `tokens.css`, e cada um vira um cartão novo quando chegar; a onda 3 espera 1.4 e 1.5.
+- Próximo passo: execução nesta sessão, a pedido do Alify em 18/11/2026 ("faça tudo aí pra eu poder mandar o repositório pra Paula"), por ondas, com uma branch por onda (`feat/wave-N`) e um PR por onda; o Alify apresenta a seção 13 da spec à Paula (1.5), e a Paula roda o teste do ChatGPT (2.4) quando puder, depois do 2.3.
