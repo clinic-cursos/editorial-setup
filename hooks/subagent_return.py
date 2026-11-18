@@ -23,7 +23,7 @@ def block(reason):
 def subagent(data):
     text = data.get("last_assistant_message") or ""
     fields = ["Arquivos entregues:", "Pendências:"] + (["Nota:", "Achados:"] if role(data) in AUDITORS else [])
-    if role(data) not in ROLES or (STATUS.search(text) and all(f in text for f in fields)):
+    if role(data) not in ROLES or (STATUS.search(text) and all(re.search(rf"^[ \t\-*]*{f}", text, re.M) for f in fields)):
         return
     if data.get("stop_hook_active"):
         print("subagent_return: aviso, o papel seguiu sem o bloco de retorno; liberado", file=sys.stderr)

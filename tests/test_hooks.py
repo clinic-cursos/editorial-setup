@@ -137,3 +137,10 @@ def test_stop_passes_when_ficha_written(tmp_path):
     older = tmp_path / "o.jsonl"
     older.write_text(t.read_text(encoding="utf-8") + json.dumps({"type": "user", "message": {"content": "continue"}}) + "\n", encoding="utf-8")
     assert decision(run("subagent_return.py", stop_input(older, "A fase 3 está concluída."), "--stop"))["decision"] == "block"
+
+
+def test_field_names_inside_sentence_do_not_count():
+    text = "Status: PRONTO\nO campo Arquivos entregues: ficou fora e a seção Pendências: também.\n"
+    assert decision(run("subagent_return.py", msg(text)))["decision"] == "block"
+    ok = "Status: PRONTO\n  - Arquivos entregues:\n- a\n* Pendências:\n- Nenhuma.\n"
+    assert decision(run("subagent_return.py", msg(ok))) == {}
