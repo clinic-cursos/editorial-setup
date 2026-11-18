@@ -127,3 +127,17 @@ def near_overlap_pdf(tmp_path):
     c.drawString(80, 699.5, "Bloco de baixo")
     c.save()
     return p
+
+
+@pytest.fixture
+def duplicate_under_titles_pdf(tmp_path):
+    p = tmp_path / "dup_titles.pdf"
+    c = _make(p)
+    for title in ("Titulo da primeira secao", "Outro titulo bem diferente"):
+        c.setFont("Helvetica", 12)
+        c.drawString(60, 720, title)
+        c.drawString(60, 706, "Este paragrafo de duas linhas aparece igual sob dois titulos distintos")
+        c.drawString(60, 692, "e nenhum revisor deveria deixar a repeticao passar em silencio.")
+        c.showPage()
+    c.save()
+    return p

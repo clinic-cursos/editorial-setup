@@ -73,3 +73,8 @@ def test_near_coincident_lines_overlap(near_overlap_pdf, open_pdf, test_rules):
 def test_similar_family_name_not_allowed():
     found = checks.check_fonts(_fake_pdf("MontserratAlternates-Regular"), load_rules())
     assert [f.kind for f in found] == ["font-not-allowed"]
+
+
+def test_duplicate_paragraph_under_different_titles(duplicate_under_titles_pdf, open_pdf, test_rules):
+    found = checks.check_duplicates(open_pdf(duplicate_under_titles_pdf), test_rules)
+    assert [(f.kind, f.page) for f in found] == [("duplicate-paragraph", 2)]

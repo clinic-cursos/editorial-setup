@@ -64,32 +64,19 @@ def check_safe_zone(pdf, rules: Rules) -> list[Finding]:
     return out
 
 
-def _paragraphs(page) -> list[str]:
-    paragraphs, current, prev = [], [], None
-    for line in _lines(page):
-        if prev is not None and line["top"] - prev["bottom"] > 0.5 * (prev["bottom"] - prev["top"]):
-            paragraphs.append(" ".join(current))
-            current = []
-        current.append(line["text"])
-        prev = line
-    if current:
-        paragraphs.append(" ".join(current))
-    return [" ".join(p.split()).casefold() for p in paragraphs]
-
-
 def check_duplicates(pdf, rules: Rules) -> list[Finding]:
-    seen: dict[str, int] = {}
+    # Janela deslizante de _MIN_PARAGRAPH caracteres do texto normalizado da página: acha o
+    # trecho repetido mesmo quando título ou entrelinha diferentes mudam o agrupamento em parágrafos.
+    seen: dict[int, int] = {}
     out = []
     for page in pdf.pages:
-        for p in _paragraphs(page):
-            if len(p) < _MIN_PARAGRAPH:
-                continue
-            if p in seen:
-                out.append(
-                    Finding(page.page_number, "duplicate-paragraph", "error", f"parágrafo repetido da página {seen[p]}: «{p[:50]}...»")
-                )
-            else:
-                seen[p] = page.page_number
+        text = " ".join(" ".join(l["text"] for l in _lines(page)).split()).casefold()
+        hashes = [hash(text[i : i + _MIN_PARAGRAPH]) for i in range(len(text) - _MIN_PARAGRAPH + 1)]
+        sources = {seen[h] for h in hashes if h in seen and seen[h] < page.page_number}
+        for src in sorted(sources):
+            out.append(Finding(page.page_number, "duplicate-paragraph", "error", f"trecho de {_MIN_PARAGRAPH}+ caracteres repetido da página {src}"))
+        for h in hashes:
+            seen.setdefault(h, page.page_number)
     return out
 
 
