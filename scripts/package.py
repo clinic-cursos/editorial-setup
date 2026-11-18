@@ -25,7 +25,7 @@ def parse_frontmatter(text: str) -> dict[str, str] | None:
         m = re.match(r"^([A-Za-z_-]+):\s*(.*)$", line)
         if m and not line.startswith(" "):
             key, val = m.group(1), m.group(2).strip()
-            if val.startswith("#") or val in (">", "|", ">-", "|-"):
+            if val.startswith("#") or val in (">", "|", ">-", "|-", "null", "Null", "NULL", "~", '""', "''"):
                 val = ""
             data[key] = val.strip("\"'")
         elif key and line.strip() and not line.strip().startswith("#"):

@@ -125,3 +125,12 @@ def test_folder_without_skill_md_warns(tmp_path):
     errs, warns = run(tmp_path)
     assert errs == [] and len(warns) == 1
     assert package.main(["--check"], root=tmp_path) == 0
+
+
+def test_null_description_fails(tmp_path):
+    for i, val in enumerate(("null", "~", '""', "''")):
+        make_skill(tmp_path, name=f"s{i}", desc=val)
+    errs, _ = run(tmp_path)
+    assert len([e for e in errs if "description" in e]) == 4
+    make_skill(tmp_path, name="outra", md_name="null")
+    assert any("name" in e for e in run(tmp_path)[0])
