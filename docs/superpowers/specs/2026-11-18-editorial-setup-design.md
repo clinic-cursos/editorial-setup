@@ -39,7 +39,7 @@ Anti-objetivos (falha mesmo que "funcione"):
 - Custo: R$ 0 além das assinaturas que a Clinic já tem. Imagem pela geração nativa do ChatGPT ou do Codex, dentro do plano. API de imagem só na VPS, com preço e ok do Alify (GPT-Image-2: US$ 0,005 a 0,165 por imagem 1024×1536, `stack-platforms.md`, A6).
 - Formato: padrão aberto Agent Skills. `name` com 1 a 64 caracteres em minúsculas, números e hífen, sem `claude` nem `anthropic`; `description` até 1.024 caracteres; `SKILL.md` abaixo de 500 linhas; pastas `references/`, `scripts/`, `assets/` (`stack-platforms.md`, A5).
 - Plugin distribuído pela organização no Claude não pode ter pasta `bin/` no topo (`stack-platforms.md`, A4).
-- Scripts em Python, com bibliotecas de licença permissiva: pdfplumber (MIT), pypdf, ReportLab (BSD), WeasyPrint (BSD-3). PyMuPDF fica fora, por ser AGPL e pesar na versão da VPS (`stack-layout.md`, B2).
+- Scripts em Python, com bibliotecas de licença permissiva: pdfplumber (MIT), pypdf, WeasyPrint (BSD-3) e python-docx (MIT); ReportLab (BSD) só nos testes, para gerar PDFs sintéticos. PyMuPDF fica fora, por ser AGPL e pesar na versão da VPS (`stack-layout.md`, B2).
 - Normas: citar a regra e o número da norma, nunca copiar o texto da ABNT (direitos reservados, `stack-layout.md`, B3).
 - Idioma: skills, regras e documentação em português; código dos scripts, nomes de função e mensagens de commit em inglês. Nomes das skills e dos agentes em português sem acento (`editor-chefe`), porque são o vocabulário da equipe e aparecem na tela da Paula (decisão desta sessão).
 
@@ -53,7 +53,7 @@ Anti-objetivos (falha mesmo que "funcione"):
 O Projeto do ChatGPT (B) continua como plano de contingência: se as skills não estiverem disponíveis no plano da Clinic, os mesmos arquivos de `skills/` entram como arquivos e instruções de um Projeto (seção 9).
 
 ## 5. O time
-Seis papéis: o Editor-Chefe e os quatro subagentes da instrução da Paula, mais o agente de imagens pedido pelo Alify em 18/11/2026. Cada um tem uma skill em `skills/<papel>/` e uma definição de agente em `agents/editorial/<papel>.md`, no molde da casa (`~/.claude/docs/agent-template.md`, adaptado: o corpo da definição carrega a skill do papel e não repete as regras).
+Seis papéis: o Editor-Chefe e os quatro subagentes da instrução da Paula, mais o agente de imagens pedido pelo Alify em 18/11/2026. A instrução da Paula põe Arte e Vídeo como agente **externo** e pede para não criar agente a mais sem justificativa e aprovação. Justificativa: o pedido real dela (seção 1) inclui gerar imagens complementares logo depois da diagramação, e isso precisa de um papel com regras próprias. O `imagens` deste setup faz só imagens conceituais de preenchimento; ilustração anatômica, didática, infográfico e vídeo continuam com o agente externo de Arte e Vídeo. A aprovação da Paula a este papel entra na apresentação a ela (seção 13). Cada um tem uma skill em `skills/<papel>/` e uma definição de agente em `agents/editorial/<papel>.md`, no molde da casa (`~/.claude/docs/agent-template.md`, adaptado: o corpo da definição carrega a skill do papel e não repete as regras).
 
 | Papel (skill) | Origem | Entrega | Nunca faz |
 |---|---|---|---|
@@ -103,6 +103,7 @@ Um arquivo `ficha-<projeto>.md` por livro, com modelo em `skills/editor-chefe/re
 - aprovações humanas: quem, qual versão (nome do arquivo e SHA-256 quando o ambiente calcula), data e hora;
 - decisões e divergências levadas ao Board;
 - imagens geradas por IA: página, briefing, modelo quando disponível, estado de validação (alimenta a nota editorial do livro);
+- custos, quando o ambiente mostra: imagens geradas, tokens ou mensagens gastas, tempo de cada fase;
 - histórico, uma linha por evento.
 
 Regras: versão aprovada não muda; mudança gera versão nova. O Editor-Chefe começa toda conversa lendo a ficha e termina toda fase entregando a ficha atualizada.
@@ -126,14 +127,14 @@ Entradas (decisão desta sessão):
 - **Livros já compostos em PDF** (caso de Preenchedores e de Toxina): o PDF é extraído para o Markdown com o pdfplumber, preservando ordem, títulos e blocos; a fidelidade é conferida comparando o texto de entrada com o de saída (seção 10). É o caminho dos livros que já existem, não o principal.
 - Slides e apostila do Board: PDF exportado (padrão). PPTX entra pelo python-pptx (MIT) se a equipe mandar nesse formato.
 
-Aparência do modelo: o `livro.css` reproduz o visual dos PDFs atuais da Clinic (capa bordô, Montserrat nos títulos, Source Sans no texto, títulos e rótulos em bordô). Antes do teste real, o Diagramador renderiza três páginas de amostra (abertura de capítulo, página de texto com caixas, página com imagem e legenda) e o Alify ou a Paula aprovam (regra da casa: mudança visível só com mockup aprovado). Enquanto o manual da Paula não chegar, a nota da fase 3 sai marcada "provisória: manual ausente", e o Editor-Chefe repete essa marca ao reportar.
+Aparência do modelo: o `livro.css` reproduz o visual dos livros e documentos de referência que a Paula já aprovou (capa bordô, Montserrat nos títulos, Source Sans no texto, títulos e rótulos em bordô). Cores, fontes, tamanhos e espaçamentos ficam como variáveis num arquivo só, `assets/tokens.css`, porque o design system dos documentos está sendo criado pelo Alify com a Paula e a Julie (informado em 18/11/2026); quando ele chegar, um cartão novo troca os valores desse arquivo, sem mexer no resto. Antes do teste real, o Diagramador renderiza três páginas de amostra (abertura de capítulo, página de texto com caixas, página com imagem e legenda) e o Alify confere contra as referências aprovadas (regra da casa: mudança visível só com mockup aprovado). Enquanto o manual da Paula não chegar, a nota da fase 3 sai marcada "provisória: manual ausente", e o Editor-Chefe repete essa marca ao reportar.
 
 Motor: só o WeasyPrint na V1, sem segundo motor. Se o teste de plataforma (critério 0) mostrar que o ChatGPT não roda o WeasyPrint, o Diagramador e o Auditor Gráfico rodam no Claude Code ou no Codex, e o ChatGPT fica com os demais papéis.
 
 ### 8.2 Checagem técnica (scripts)
 - `skills/auditor-grafico/scripts/audit_pdf.py`: lê o PDF com pdfplumber e pypdf e lista, por página, sobreposição de caixas de texto, texto fora da área útil, parágrafo duplicado, fonte fora da lista do manual, imagem com DPI efetivo abaixo do mínimo (pixels ÷ (largura exibida em pt ÷ 72)), imagem com proporção alterada, margens, número de página e entradas do sumário. Saída em JSON e Markdown.
 - `skills/diagramador/scripts/check_layout.py`: a mesma checagem em modo rápido, que o Diagramador roda antes de entregar (exigência da instrução da Paula, fase 2).
-- `skills/imagens/scripts/free_space.py`: mede o espaço livre de cada página (do fim do último objeto até a margem inferior, e as faixas brancas na página renderizada) e lista as páginas com espaço acima do limite, com largura, altura e proporção do retângulo livre.
+- `skills/imagens/scripts/free_space.py`: mede o espaço livre de cada página (do fim do último objeto de texto, imagem ou desenho até a zona de segurança inferior, na largura útil) e lista as páginas com espaço acima do limite, com largura, altura e proporção do retângulo livre.
 
 Os três compartilham uma biblioteca pequena (`lib/pdfcheck/`), copiada para dentro de cada skill pelo script de empacotamento, porque uma skill não lê arquivo de outra.
 
@@ -174,7 +175,7 @@ editorial-setup/
 `scripts/package.py`:
 - valida cada skill: frontmatter, limites de `name` e `description`, `SKILL.md` abaixo de 500 linhas, nome sem `claude` nem `anthropic`, nenhuma pasta `bin/` no topo;
 - copia `shared/references/` e `lib/pdfcheck/` para dentro de cada skill, em `dist/`;
-- gera `dist/chatgpt/<skill>.zip` e `dist/claude-ai/<skill>.zip` (com `SKILL.md` na raiz do zip), os TOML de `.codex/agents/` a partir de `agents/editorial/`, e confere os manifestos dos dois plugins;
+- gera `dist/chatgpt/<skill>.zip` e `dist/claude-ai/<skill>.zip` (com `SKILL.md` na raiz do zip), os TOML dos agentes do Codex em `dist/codex/agents/` a partir de `agents/editorial/` (o guia da equipe manda copiar para `.codex/agents/` do projeto ou para `~/.codex/agents/`), e confere os manifestos dos dois plugins;
 - sai com código diferente de 0 se algo falhar. `dist/` não vai para o git.
 
 Contingência sem skills no ChatGPT: o `package.py` também gera `dist/chatgpt-projeto/`, com as instruções do Projeto (o `SKILL.md` do Editor-Chefe) e os demais `SKILL.md` e referências como arquivos do Projeto.
@@ -182,13 +183,13 @@ Contingência sem skills no ChatGPT: o `package.py` também gera `dist/chatgpt-p
 ## 10. Critérios de aceite
 Em ordem de construção, seguindo a ordem oficial da Paula (Editor-Chefe, Diagramador, Editor Científico, Auditor Científico, Auditor Gráfico) e pondo o agente de imagens logo depois do Diagramador, porque o pedido de exemplo usa os dois juntos.
 
-Livros de teste, fora do repositório (fotos clínicas e conteúdo do Board não entram no git): o caminho vem da variável `EDITORIAL_SAMPLES_DIR` (nesta máquina, `~/Downloads/livros-paula/` e `~/Downloads/`). **Preenchedores** é o caso positivo, porque é o fluxo do pedido da Paula. **Toxina** é o caso negativo do Auditor Gráfico, porque o briefing diz que ele tem repetição e sobreposição em várias páginas, e o caso inicial que a instrução da Paula pede para o Diagramador. Os testes do repositório usam só PDFs, imagens e capítulos sintéticos.
+Livros de teste, fora do repositório (fotos clínicas e conteúdo do Board não entram no git): o caminho vem da variável `EDITORIAL_SAMPLES_DIR` (nesta máquina, `~/Downloads/livros-paula/`, com os dois PDFs). **Preenchedores** é o caso positivo, porque é o fluxo do pedido da Paula. **Toxina** é o caso negativo do Auditor Gráfico, porque o briefing diz que ele tem repetição e sobreposição em várias páginas, e o caso inicial que a instrução da Paula pede para o Diagramador. Os testes do repositório usam só PDFs, imagens e capítulos sintéticos.
 
-0. **Teste de plataforma no ChatGPT**, feito pelo Alify, antes do Diagramador: instalar uma skill de teste, rodar `import weasyprint` e `pip list` pelo Python da conversa, gerar uma imagem e ver se o Python enxerga o arquivo dela. O resultado decide o motor no ChatGPT (seção 8.1) e o passo 5 da seção 8.3. Registrado em `docs/medicoes/`.
+0. **Teste de plataforma no ChatGPT**, feito pela Paula quando puder (ela já usa o ChatGPT), sem travar a construção do Diagramador, que roda localmente: instalar uma skill de teste, rodar `import weasyprint` e `pip list` pelo Python da conversa, gerar uma imagem e ver se o Python enxerga o arquivo dela. O resultado decide o motor no ChatGPT (seção 8.1) e o passo 5 da seção 8.3. Registrado em `docs/medicoes/`.
 1. **Empacotamento:** `python scripts/package.py` sai com código 0, gera os zips das seis skills e os TOML dos seis agentes; um teste com uma skill inválida (nome com `claude`, `description` acima de 1.024) faz o script sair com erro.
 2. **Editor-Chefe** (critério da instrução da Paula, fase 1): num projeto de teste, cria a ficha com todos os campos da seção 7, delega uma tarefa a um papel, recebe o resultado, aplica o portão de nota (um caso que passa com 92 e outro que volta com 85) e registra tudo no histórico.
 3. **Checagem de PDF** (`tests/`): em PDFs pequenos de exemplo, acusa uma sobreposição injetada, um texto fora da margem, um parágrafo duplicado, uma fonte de reserva e uma imagem abaixo do DPI mínimo; num PDF limpo, zero erros.
-4. **Diagramador**, com o PDF de Preenchedores: três páginas de amostra aprovadas pelo Alify ou pela Paula antes do livro inteiro; PDF A4; só as fontes do manual (nenhuma DejaVu); zero sobreposição, corte e duplicação na checagem; números do sumário iguais à paginação; texto de saída igual ao de entrada em pelo menos 99,5% dos caracteres, sem contar cabeçalho, rodapé e números de página.
+4. **Diagramador**, com o PDF de Toxina (caso inicial da instrução da Paula, com os originais preservados) e depois o de Preenchedores: três páginas de amostra aprovadas pelo Alify ou pela Paula antes do livro inteiro; PDF A4; só as fontes do manual (nenhuma DejaVu); zero sobreposição, corte e duplicação na checagem; números do sumário iguais à paginação; texto de saída igual ao de entrada em pelo menos 99,5% dos caracteres, sem contar cabeçalho, rodapé e números de página.
 5. **Imagens**, no mesmo livro: lista das páginas com espaço livre acima do limite; uma imagem por página selecionada, na proporção do espaço; depois da reinserção, a checagem continua com zero erros e a paginação não muda.
 6. **Editor Científico e Auditor Científico**, com um capítulo sintético (slides de teste em PDF, escritos para o teste): tabela slide a capítulo sem slide órfão; toda afirmação nova com fonte; o `verify_refs.py` confere cada DOI ou PMID e acusa uma referência inventada plantada no texto.
 6a. **Auditor Gráfico** no PDF de Toxina: acusa erros de repetição ou sobreposição nas páginas onde existem, e os avisos de resolução.
@@ -197,14 +198,39 @@ Livros de teste, fora do repositório (fotos clínicas e conteúdo do Board não
 ## 11. Limites conhecidos e o que fica em aberto
 - Skills no ChatGPT estão em beta e vêm desligadas; quem administra o workspace liga. Os planos que têm o recurso não foram confirmados em fonte oficial (a página de ajuda deu 403). O critério 7 confirma; se não houver, vale a contingência do Projeto.
 - Não há fonte dizendo que uma skill do ChatGPT aciona a geração de imagem ou o Python por conta própria; a skill pede ao modelo, que usa as ferramentas da conversa. O critério 7 confirma.
-- A lista de bibliotecas do ambiente Python do ChatGPT não é publicada; o WeasyPrint aparece só em lista da comunidade. Se faltar, o Diagramador gera o PDF pelo ReportLab a partir da mesma estrutura, com aviso no relatório.
+- A lista de bibliotecas do ambiente Python do ChatGPT não é publicada; o WeasyPrint aparece só em lista da comunidade. Se faltar, vale a seção 8.1: o Diagramador e o Auditor Gráfico rodam no Claude Code ou no Codex.
 - O chat do ChatGPT e do claude.ai não grava a ficha nos arquivos do Projeto; a Paula substitui à mão.
 - Limite de 30 MB por arquivo no claude.ai; o PDF de Preenchedores tem 4,8 MB.
 - Manual de diagramação da Paula: não chegou. Limite de espaço livre (25%), regra de resolução (seção 8.2) e a regra das imagens só conceituais (seção 8.3): valores provisórios desta sessão, a confirmar com ela.
 - A auditoria de referências depende de rede: o sandbox da API do Claude não tem internet, e no claude.ai Enterprise a rede vem desligada por padrão (`stack-layout.md`, B1).
 - A conta `miguel-fd2` tem leitura no repositório pela permissão base da org; o Alify a usa em outra máquina e decidiu mantê-la.
 
-## 12. O que fica com quem constrói
+### 9.1 A Paula trabalha e melhora o setup
+O objetivo é a Paula já trabalhar com o setup no ChatGPT, que ela usa todo dia, e melhorá-lo com o uso (Alify, 18/11/2026). Para a fonte continuar única:
+- Cada melhoria vira uma linha em `docs/melhorias.md` (data, papel, o que mudar, por quê, exemplo). A Paula pode ditar a melhoria ao Editor-Chefe, que devolve a linha pronta para ela mandar ao Alify, ou mandar direto.
+- A mudança entra no repositório, passa pelos testes e pelo `package.py`, sobe a versão do plugin e ganha uma linha em `CHANGELOG.md`; a Paula reinstala o pacote novo.
+- Mudança feita direto na skill instalada no ChatGPT se perde no próximo pacote; o guia dela diz para mandar de volta.
+
+## 12. Por que não passou pelo planejamento com prova completo
+A regra da casa pede ADR, `verifier` e pre-mortem para escolha de stack. Aqui o caminho foi o curto (brainstorming, pesquisa com fonte, spec, revisão de construção e revisão final), porque a escolha é reversível e sem custo: as skills são texto, e o motor de PDF fica atrás dos scripts de uma skill só. Se a V1 mostrar que o WeasyPrint ou o pdfplumber não servem, a troca fica dentro do `diagramador` e do `lib/pdfcheck/`. A escolha que pesa de verdade, a peça de orquestração da VPS, passa pelo Fluxo 1 completo no ADR do orquestrador.
+
+## 13. Resposta à primeira entrega pedida pela Paula
+A instrução da Paula (seção 8) pede dez itens antes de implementações extensas. Este documento é a resposta; o Alify apresenta a ela antes da onda do Diagramador (cartão manual do plano).
+
+1. **Diagnóstico do setup atual:** não havia setup editorial implementado. O `agent-service` da VPS tem só o README; existe um ADR proposto da peça de orquestração da VPS (Pydantic AI com DBOS) e uma proposta de MVP de outra sessão, com cinco papéis tirados do briefing do Bruno, já marcada como desatualizada por aquela sessão em 18/11/2026. O trabalho de hoje é feito à mão pela Paula no ChatGPT.
+2. **Estrutura definitiva:** seção 5.
+3. **O que já está implementado:** nada além deste desenho, da pesquisa e do repositório.
+4. **O que precisa ser modificado:** a lista de papéis da proposta de MVP da outra sessão cai; a versão da VPS reaproveita estas skills.
+5. **Redundâncias eliminadas:** os dez papéis do briefing do Bruno viram seis. Pesquisador Científico, Escritor Técnico-Didático e Revisor de Originais viram o Editor Científico (como a Paula pediu); Editor de Projetos e Editor de Desenvolvimento ficam com o Editor-Chefe; Diretor de Arte, Produção Gráfica e Marketing ficam para depois.
+6. **Comunicação e delegação:** seção 6 (pedido estruturado do Editor-Chefe, bloco de retorno fixo de cada papel, portão de nota, independência).
+7. **Memória persistente:** seção 7 (ficha do projeto; na VPS, o PostgreSQL do ADR do orquestrador).
+8. **Plano de execução:** `docs/superpowers/plans/2026-11-18-editorial-setup.md`, com o Editor-Chefe primeiro e o Diagramador em seguida.
+9. **Critérios de teste e aceite:** seção 10 (critério 2 para o Editor-Chefe, 4 e 5 para o Diagramador).
+10. **Integração com o ChatGPT para imagens:** seções 8.3 e 11. A geração nativa existe na interface do ChatGPT e no Codex, dentro do plano; não há API com o mesmo recurso grátis, e a API paga (GPT-Image-2) fica para a VPS, com preço e ok.
+
+Pontos para a Paula decidir na apresentação: o papel `imagens` dentro do setup; os valores provisórios (25% de página vazia, regra de resolução, imagens só conceituais); o envio do manual de diagramação.
+
+## 14. O que fica com quem constrói
 - O texto de cada `SKILL.md`, dentro destas regras: missão, quando acionar, entradas, processo numerado, barra de qualidade, saída, limites e retorno, no espírito do molde da casa.
 - Os pesos finos das rubricas, partindo dos da seção 6.2.
 - Os valores exatos de cor da paleta, tirados dos PDFs.
