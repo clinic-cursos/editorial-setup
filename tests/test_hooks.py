@@ -75,8 +75,6 @@ def test_stop_reminds_ficha_once():
     stop = {"hook_event_name": "Stop", "agent_type": "editor-chefe", "stop_hook_active": False,
             "last_assistant_message": "A fase 2 está concluída."}
     assert decision(run("subagent_return.py", stop, "--stop"))["decision"] == "block"
-    stop["last_assistant_message"] = "A fase 2 está concluída e a ficha foi atualizada."
-    assert decision(run("subagent_return.py", stop, "--stop")) == {}
 
 
 def test_hook_fails_open_on_bad_json():
@@ -88,7 +86,7 @@ def test_hook_fails_open_on_bad_json():
 def test_stop_reminds_when_skill_used(tmp_path):
     done = "A fase 2 está concluída."
     for line in ('{"type":"tool_use","name":"Skill","input":{"skill":"clinic-editorial:editor-chefe"}}',
-                 "<command-name>/editor-chefe</command-name>"):
+                 '{"type":"user","message":{"content":"<command-name>/editor-chefe</command-name>"}}'):
         t = tmp_path / "t.jsonl"
         t.write_text(line + "\n", encoding="utf-8")
         stop = {"hook_event_name": "Stop", "stop_hook_active": False, "transcript_path": str(t), "last_assistant_message": done}
@@ -107,3 +105,35 @@ def test_auditor_return_without_score_asks_once():
     full = base + "Nota: 92\nAchados:\n- Nenhum.\n"
     assert decision(run("subagent_return.py", msg(full, agent="auditor-grafico"))) == {}
     assert decision(run("subagent_return.py", msg(base, agent="diagramador"))) == {}
+
+
+def transcript(tmp_path, *entries):
+    lines = [json.dumps({"type": "user", "message": {"content": "<command-name>/editor-chefe</command-name>"}})]
+    for e in entries:
+        lines.append(json.dumps(e))
+    t = tmp_path / "t.jsonl"
+    t.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return t
+
+
+def tool(name, path):
+    return {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": name, "input": {"file_path": path}}]}}
+
+
+def stop_input(t, text):
+    return {"hook_event_name": "Stop", "stop_hook_active": False, "transcript_path": str(t), "last_assistant_message": text}
+
+
+def test_stop_reminds_when_ficha_only_mentioned(tmp_path):
+    t = transcript(tmp_path, tool("Write", "/p/capitulo.md"))
+    out = run("subagent_return.py", stop_input(t, "A fase 2 está concluída e a ficha ainda precisa ser atualizada."), "--stop")
+    assert decision(out)["decision"] == "block"
+
+
+def test_stop_passes_when_ficha_written(tmp_path):
+    result = {"type": "user", "message": {"content": [{"type": "tool_result", "content": "ok"}]}}
+    t = transcript(tmp_path, tool("Edit", "/p/ficha.md"), result)
+    assert decision(run("subagent_return.py", stop_input(t, "A fase 2 está concluída."), "--stop")) == {}
+    older = tmp_path / "o.jsonl"
+    older.write_text(t.read_text(encoding="utf-8") + json.dumps({"type": "user", "message": {"content": "continue"}}) + "\n", encoding="utf-8")
+    assert decision(run("subagent_return.py", stop_input(older, "A fase 3 está concluída."), "--stop"))["decision"] == "block"

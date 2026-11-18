@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """SubagentStop: exige o bloco de retorno.md dos cinco papéis. Com --stop (Stop): lembra a ficha. Falha aberto."""
 import json
+import os
 import re
 import sys
 
@@ -38,11 +39,32 @@ def chief_skill_used(data):
         return bool(SKILL_USED.search(f.read()))
 
 
+def ficha_written(path):
+    """Houve Write/Edit em ficha*.md desde a última mensagem real do usuário?"""
+    if not path:
+        return False
+    written = False
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            entry = json.loads(line)
+            content = (entry.get("message") or {}).get("content")
+            if entry.get("type") == "user":
+                if isinstance(content, str) or any(c.get("type") != "tool_result" for c in content or []):
+                    written = False
+                continue
+            for c in content if isinstance(content, list) else []:
+                name = os.path.basename((c.get("input") or {}).get("file_path") or "")
+                if c.get("type") == "tool_use" and c.get("name") in ("Write", "Edit", "MultiEdit") \
+                        and name.startswith("ficha") and name.endswith(".md"):
+                    written = True
+    return written
+
+
 def stop(data):
     text = data.get("last_assistant_message") or ""
     if data.get("stop_hook_active") or not (role(data) == "editor-chefe" or chief_skill_used(data)):
         return
-    if PHASE_DONE.search(text) and "ficha" not in text.lower():
+    if PHASE_DONE.search(text) and not ficha_written(data.get("transcript_path")):
         block("Houve fase concluída sem atualização da ficha. Atualize e entregue a ficha.md do projeto.")
 
 
