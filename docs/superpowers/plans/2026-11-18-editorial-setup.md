@@ -38,6 +38,7 @@
 - `Requer: internet` em todo cartão que muda dependência (`pyproject.toml` e `uv.lock`), porque a sandbox do Codex não tem rede para o `uv lock`.
 - Testes: `uv run --locked pytest`. PDFs, imagens, DOCX e capítulos de teste são gerados por código em `tests/conftest.py` (ReportLab, python-docx, Pillow do próprio ReportLab), sem binário no git.
 - Cartão que roda `package.py --sync` traz a própria pasta da skill inteira nos "Arquivos permitidos" (`skills/<skill>/**`), o que inclui as cópias de `scripts/pdfcheck/` e `references/comum/`.
+- Cartão que muda `shared/` ou `lib/pdfcheck/` (inclusive um ajuste de valor em `graphic-rules.json`) roda `package.py --sync`, traz `skills/*/references/comum/**` e `skills/*/scripts/pdfcheck/**` nos "Arquivos permitidos" e termina a Verificação com `uv run --locked python scripts/package.py --check`. Assim a `main` nunca fica com cópia divergente.
 - Cartão `manual` é feito por uma pessoa (ou pela sessão de execução, quando o cartão diz) e registrado em `docs/medicoes/`; a ponte não o despacha.
 - Linha de comando dos scripts: código de saída 0 sem erro, 1 com erro encontrado, 2 com uso errado ou arquivo ilegível.
 
@@ -46,7 +47,7 @@
   - `Finding(page: int, kind: str, severity: Literal["error", "warning"], detail: str, bbox: tuple[float, float, float, float] | None = None)` (dataclass; `page` começa em 1).
   - `Report(pdf: str, pages: int, findings: list[Finding])` com `errors() -> list[Finding]`, `to_json() -> str`, `to_markdown() -> str` (tabela em português por página).
   - `FreeSpace(page: int, x0: float, top: float, x1: float, bottom: float, fraction: float)`.
-- `lib/pdfcheck/rules.py` (cartão 2.1): `Rules` (dataclass) com `allowed_fonts: list[str]`, `safe_zone_mm: float`, `error_ppi: int`, `warning_ppi: int`, `free_space_fraction: float`, `distortion_tolerance: float`, `page_size_pt: tuple[float, float]`; `load_rules(path: str | None = None) -> Rules`, que lê o `graphic-rules.json` ao lado da cópia da biblioteca quando `path` é `None`.
+- `lib/pdfcheck/rules.py` (cartão 2.1): `Rules` (dataclass) com `allowed_fonts: list[str]`, `safe_zone_mm: float`, `error_ppi: int`, `warning_ppi: int`, `free_space_fraction: float`, `distortion_tolerance: float`, `page_size_pt: tuple[float, float]`; `load_rules(path: str | None = None) -> Rules`; com `path` `None`, procura nesta ordem: `../../references/comum/graphic-rules.json` a partir da pasta da cópia (dentro de uma skill) e `shared/rules/graphic-rules.json` a partir da raiz do repositório.
 - `lib/pdfcheck/checks.py` (cada função recebe `pdf: pdfplumber.PDF` e `rules: Rules` e devolve `list[Finding]`): `check_overlaps`, `check_safe_zone`, `check_duplicates`, `check_fonts`, `check_text_layer`, `check_page_size` (cartão 2.1); `check_images(pdf, rules, inherited: set[str] | None = None)`, `check_page_numbers`, `check_toc` (cartão 2.2). E `free_space(pdf, rules) -> list[FreeSpace]` (cartão 2.2).
 - Tipos de achado (`kind`): `overlap`, `outside-safe-zone`, `duplicate-paragraph`, `font-not-allowed`, `font-unnamed`, `page-without-text`, `page-size`, `image-low-resolution`, `image-distorted`, `page-number`, `toc-mismatch`.
 - `skills/diagramador/scripts/build_book.py` (cartão 3.2): `build(manuscript_path: str, out_dir: str) -> BuildResult`, com `BuildResult(html: str, pdf: str, layout: dict[str, int], pages: int)`; `layout` mapeia o `id` de cada bloco (`b0001`...) para a página onde ele começa.
@@ -106,25 +107,25 @@ Critérios de aceite: `docs/medicoes/2026-11-ensaio-editor-chefe.md` com `Result
 
 #### Cartão 1.5 (manual, Alify): Apresentação à Paula
 Objetivo: apresentar à Paula a seção 13 da spec (resposta à primeira entrega que ela pediu) antes da onda 3.
-Critérios de aceite: `docs/medicoes/2026-11-apresentacao-paula.md` com a data e as respostas dela sobre o papel `imagens`, os valores provisórios de `graphic-rules.json`, a regra das imagens só conceituais e o prazo do manual de diagramação. Valor mudado por ela entra em `graphic-rules.json` antes da onda 3.
+Critérios de aceite: `docs/medicoes/2026-11-apresentacao-paula.md` com a data e as respostas dela sobre o papel `imagens`, os valores provisórios de `graphic-rules.json`, a regra das imagens só conceituais e o prazo do manual de diagramação. Valor mudado por ela entra em `graphic-rules.json` antes da onda 3, num cartão `mechanical` que segue a convenção de mudança em `shared/`.
 
 ### Onda 2: checagem de PDF e teste de plataforma
 
 #### Cartão 2.1: Checagens de texto, fonte e página
 Função: backend
 Objetivo: implementar o modelo de achados, as regras e as checagens de sobreposição, zona de segurança, duplicação, fonte, camada de texto e tamanho de página.
-Arquivos permitidos: lib/pdfcheck/model.py, lib/pdfcheck/rules.py, lib/pdfcheck/checks.py, shared/rules/graphic-rules.json, tests/conftest.py, tests/test_checks_text.py
+Arquivos permitidos: lib/pdfcheck/model.py, lib/pdfcheck/rules.py, lib/pdfcheck/checks.py, shared/rules/graphic-rules.json, skills/*/references/comum/**, skills/*/scripts/pdfcheck/**, tests/conftest.py, tests/test_checks_text.py
 Critérios de aceite:
 - `graphic-rules.json` com todos os valores das Global Constraints e `allowed_fonts: ["Montserrat", "SourceSans3", "SourceSansPro"]`; `model.py` já com `FreeSpace`.
 - `tests/conftest.py` gera, com ReportLab, PDFs A4 sintéticos: limpo; com duas linhas sobrepostas; com texto a 5 mm da borda; com um parágrafo de 120 caracteres repetido; com uma página só de imagem; e um PDF em tamanho Carta. Os testes usam uma fixture `test_rules` com `allowed_fonts` que inclui a Helvetica do ReportLab, salvo o teste de fonte.
 - Testes: `test_clean_pdf_has_no_errors`, `test_overlap_detected` (um `overlap` na página certa), `test_safe_zone_detected`, `test_duplicate_paragraph_detected`, `test_font_not_allowed_detected` (com as regras reais, `font-not-allowed` com `Helvetica` no `detail`), `test_subset_prefix_normalized`, `test_unnamed_font_is_warning`, `test_page_without_text_is_warning`, `test_letter_size_is_page_size_error`.
 - Sobreposição: caixas de linhas de texto de blocos diferentes que se cruzam em mais de 1 pt nos dois eixos; letras repetidas no mesmo lugar (negrito simulado) não contam, usando `dedupe_chars`.
-Verificação: uv run --locked pytest tests/test_checks_text.py -q
+Verificação: uv run --locked pytest tests/test_checks_text.py -q && uv run --locked python scripts/package.py --check
 
 #### Cartão 2.2: Checagens de imagem, paginação, sumário e espaço livre
 Função: backend
 Objetivo: completar `checks.py` com resolução e distorção de imagem, número de página, sumário e espaço livre.
-Arquivos permitidos: lib/pdfcheck/checks.py, tests/conftest.py, tests/test_checks_layout.py
+Arquivos permitidos: lib/pdfcheck/checks.py, skills/*/scripts/pdfcheck/**, tests/conftest.py, tests/test_checks_layout.py
 Critérios de aceite:
 - PPI efetivo = pixels ÷ (tamanho exibido em pt ÷ 72), pelo menor dos dois eixos. Imagem com nome em `inherited` é sempre `warning`; as demais são `error` abaixo de `error_ppi` e `warning` abaixo de `warning_ppi`.
 - Distorção: proporção exibida difere da proporção em pixels em mais de `distortion_tolerance`; imagem girada usa a matriz de transformação; recorte por máscara não conta.
@@ -132,7 +133,7 @@ Critérios de aceite:
 - `check_toc`: cada entrada do sumário (linha com título e número no fim) aponta para a página onde o título aparece; diferença vira `toc-mismatch`.
 - `free_space`: retângulo entre o fim do último objeto (texto, imagem ou desenho) e a zona de segurança inferior, na largura útil; entra quando a altura passa de `free_space_fraction` da altura útil. Página sem objeto e abertura de capítulo (maior título no terço de cima, ocupando a largura) ficam fora.
 - Testes: `test_low_ppi_new_image_is_error`, `test_low_ppi_inherited_image_is_warning`, `test_distorted_image_detected`, `test_rotated_image_not_distorted`, `test_page_number_gap_detected`, `test_toc_mismatch_detected`, `test_free_space_listed_with_fraction`, `test_blank_page_not_candidate`, `test_chapter_opening_not_candidate`.
-Verificação: uv run --locked pytest tests/test_checks_layout.py -q
+Verificação: uv run --locked pytest tests/test_checks_layout.py -q && uv run --locked python scripts/package.py --check
 
 #### Cartão 2.3: Skill de teste de plataforma e roteiro
 Função: docs
@@ -226,9 +227,9 @@ Função: backend
 Objetivo: rodar o Diagramador no caso inicial da Paula (Toxina) e o fluxo do pedido dela (Preenchedores) nos PDFs reais (critérios 4 e 5 da spec).
 Arquivos permitidos: scripts/run_sample.py, docs/medicoes/2026-11-ensaio-toxina-diagramacao.md, docs/medicoes/2026-11-ensaio-preenchedores.md
 Critérios de aceite:
-- `run_sample.py NOME_DO_PDF RELATORIO` lê de `EDITORIAL_SAMPLES_DIR`, nunca escreve nos originais, trabalha em pasta temporária fora do repositório e roda: extrair, compor, `check_layout`, `text_fidelity`, `free_space`, inserir imagens sintéticas de teste (retângulos na paleta) e conferir de novo.
+- `run_sample.py NOME_DO_PDF RELATORIO` sai com 0 sempre que grava o relatório, aprovado ou não, e com 2 em erro de uso ou de leitura; lê de `EDITORIAL_SAMPLES_DIR`, nunca escreve nos originais, trabalha em pasta temporária fora do repositório e roda: extrair, compor, `check_layout`, `text_fidelity`, `free_space`, inserir imagens sintéticas de teste (retângulos na paleta) e conferir de novo.
 - Cada relatório com `Resultado: APROVADO` ou `REPROVADO` e os números: páginas, fontes encontradas (nenhuma DejaVu), erros e avisos por tipo, fidelidade, páginas candidatas, paginação antes e depois. Sem trecho do livro.
-Verificação: test -n "$EDITORIAL_SAMPLES_DIR" && uv run --locked python scripts/run_sample.py Toxina_Botulinica_Miolo_Alta_Resolucao.pdf docs/medicoes/2026-11-ensaio-toxina-diagramacao.md && uv run --locked python scripts/run_sample.py Preenchedores_Dermicos_Consolidado_40_Alteracoes.pdf docs/medicoes/2026-11-ensaio-preenchedores.md && grep -q "Resultado: APROVADO" docs/medicoes/2026-11-ensaio-preenchedores.md
+Verificação: test -n "$EDITORIAL_SAMPLES_DIR" && uv run --locked python scripts/run_sample.py Toxina_Botulinica_Miolo_Alta_Resolucao.pdf docs/medicoes/2026-11-ensaio-toxina-diagramacao.md && uv run --locked python scripts/run_sample.py Preenchedores_Dermicos_Consolidado_40_Alteracoes.pdf docs/medicoes/2026-11-ensaio-preenchedores.md && grep -q "Resultado: APROVADO" docs/medicoes/2026-11-ensaio-toxina-diagramacao.md && grep -q "Resultado: APROVADO" docs/medicoes/2026-11-ensaio-preenchedores.md
 
 ### Onda 4: Editor Científico e Auditor Científico
 

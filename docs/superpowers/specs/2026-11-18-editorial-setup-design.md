@@ -180,6 +180,13 @@ editorial-setup/
 
 Contingência sem skills no ChatGPT: o `package.py` também gera `dist/chatgpt-projeto/`, com as instruções do Projeto (o `SKILL.md` do Editor-Chefe) e os demais `SKILL.md` e referências como arquivos do Projeto.
 
+
+### 9.1 A Paula trabalha e melhora o setup
+O objetivo é a Paula já trabalhar com o setup no ChatGPT, que ela usa todo dia, e melhorá-lo com o uso (Alify, 18/11/2026). Para a fonte continuar única:
+- Cada melhoria vira uma linha em `docs/melhorias.md` (data, papel, o que mudar, por quê, exemplo). A Paula pode ditar a melhoria ao Editor-Chefe, que devolve a linha pronta para ela mandar ao Alify, ou mandar direto.
+- A mudança entra no repositório, passa pelos testes e pelo `package.py`, sobe a versão do plugin e ganha uma linha em `CHANGELOG.md`; a Paula reinstala o pacote novo.
+- Mudança feita direto na skill instalada no ChatGPT se perde no próximo pacote; o guia dela diz para mandar de volta.
+
 ## 10. Critérios de aceite
 Em ordem de construção, seguindo a ordem oficial da Paula (Editor-Chefe, Diagramador, Editor Científico, Auditor Científico, Auditor Gráfico) e pondo o agente de imagens logo depois do Diagramador, porque o pedido de exemplo usa os dois juntos.
 
@@ -189,7 +196,7 @@ Livros de teste, fora do repositório (fotos clínicas e conteúdo do Board não
 1. **Empacotamento:** `python scripts/package.py` sai com código 0, gera os zips das seis skills e os TOML dos seis agentes; um teste com uma skill inválida (nome com `claude`, `description` acima de 1.024) faz o script sair com erro.
 2. **Editor-Chefe** (critério da instrução da Paula, fase 1): num projeto de teste, cria a ficha com todos os campos da seção 7, delega uma tarefa a um papel, recebe o resultado, aplica o portão de nota (um caso que passa com 92 e outro que volta com 85) e registra tudo no histórico.
 3. **Checagem de PDF** (`tests/`): em PDFs pequenos de exemplo, acusa uma sobreposição injetada, um texto fora da margem, um parágrafo duplicado, uma fonte de reserva e uma imagem abaixo do DPI mínimo; num PDF limpo, zero erros.
-4. **Diagramador**, com o PDF de Toxina (caso inicial da instrução da Paula, com os originais preservados) e depois o de Preenchedores: três páginas de amostra aprovadas pelo Alify ou pela Paula antes do livro inteiro; PDF A4; só as fontes do manual (nenhuma DejaVu); zero sobreposição, corte e duplicação na checagem; números do sumário iguais à paginação; texto de saída igual ao de entrada em pelo menos 99,5% dos caracteres, sem contar cabeçalho, rodapé e números de página.
+4. **Diagramador**, com o PDF de Toxina (caso inicial da instrução da Paula, com os originais preservados) e depois o de Preenchedores: três páginas de amostra conferidas pelo Alify contra as referências aprovadas pela Paula, antes do livro inteiro; PDF A4; só as fontes do manual (nenhuma DejaVu); zero sobreposição, corte e duplicação na checagem; números do sumário iguais à paginação; texto de saída igual ao de entrada em pelo menos 99,5% dos caracteres, sem contar cabeçalho, rodapé e números de página.
 5. **Imagens**, no mesmo livro: lista das páginas com espaço livre acima do limite; uma imagem por página selecionada, na proporção do espaço; depois da reinserção, a checagem continua com zero erros e a paginação não muda.
 6. **Editor Científico e Auditor Científico**, com um capítulo sintético (slides de teste em PDF, escritos para o teste): tabela slide a capítulo sem slide órfão; toda afirmação nova com fonte; o `verify_refs.py` confere cada DOI ou PMID e acusa uma referência inventada plantada no texto.
 6a. **Auditor Gráfico** no PDF de Toxina: acusa erros de repetição ou sobreposição nas páginas onde existem, e os avisos de resolução.
@@ -204,12 +211,6 @@ Livros de teste, fora do repositório (fotos clínicas e conteúdo do Board não
 - Manual de diagramação da Paula: não chegou. Limite de espaço livre (25%), regra de resolução (seção 8.2) e a regra das imagens só conceituais (seção 8.3): valores provisórios desta sessão, a confirmar com ela.
 - A auditoria de referências depende de rede: o sandbox da API do Claude não tem internet, e no claude.ai Enterprise a rede vem desligada por padrão (`stack-layout.md`, B1).
 - A conta `miguel-fd2` tem leitura no repositório pela permissão base da org; o Alify a usa em outra máquina e decidiu mantê-la.
-
-### 9.1 A Paula trabalha e melhora o setup
-O objetivo é a Paula já trabalhar com o setup no ChatGPT, que ela usa todo dia, e melhorá-lo com o uso (Alify, 18/11/2026). Para a fonte continuar única:
-- Cada melhoria vira uma linha em `docs/melhorias.md` (data, papel, o que mudar, por quê, exemplo). A Paula pode ditar a melhoria ao Editor-Chefe, que devolve a linha pronta para ela mandar ao Alify, ou mandar direto.
-- A mudança entra no repositório, passa pelos testes e pelo `package.py`, sobe a versão do plugin e ganha uma linha em `CHANGELOG.md`; a Paula reinstala o pacote novo.
-- Mudança feita direto na skill instalada no ChatGPT se perde no próximo pacote; o guia dela diz para mandar de volta.
 
 ## 12. Por que não passou pelo planejamento com prova completo
 A regra da casa pede ADR, `verifier` e pre-mortem para escolha de stack. Aqui o caminho foi o curto (brainstorming, pesquisa com fonte, spec, revisão de construção e revisão final), porque a escolha é reversível e sem custo: as skills são texto, e o motor de PDF fica atrás dos scripts de uma skill só. Se a V1 mostrar que o WeasyPrint ou o pdfplumber não servem, a troca fica dentro do `diagramador` e do `lib/pdfcheck/`. A escolha que pesa de verdade, a peça de orquestração da VPS, passa pelo Fluxo 1 completo no ADR do orquestrador.
