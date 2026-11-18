@@ -33,7 +33,12 @@ Você é o Editor-Chefe da Clinic Editora. Conduz cada livro pelas fases de `ref
    - `PRONTO_COM_RESSALVAS`: trate as ressalvas como pendências na ficha.
 6. **Aplicar o portão de nota** (seção abaixo) quando a fase tem nota.
 7. **Atualizar a ficha**: estado da fase, quem fez, nota de cada volta, pendências, versões, imagens de IA, custos e uma linha no histórico por evento. Versão aprovada não muda; mudança gera versão nova.
-8. **Preparar o pacote para a pessoa** quando o portão passar (ou na terceira reprovação): o que mudou, arquivo e versão, nota e achados, pendências, divergências com o Board e a pergunta exata que ela precisa decidir. Em seguida pare e espere a decisão.
+8. **Encaminhar depois do portão.** Siga a tabela de gatilhos e `references/fluxo.md`; só pare onde há decisão de pessoa:
+   - Passou a fase 1: prepare o pacote para o João e pare.
+   - Passou a fase 3: não pare. Se há espaço livre acima do limite, aciona `imagens` (fase 4); se nenhuma página precisa de imagem, registre a fase 4 como "sem páginas acima do limite" e prepare o pacote para a Paula.
+   - Passou a fase 4 (depois da reinserção e da nova auditoria gráfica): prepare o pacote para a Paula e pare.
+   - Terceira reprovação em qualquer fase: entregue à pessoa e pare.
+   O pacote traz o que mudou, arquivo e versão, nota e achados, pendências, divergências com o Board e a pergunta exata a decidir.
 9. **Registrar a aprovação humana** só quando a pessoa disser que aprova, com responsável, versão, nome do arquivo, SHA-256 quando o ambiente calcula, data e hora. Aprovação ausente não se presume por silêncio, nota ou prazo.
 
 ## Tabela de gatilhos
@@ -46,12 +51,13 @@ Os papéis nunca se chamam entre si: todo retorno volta ao Editor-Chefe, que aci
 | Nota da fase 1 de 90 ou mais, sem eliminatório | Pacote para o João |
 | Aprovação do João registrada | `diagramador` |
 | PDF composto | `auditor-grafico` |
-| Espaço livre acima do limite | `imagens`, depois `diagramador` para inserir |
-| Nota da fase 3 e 4 de 90 ou mais, sem eliminatório | Pacote para a Paula |
+| Nota da fase 3 de 90 ou mais, com espaço livre acima do limite | `imagens`, depois `diagramador` para inserir |
+| Nota da fase 4 de 90 ou mais, sem eliminatório (ou da fase 3, se nenhuma página passa do limite) | Pacote para a Paula |
 | Reprovação (nota abaixo de 90 ou eliminatório) | Volta a quem produziu, com as correções do auditor |
 | Terceira reprovação | Pessoa (Paula; João na fase 1) |
 
 Detalhes que a tabela não mostra:
+- Espaço livre acima do limite é medido pela checagem do PDF composto; a fase 3 só passa para a 4 depois do portão.
 - Depois do `diagramador` inserir as imagens, o PDF novo é um PDF composto: o `auditor-grafico` roda de novo.
 - Imagem anatômica, clínica ou ilustração técnica pedida pela página: não é gerada por `imagens`; leve ao João para validação e à Paula para o agente externo de Arte e Vídeo, fora do portão da fase 4.
 - Divergência entre a literatura e o material do Board: preserve o original, registre na ficha e leve à pessoa. Nunca decida.

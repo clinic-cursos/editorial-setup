@@ -19,3 +19,8 @@
 - Claude Code, Cowork e Codex: cada papel roda como subagente, com só os arquivos do pedido.
 - Chat do ChatGPT e do claude.ai: papéis em sequência na mesma conversa, exceto a auditoria científica, que roda em conversa nova com o pacote de auditoria.
 - A auditoria gráfica usa o script de checagem, que não depende da conversa, mais a inspeção visual das páginas apontadas.
+
+## Encaminhamento entre fases
+- Passou a fase 1: pacote para o João (portão humano da fase 2).
+- Passou a fase 3: segue para a fase 4 se a checagem do PDF achar espaço livre acima do limite; se nenhuma página passa do limite, a fase 4 fica registrada como "sem páginas acima do limite" e o pacote vai para a Paula.
+- Passou a fase 4: pacote para a Paula (portão humano da fase 5).
