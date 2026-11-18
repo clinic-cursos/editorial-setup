@@ -7,6 +7,7 @@ import sys
 ROLES = {"editor-cientifico", "auditor-cientifico", "diagramador", "imagens", "auditor-grafico"}
 STATUS = re.compile(r"^\W*Status:\W*(PRONTO_COM_RESSALVAS|PRONTO|PRECISA_DE_DADO|BLOQUEADO)\W*$", re.M)
 SKILL_USED = re.compile(r'"skill"\s*:\s*"(?:[\w-]+:)?editor-chefe"|<command-name>/?(?:[\w-]+:)?editor-chefe</command-name>')
+AUDITORS = {"auditor-cientifico", "auditor-grafico"}
 PHASE_DONE = re.compile(r"fase\s*\d+\S*\s+(?:está\s+|foi\s+)?conclu[íi]d", re.I)
 
 
@@ -19,13 +20,15 @@ def block(reason):
 
 
 def subagent(data):
-    if role(data) not in ROLES or STATUS.search(data.get("last_assistant_message") or ""):
+    text = data.get("last_assistant_message") or ""
+    fields = ["Arquivos entregues:", "Pendências:"] + (["Nota:", "Achados:"] if role(data) in AUDITORS else [])
+    if role(data) not in ROLES or (STATUS.search(text) and all(f in text for f in fields)):
         return
     if data.get("stop_hook_active"):
         print("subagent_return: aviso, o papel seguiu sem o bloco de retorno; liberado", file=sys.stderr)
         return
     block("Falta o bloco de retorno. Devolva a mensagem final no formato de retorno.md, "
-          "com a linha 'Status:' (PRONTO, PRONTO_COM_RESSALVAS, PRECISA_DE_DADO ou BLOQUEADO).")
+          "com 'Status:' (PRONTO, PRONTO_COM_RESSALVAS, PRECISA_DE_DADO ou BLOQUEADO), 'Arquivos entregues:' e 'Pendências:' (auditores também 'Nota:' e 'Achados:').")
 
 
 def chief_skill_used(data):

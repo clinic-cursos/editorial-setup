@@ -66,7 +66,7 @@ def test_return_missing_asks_once():
 
 
 def test_return_present_passes():
-    ok = "Resumo\nStatus: PRONTO_COM_RESSALVAS\nArquivos entregues:\n- a\n"
+    ok = "Resumo\nStatus: PRONTO_COM_RESSALVAS\nArquivos entregues:\n- a\nPendências:\n- x\n"
     assert decision(run("subagent_return.py", msg(ok))) == {}
     assert decision(run("subagent_return.py", msg("sem bloco", agent="Explore"))) == {}
 
@@ -96,3 +96,14 @@ def test_stop_reminds_when_skill_used(tmp_path):
     t.write_text('{"name":"Skill","input":{"skill":"run"}}\n', encoding="utf-8")
     assert decision(run("subagent_return.py", stop, "--stop")) == {}
 
+
+def test_return_without_files_asks_once():
+    assert decision(run("subagent_return.py", msg("Status: PRONTO")))["decision"] == "block"
+
+
+def test_auditor_return_without_score_asks_once():
+    base = "Status: PRONTO\nArquivos entregues:\n- a\nPendências:\n- Nenhuma.\n"
+    assert decision(run("subagent_return.py", msg(base, agent="auditor-grafico")))["decision"] == "block"
+    full = base + "Nota: 92\nAchados:\n- Nenhum.\n"
+    assert decision(run("subagent_return.py", msg(full, agent="auditor-grafico"))) == {}
+    assert decision(run("subagent_return.py", msg(base, agent="diagramador"))) == {}
