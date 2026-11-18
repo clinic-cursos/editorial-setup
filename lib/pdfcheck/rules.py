@@ -1,7 +1,7 @@
 """Regras gráficas provisórias, lidas de graphic-rules.json."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -14,6 +14,7 @@ class Rules:
     free_space_fraction: float
     distortion_tolerance: float
     page_size_pt: tuple[float, float]
+    allowed_repeats: list[str] = field(default_factory=list)  # textos que se repetem de propósito
 
 
 def load_rules(path: str | None = None) -> Rules:

@@ -1,3 +1,4 @@
+import dataclasses
 from types import SimpleNamespace
 
 from lib.pdfcheck import checks
@@ -78,3 +79,9 @@ def test_similar_family_name_not_allowed():
 def test_duplicate_paragraph_under_different_titles(duplicate_under_titles_pdf, open_pdf, test_rules):
     found = checks.check_duplicates(open_pdf(duplicate_under_titles_pdf), test_rules)
     assert [(f.kind, f.page) for f in found] == [("duplicate-paragraph", 2)]
+
+
+def test_standard_caption_repeat_is_allowed(caption_repeat_pdf, open_pdf, test_rules):
+    pdf = open_pdf(caption_repeat_pdf)
+    assert checks.check_duplicates(pdf, test_rules) == []
+    assert checks.check_duplicates(pdf, dataclasses.replace(test_rules, allowed_repeats=[]))

@@ -141,3 +141,24 @@ def duplicate_under_titles_pdf(tmp_path):
         c.showPage()
     c.save()
     return p
+
+
+CAPTION = (
+    "Divulgação autorizada pelo usuário em TCLE. Esta imagem não representa, em hipótese alguma, "
+    "garantia de resultado. Cada ser humano tem características anatômicas e fisiológicas únicas."
+)
+
+
+@pytest.fixture
+def caption_repeat_pdf(tmp_path):
+    p = tmp_path / "caption.pdf"
+    c = _make(p)
+    for title in ("Caso clinico um", "Outro caso clinico bem diferente"):
+        c.setFont("Helvetica", 9)
+        c.drawString(60, 720, title)
+        cut = CAPTION.index(" ", 90)
+        c.drawString(60, 650, CAPTION[:cut])
+        c.drawString(60, 638.5, CAPTION[cut + 1 :])
+        c.showPage()
+    c.save()
+    return p
