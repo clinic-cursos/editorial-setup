@@ -82,6 +82,8 @@ def check_duplicates(pdf, rules: Rules) -> list[Finding]:
     out = []
     for page in pdf.pages:
         text = " ".join(" ".join(l["text"] for l in _lines(page)).split()).casefold()
+        for a in allowed:
+            text = text.replace(a, "\x00")  # texto de repetição proposital sai antes da busca
         sources = set()
         for i in range(len(text) - _MIN_PARAGRAPH + 1):
             w = text[i : i + _MIN_PARAGRAPH]
@@ -90,8 +92,7 @@ def check_duplicates(pdf, rules: Rules) -> list[Finding]:
             # na mesma página, só vale repetição sem sobreposição das janelas
             if first == (page.page_number, i) or (first[0] == page.page_number and i - first[1] < _MIN_PARAGRAPH):
                 continue
-            if not any(w.strip() in a for a in allowed):
-                sources.add(first[0])
+            sources.add(first[0])
         for src in sorted(sources):
             where = "na própria página" if src == page.page_number else f"da página {src}"
             out.append(Finding(page.page_number, "duplicate-paragraph", "error", f"trecho de {_MIN_PARAGRAPH}+ caracteres repetido {where}"))

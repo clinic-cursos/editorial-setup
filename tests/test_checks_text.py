@@ -95,3 +95,7 @@ def test_duplicate_within_same_page(same_page_duplicate_pdf, open_pdf, test_rule
 def test_coincident_baselines_overlap_in_one_region(coincident_baselines_pdf, open_pdf, test_rules):
     found = checks.check_overlaps(open_pdf(coincident_baselines_pdf), test_rules)
     assert [f.kind for f in found] == ["overlap"]
+
+
+def test_label_before_allowed_caption_is_not_duplicate(label_before_caption_pdf, open_pdf, test_rules):
+    assert checks.check_duplicates(open_pdf(label_before_caption_pdf), test_rules) == []
