@@ -102,7 +102,7 @@ def check_fonts(pdf, rules: Rules) -> list[Finding]:
             name = _SUBSET.sub("", raw)
             if not name or name.casefold() == "unknown":
                 out.append(Finding(page.page_number, "font-unnamed", "warning", "fonte sem nome (possível Type3); conferir a mão"))
-            elif not any(name.casefold().startswith(a) for a in allowed):
+            elif not any(name.split('-')[0].casefold() == a for a in allowed):
                 out.append(Finding(page.page_number, "font-not-allowed", "error", f"fonte fora da marca: {name}"))
     return out
 

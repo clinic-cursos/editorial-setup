@@ -69,3 +69,7 @@ def test_letter_size_is_page_size_error(letter_pdf, open_pdf, test_rules):
 def test_near_coincident_lines_overlap(near_overlap_pdf, open_pdf, test_rules):
     found = checks.check_overlaps(open_pdf(near_overlap_pdf), test_rules)
     assert [f.kind for f in found] == ["overlap"]
+
+def test_similar_family_name_not_allowed():
+    found = checks.check_fonts(_fake_pdf("MontserratAlternates-Regular"), load_rules())
+    assert [f.kind for f in found] == ["font-not-allowed"]
