@@ -162,3 +162,16 @@ def caption_repeat_pdf(tmp_path):
         c.showPage()
     c.save()
     return p
+
+
+@pytest.fixture
+def same_page_duplicate_pdf(tmp_path):
+    p = tmp_path / "same_page.pdf"
+    c = _make(p)
+    c.setFont("Helvetica", 9)
+    c.drawString(60, 700, "Pagina com repeticao interna.")
+    c.drawString(60, 650, PARAGRAPH)
+    c.drawString(60, 600, "Texto intermediario diferente.")
+    c.drawString(60, 550, PARAGRAPH)
+    c.save()
+    return p

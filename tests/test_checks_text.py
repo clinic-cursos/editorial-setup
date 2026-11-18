@@ -85,3 +85,8 @@ def test_standard_caption_repeat_is_allowed(caption_repeat_pdf, open_pdf, test_r
     pdf = open_pdf(caption_repeat_pdf)
     assert checks.check_duplicates(pdf, test_rules) == []
     assert checks.check_duplicates(pdf, dataclasses.replace(test_rules, allowed_repeats=[]))
+
+
+def test_duplicate_within_same_page(same_page_duplicate_pdf, open_pdf, test_rules):
+    found = checks.check_duplicates(open_pdf(same_page_duplicate_pdf), test_rules)
+    assert [(f.kind, f.page) for f in found] == [("duplicate-paragraph", 1)]

@@ -68,17 +68,23 @@ def check_duplicates(pdf, rules: Rules) -> list[Finding]:
     # Janela deslizante de _MIN_PARAGRAPH caracteres do texto normalizado da página: acha o
     # trecho repetido mesmo quando título ou entrelinha diferentes mudam o agrupamento em parágrafos.
     allowed = [" ".join(a.split()).casefold() for a in rules.allowed_repeats]
-    seen: dict[int, int] = {}
+    seen: dict[int, tuple[int, int]] = {}  # hash -> (página, posição) da primeira ocorrência
     out = []
     for page in pdf.pages:
         text = " ".join(" ".join(l["text"] for l in _lines(page)).split()).casefold()
-        windows = [text[i : i + _MIN_PARAGRAPH] for i in range(len(text) - _MIN_PARAGRAPH + 1)]
-        hashes = [hash(w) for w in windows]
-        sources = {seen[h] for h, w in zip(hashes, windows) if h in seen and seen[h] < page.page_number and not any(w.strip() in a for a in allowed)}
+        sources = set()
+        for i in range(len(text) - _MIN_PARAGRAPH + 1):
+            w = text[i : i + _MIN_PARAGRAPH]
+            h = hash(w)
+            first = seen.setdefault(h, (page.page_number, i))
+            # na mesma página, só vale repetição sem sobreposição das janelas
+            if first == (page.page_number, i) or (first[0] == page.page_number and i - first[1] < _MIN_PARAGRAPH):
+                continue
+            if not any(w.strip() in a for a in allowed):
+                sources.add(first[0])
         for src in sorted(sources):
-            out.append(Finding(page.page_number, "duplicate-paragraph", "error", f"trecho de {_MIN_PARAGRAPH}+ caracteres repetido da página {src}"))
-        for h in hashes:
-            seen.setdefault(h, page.page_number)
+            where = "na própria página" if src == page.page_number else f"da página {src}"
+            out.append(Finding(page.page_number, "duplicate-paragraph", "error", f"trecho de {_MIN_PARAGRAPH}+ caracteres repetido {where}"))
     return out
 
 
