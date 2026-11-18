@@ -12,28 +12,33 @@ NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc")
 
 
-def parse_frontmatter(text: str) -> dict[str, str]:
+def parse_frontmatter(text: str) -> dict[str, str] | None:
+    """Return the fields, or None when the closing '---' is missing."""
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
-        return {}
+        return None
     data: dict[str, str] = {}
     key = None
     for line in lines[1:]:
         if line.strip() == "---":
-            break
+            return data
         m = re.match(r"^([A-Za-z_-]+):\s*(.*)$", line)
         if m and not line.startswith(" "):
             key, val = m.group(1), m.group(2).strip()
-            data[key] = "" if val in (">", "|", ">-", "|-") else val.strip("\"'")
-        elif key and line.strip():
+            if val.startswith("#") or val in (">", "|", ">-", "|-"):
+                val = ""
+            data[key] = val.strip("\"'")
+        elif key and line.strip() and not line.strip().startswith("#"):
             data[key] = (data[key] + " " + line.strip()).strip()
-    return data
+    return None
 
 
 def check_skill(skill: Path) -> list[str]:
     errs = []
     md = (skill / "SKILL.md").read_text(encoding="utf-8")
     fm = parse_frontmatter(md)
+    if fm is None:
+        return [f"skills/{skill.name}: SKILL.md frontmatter missing or not closed with '---'"]
     name, desc = fm.get("name", ""), fm.get("description", "")
     tag = f"skills/{skill.name}"
     if not (1 <= len(name) <= 64 and NAME_RE.match(name)):
@@ -50,21 +55,32 @@ def check_skill(skill: Path) -> list[str]:
     return errs
 
 
-def compare_tree(src: Path, dst: Path, label: str) -> list[str]:
-    errs = []
-    for f in sorted(p for p in src.rglob("*") if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc"):
-        copy = dst / f.relative_to(src)
-        if not copy.is_file() or not filecmp.cmp(f, copy, shallow=False):
-            errs.append(f"{label}: {copy} differs from {f} (run --sync)")
+def tree_files(root: Path) -> set[Path]:
+    return {p.relative_to(root) for p in root.rglob("*") if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc"}
+
+
+def targets(root: Path, skill: Path) -> dict[Path, list[Path]]:
+    """Copy destination inside the skill -> source dirs that feed it."""
+    out: dict[Path, list[Path]] = {}
+    if skill.name in PDFCHECK_SKILLS and (root / "lib" / "pdfcheck").is_dir():
+        out[skill / "scripts" / "pdfcheck"] = [root / "lib" / "pdfcheck"]
+    common = [root / "shared" / d for d in ("references", "rules") if (root / "shared" / d).is_dir()]
+    if common:
+        out[skill / "references" / "comum"] = common
+    return out
+
+
+def compare(dst: Path, srcs: list[Path], label: str) -> list[str]:
+    errs, expected = [], set()
+    for src in srcs:
+        for rel in sorted(tree_files(src)):
+            expected.add(rel)
+            copy = dst / rel
+            if not copy.is_file() or not filecmp.cmp(src / rel, copy, shallow=False):
+                errs.append(f"{label}: {copy} differs from {src / rel} (run --sync)")
+    for rel in sorted(tree_files(dst) - expected if dst.is_dir() else set()):
+        errs.append(f"{label}: {dst / rel} has no source (run --sync)")
     return errs
-
-
-def common_sources(root: Path):
-    """(source dir, relative destination inside the skill) pairs that exist."""
-    return [
-        (root / "shared" / "references", Path("references/comum")),
-        (root / "shared" / "rules", Path("references/comum")),
-    ]
 
 
 def check(root: Path) -> tuple[list[str], list[str]]:
@@ -77,11 +93,8 @@ def check(root: Path) -> tuple[list[str], list[str]]:
             warns.append(f"skills/{skill.name}: no SKILL.md, skipped")
             continue
         errs += check_skill(skill)
-        if skill.name in PDFCHECK_SKILLS and (root / "lib" / "pdfcheck").is_dir():
-            errs += compare_tree(root / "lib" / "pdfcheck", skill / "scripts" / "pdfcheck", f"skills/{skill.name}")
-        for src, rel in common_sources(root):
-            if src.is_dir():
-                errs += compare_tree(src, skill / rel, f"skills/{skill.name}")
+        for dst, srcs in targets(root, skill).items():
+            errs += compare(dst, srcs, f"skills/{skill.name}")
     return errs, warns
 
 
@@ -90,11 +103,12 @@ def sync(root: Path) -> None:
     for skill in sorted(p for p in skills_dir.iterdir() if p.is_dir()) if skills_dir.is_dir() else []:
         if not (skill / "SKILL.md").is_file():
             continue
-        pairs = [(src, skill / rel) for src, rel in common_sources(root) if src.is_dir()]
-        if skill.name in PDFCHECK_SKILLS and (root / "lib" / "pdfcheck").is_dir():
-            pairs.append((root / "lib" / "pdfcheck", skill / "scripts" / "pdfcheck"))
-        for src, dst in pairs:
-            shutil.copytree(src, dst, dirs_exist_ok=True, ignore=IGNORE)
+        for dst, srcs in targets(root, skill).items():
+            for src in srcs:
+                shutil.copytree(src, dst, dirs_exist_ok=True, ignore=IGNORE)
+            expected = set().union(*(tree_files(src) for src in srcs))
+            for rel in tree_files(dst) - expected:
+                (dst / rel).unlink()
 
 
 def main(argv: list[str] | None = None, root: Path = ROOT) -> int:

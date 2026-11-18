@@ -5,13 +5,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import package  # noqa: E402
 
 
-def make_skill(root, name="demo", desc="Uma skill de teste.", extra_lines=0, md_name=None):
+def make_skill(root, name="demo", desc="Uma skill de teste.", total_lines=None, md_name=None, raw=None):
     d = root / "skills" / name
     d.mkdir(parents=True)
-    body = "\n".join(["linha"] * extra_lines)
-    (d / "SKILL.md").write_text(
-        f"---\nname: {md_name or name}\ndescription: {desc}\n---\n# Demo\n{body}\n", encoding="utf-8"
-    )
+    lines = ["---", f"name: {md_name or name}", f"description: {desc}", "---", "# Demo"]
+    lines += ["linha"] * ((total_lines or 0) - len(lines))
+    (d / "SKILL.md").write_text(raw if raw is not None else "\n".join(lines) + "\n", encoding="utf-8")
     return d
 
 
@@ -39,9 +38,51 @@ def test_description_over_1024_fails(tmp_path):
 
 
 def test_skill_md_500_lines_fails(tmp_path):
-    make_skill(tmp_path, extra_lines=500)
+    make_skill(tmp_path, total_lines=500)
     errs, _ = run(tmp_path)
     assert any("lines" in e for e in errs)
+
+
+def test_skill_md_499_lines_passes(tmp_path):
+    make_skill(tmp_path, total_lines=499)
+    assert run(tmp_path) == ([], [])
+
+
+def test_unclosed_frontmatter_fails(tmp_path):
+    make_skill(tmp_path, raw="---\nname: demo\ndescription: ok\n# Demo\n")
+    assert run(tmp_path)[0]
+
+
+def test_comment_only_description_fails(tmp_path):
+    make_skill(tmp_path, desc="# comentario")
+    errs, _ = run(tmp_path)
+    assert any("description" in e for e in errs)
+
+
+def _shared_tree(tmp_path):
+    make_skill(tmp_path, name="diagramador")
+    (tmp_path / "lib" / "pdfcheck").mkdir(parents=True)
+    (tmp_path / "lib" / "pdfcheck" / "a.py").write_text("x = 1\n")
+    (tmp_path / "shared" / "references").mkdir(parents=True)
+    (tmp_path / "shared" / "references" / "g.md").write_text("regra\n")
+    package.sync(tmp_path)
+    return tmp_path / "skills" / "diagramador"
+
+
+def test_extra_file_in_copy_fails(tmp_path):
+    skill = _shared_tree(tmp_path)
+    (skill / "references/comum/sobra.md").write_text("x\n")
+    assert any("sobra.md" in e for e in run(tmp_path)[0])
+
+
+def test_sync_removes_stale_file(tmp_path):
+    skill = _shared_tree(tmp_path)
+    (skill / "scripts/pdfcheck/velho.py").write_text("x\n")
+    (skill / "references/comum/sobra.md").write_text("x\n")
+    package.sync(tmp_path)
+    assert not (skill / "scripts/pdfcheck/velho.py").exists()
+    assert not (skill / "references/comum/sobra.md").exists()
+    assert run(tmp_path) == ([], [])
 
 
 def test_top_level_bin_fails(tmp_path):
