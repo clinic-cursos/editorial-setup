@@ -205,3 +205,35 @@ def coincident_baselines_pdf(tmp_path):
     c.drawString(80, 699.95, "Bbbbbbbb Bbbbbbbb")
     c.save()
     return p
+
+
+@pytest.fixture
+def layout_pdf(tmp_path):
+    def make(*draw_pages):
+        path = tmp_path / "layout.pdf"
+        document = _make(path)
+        for draw in draw_pages:
+            draw(document)
+            document.showPage()
+        document.save()
+        return path
+
+    return make
+
+
+@pytest.fixture
+def placed_image_pdf(layout_pdf):
+    def make(width, height, *, rotation=0, clip=False, pixels=(600, 300)):
+        def draw(document):
+            document.translate(250, 350)
+            document.rotate(rotation)
+            if clip:
+                mask = document.beginPath()
+                mask.rect(0, 0, width / 2, height)
+                document.clipPath(mask, stroke=0)
+            image = ImageReader(Image.new("RGB", pixels, "#800020"))
+            document.drawImage(image, 0, 0, width, height)
+
+        return layout_pdf(draw)
+
+    return make

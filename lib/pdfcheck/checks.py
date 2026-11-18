@@ -1,8 +1,14 @@
-"""Checagens de PDF por página. Cada uma recebe (pdf, rules) e devolve list[Finding]."""
+"""Checagens de PDF e medição de espaço livre por página."""
 
 import re
+from collections import defaultdict
+from itertools import chain
+from math import hypot
+from unicodedata import normalize
 
-from .model import Finding
+from pdfplumber.page import LTContainer
+
+from .model import Finding, FreeSpace
 from .rules import Rules
 
 MM = 72 / 25.4
@@ -10,11 +16,14 @@ _SUBSET = re.compile(r"^[A-Z]{6}\+")
 _MIN_PARAGRAPH = 100  # caracteres
 _PAGE_TOLERANCE = 1.0  # pt
 _GAP = 15.0  # pt: pares de letras mais próximos que isso formam a mesma região de sobreposição
+_FOLIO = re.compile(r"[0-9]+")
+_TOC_HEADING = re.compile(r"sum[áa]rio(?:\s*\(continua(?:ção)?\))?")
+_TOC_ENTRY = re.compile(r"(?P<title>.+?)(?P<leader>\s+|[.·…]{2,}|…)\s*(?P<number>[0-9]+)")
 
 
-def _lines(page):
+def _lines(page, *, return_chars=False):
     # dedupe_chars: negrito simulado (letra desenhada duas vezes no mesmo lugar) não conta
-    return page.dedupe_chars().extract_text_lines(y_tolerance=1, return_chars=False)
+    return page.dedupe_chars().extract_text_lines(y_tolerance=1, return_chars=return_chars)
 
 
 def _area(c) -> float:
@@ -133,3 +142,141 @@ def check_page_size(pdf, rules: Rules) -> list[Finding]:
         for p in pdf.pages
         if abs(p.width - w) > _PAGE_TOLERANCE or abs(p.height - h) > _PAGE_TOLERANCE
     ]
+
+
+def _placed_images(container):
+    for item in container:
+        if isinstance(item, LTContainer):
+            yield from _placed_images(item)
+        elif hasattr(item, "srcsize"):
+            # pdfplumber expõe a caixa alinhada aos eixos em page.images.
+            # A figura pai preserva a matriz da imagem inteira, mesmo com recorte.
+            yield item, container.matrix
+
+
+def check_images(pdf, rules: Rules, inherited: set[str] | None = None) -> list[Finding]:
+    inherited = inherited or set()
+    out = []
+    for page in pdf.pages:
+        for image, (a, b, c, d, _, _) in _placed_images(page.layout):
+            width, height = hypot(a, b), hypot(c, d)
+            pixels_x, pixels_y = image.srcsize
+            if min(width, height, pixels_x, pixels_y) <= 0:
+                continue
+            box = page.process_object(image)
+            bbox = (box["x0"], box["top"], box["x1"], box["bottom"])
+            ppi = min(pixels_x / width, pixels_y / height) * 72
+            if ppi < rules.warning_ppi:
+                severity = "error" if image.name not in inherited and ppi < rules.error_ppi else "warning"
+                detail = f"imagem {image.name} com {ppi:.1f} ppi efetivos"
+                out.append(Finding(page.page_number, "image-low-resolution", severity, detail, bbox))
+
+            distortion = abs((width / height) / (pixels_x / pixels_y) - 1)
+            if distortion > rules.distortion_tolerance:
+                detail = f"imagem {image.name} com {distortion:.1%} de alteração na proporção"
+                out.append(Finding(page.page_number, "image-distorted", "error", detail, bbox))
+    return out
+
+
+def _footer_top(page, rules: Rules) -> float:
+    return page.bbox[3] - max(page.height * 0.10, rules.safe_zone_mm * MM)
+
+
+def _printed_number(lines, footer_top: float) -> int | None:
+    numbers = [
+        line for line in lines if line["top"] >= footer_top and _FOLIO.fullmatch(line["text"])
+    ]
+    return int(max(numbers, key=lambda line: line["bottom"])["text"]) if numbers else None
+
+
+def check_page_numbers(pdf, rules: Rules) -> list[Finding]:
+    out = []
+    expected = None
+    for page in pdf.pages:
+        printed = _printed_number(_lines(page), _footer_top(page, rules))
+        if printed is None:
+            out.append(Finding(page.page_number, "page-number", "error", "número de página ausente no rodapé"))
+        elif expected is not None and printed != expected:
+            detail = f"número {printed} no rodapé, esperado {expected}"
+            out.append(Finding(page.page_number, "page-number", "error", detail))
+        if printed is not None:
+            expected = printed + 1
+        elif expected is not None:
+            expected += 1
+    return out
+
+
+def _normalized(text: str) -> str:
+    return " ".join(normalize("NFKC", text).casefold().split())
+
+
+def check_toc(pdf, rules: Rules) -> list[Finding]:
+    entries = []
+    title_pages = defaultdict(set)
+    printed_pages = {}
+    continuing = False
+    for page in pdf.pages:
+        lines = _lines(page)
+        footer_top = _footer_top(page, rules)
+        printed_pages[page.page_number] = _printed_number(lines, footer_top)
+        body = [line for line in lines if line["top"] < footer_top]
+        texts = [_normalized(line["text"]) for line in body]
+        heading = next((i for i, text in enumerate(texts) if _TOC_HEADING.fullmatch(text)), None)
+        rows = body[heading + 1 :] if heading is not None else body
+        matches = [match for line in rows if (match := _TOC_ENTRY.fullmatch(line["text"]))]
+        looks_like_toc = bool(matches) and (
+            len(matches) == len(rows) or any(m["leader"].strip() for m in matches)
+        )
+        continuing = heading is not None or (continuing and looks_like_toc)
+        if continuing:
+            entries.extend(
+                (page.page_number, m["title"].rstrip(" .·…"), int(m["number"])) for m in matches
+            )
+        else:
+            for text in texts:
+                title_pages[text].add(page.page_number)
+
+    uses_printed_pages = any(number is not None for number in printed_pages.values())
+    out = []
+    for page, title, declared in entries:
+        actual = title_pages.get(_normalized(title), set())
+        if uses_printed_pages:
+            actual = {printed_pages[p] for p in actual} - {None}
+        if declared not in actual:
+            location = ", ".join(map(str, sorted(actual))) or "sem página correspondente"
+            detail = f"sumário indica {declared} para «{title}», encontrado: {location}"
+            out.append(Finding(page, "toc-mismatch", "error", detail))
+    return out
+
+
+def _chapter_opening(page, useful_width: float) -> bool:
+    lines = _lines(page, return_chars=True)
+    if not lines:
+        return False
+    # A caixa do texto aproxima a largura ocupada pelo título no PDF final.
+    title = max(lines, key=lambda line: max(char["size"] for char in line["chars"]))
+    return (
+        title["top"] < page.bbox[1] + page.height / 3
+        and title["x1"] - title["x0"] >= useful_width / 2
+        and max(char["size"] for char in title["chars"]) >= 18
+    )
+
+
+def free_space(pdf, rules: Rules) -> list[FreeSpace]:
+    margin = rules.safe_zone_mm * MM
+    out = []
+    for page in pdf.pages:
+        x0, y0, x1, bottom = page.bbox
+        x0, x1, bottom = x0 + margin, x1 - margin, bottom - margin
+        useful_height = bottom - y0 - margin
+        if useful_height <= 0 or x1 <= x0:
+            continue
+        objects = chain(page.chars, page.images, page.lines, page.rects, page.curves)
+        top = max((obj["bottom"] for obj in objects if obj["top"] < bottom), default=None)
+        if top is None:
+            continue
+        top = max(top, y0 + margin)
+        fraction = (bottom - top) / useful_height
+        if fraction > rules.free_space_fraction and not _chapter_opening(page, x1 - x0):
+            out.append(FreeSpace(page.page_number, x0, top, x1, bottom, fraction))
+    return out
