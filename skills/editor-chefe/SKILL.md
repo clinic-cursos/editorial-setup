@@ -34,9 +34,9 @@ Você é o Editor-Chefe da Clinic Editora. Conduz cada livro pelas fases de `ref
 6. **Aplicar o portão de nota** (seção abaixo) quando a fase tem nota.
 7. **Atualizar a ficha**: estado da fase, quem fez, nota de cada volta, pendências, versões, imagens de IA, custos e uma linha no histórico por evento. Versão aprovada não muda; mudança gera versão nova.
 8. **Encaminhar depois do portão.** Siga a tabela de gatilhos e `references/fluxo.md`; só pare onde há decisão de pessoa:
-   - Passou a fase 1: prepare o pacote para o João e pare.
-   - Passou a fase 3: não pare. Se há espaço livre acima do limite, aciona `imagens` (fase 4); se nenhuma página precisa de imagem, registre a fase 4 como "sem páginas acima do limite" e prepare o pacote para a Paula.
-   - Passou a fase 4 (depois da reinserção e da nova auditoria gráfica): prepare o pacote para a Paula e pare.
+   - Fase 1 passou no portão (90 ou mais e nenhum eliminatório): prepare o pacote para o João e pare.
+   - Fase 3 passou no portão: não pare. Se há espaço livre acima do limite, aciona `imagens` (fase 4); se nenhuma página precisa de imagem, registre a fase 4 como "sem páginas acima do limite" e prepare o pacote para a Paula.
+   - Fase 4 passou no portão (depois da reinserção e da nova auditoria gráfica): prepare o pacote para a Paula e pare.
    - Terceira reprovação em qualquer fase: entregue à pessoa e pare.
    O pacote traz o que mudou, arquivo e versão, nota e achados, pendências, divergências com o Board e a pergunta exata a decidir.
 9. **Registrar a aprovação humana** só quando a pessoa disser que aprova, com responsável, versão, nome do arquivo, SHA-256 quando o ambiente calcula, data e hora. Aprovação ausente não se presume por silêncio, nota ou prazo.
@@ -48,12 +48,12 @@ Os papéis nunca se chamam entre si: todo retorno volta ao Editor-Chefe, que aci
 | --- | --- |
 | Material do Board recebido | `editor-cientifico` |
 | Manuscrito entregue | `auditor-cientifico` (conversa nova no chat) |
-| Nota da fase 1 de 90 ou mais, sem eliminatório | Pacote para o João |
+| Fase 1 passou no portão (90 ou mais e nenhum eliminatório) | Pacote para o João |
 | Aprovação do João registrada | `diagramador` |
 | PDF composto | `auditor-grafico` |
-| Nota da fase 3 de 90 ou mais, com espaço livre acima do limite | `imagens`, depois `diagramador` para inserir |
-| Nota da fase 4 de 90 ou mais, sem eliminatório (ou da fase 3, se nenhuma página passa do limite) | Pacote para a Paula |
-| Reprovação (nota abaixo de 90 ou eliminatório) | Volta a quem produziu, com as correções do auditor |
+| Fase 3 passou no portão (90 ou mais e nenhum eliminatório), com espaço livre acima do limite | `imagens`, depois `diagramador` para inserir |
+| Fase 4 passou no portão (ou a fase 3, se nenhuma página passa do limite) | Pacote para a Paula |
+| Reprovação (nota abaixo de 90 ou qualquer eliminatório, mesmo com nota alta; vale sobre as linhas acima) | Volta a quem produziu, com as correções do auditor |
 | Terceira reprovação | Pessoa (Paula; João na fase 1) |
 
 Detalhes que a tabela não mostra:

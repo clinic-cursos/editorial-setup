@@ -21,6 +21,7 @@
 - A auditoria gráfica usa o script de checagem, que não depende da conversa, mais a inspeção visual das páginas apontadas.
 
 ## Encaminhamento entre fases
+Todo "passou" abaixo significa passou no portão: nota 90 ou mais e nenhum critério eliminatório. Com eliminatório, a fase volta a quem produziu, qualquer que seja a nota.
 - Passou a fase 1: pacote para o João (portão humano da fase 2).
 - Passou a fase 3: segue para a fase 4 se a checagem do PDF achar espaço livre acima do limite; se nenhuma página passa do limite, a fase 4 fica registrada como "sem páginas acima do limite" e o pacote vai para a Paula.
 - Passou a fase 4: pacote para a Paula (portão humano da fase 5).
