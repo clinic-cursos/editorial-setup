@@ -181,6 +181,8 @@ editorial-setup/
 Contingência sem skills no ChatGPT: o `package.py` também gera `dist/chatgpt-projeto/`, com as instruções do Projeto (o `SKILL.md` do Editor-Chefe) e os demais `SKILL.md` e referências como arquivos do Projeto.
 
 
+Gatilhos e hooks (pedido do Alify em 18/11/2026): o Editor-Chefe aciona cada papel no evento certo, por uma tabela de gatilhos na skill dele, e todo retorno volta a ele; os papéis não se chamam entre si. No Claude Code e no Codex o Editor-Chefe roda na conversa principal, porque subagente não abre subagente. No plugin do Claude Code, `hooks/hooks.json` traz três travas: nega escrita nos originais e em versão aprovada, confere o bloco de retorno de cada papel e lembra a ficha no fim da conversa. No ChatGPT e no claude.ai, que não têm hook, as mesmas regras ficam no texto das skills.
+
 ### 9.1 A Paula trabalha e melhora o setup
 O objetivo é a Paula já trabalhar com o setup no ChatGPT, que ela usa todo dia, e melhorá-lo com o uso (Alify, 18/11/2026). Para a fonte continuar única:
 - Cada melhoria vira uma linha em `docs/melhorias.md` (data, papel, o que mudar, por quê, exemplo). A Paula pode ditar a melhoria ao Editor-Chefe, que devolve a linha pronta para ela mandar ao Alify, ou mandar direto.
