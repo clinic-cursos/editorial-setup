@@ -8,4 +8,11 @@ Todos os papéis consultam estas referências antes de executar uma tarefa edito
 - [Manuscrito](references/manuscrito.md) define o formato que o Editor Científico-Didático produz e que segue para a diagramação após a aprovação técnica.
 - [Retorno](references/retorno.md) define o bloco que os papéis devolvem ao Editor-Chefe.
 
-Edite as referências em `shared/references/`. O empacotamento copia os arquivos para `references/comum/` de cada skill.
+## Cópia para as skills
+
+As partes comuns são copiadas para dentro de cada skill por `uv run python scripts/package.py --sync`:
+
+- `shared/references/` e `shared/rules/` vão para `skills/<skill>/references/comum/` (toda skill com `SKILL.md`).
+- `lib/pdfcheck/` vai para `skills/<skill>/scripts/pdfcheck/` (`diagramador`, `imagens`, `auditor-grafico`).
+
+Não edite as cópias: edite a origem e rode `--sync`. O `--check` falha se houver deriva.
