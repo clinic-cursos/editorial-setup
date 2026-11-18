@@ -60,13 +60,13 @@ def tree_files(root: Path) -> set[Path]:
 
 
 def targets(root: Path, skill: Path) -> dict[Path, list[Path]]:
-    """Copy destination inside the skill -> source dirs that feed it."""
+    """Copy destination inside the skill -> source dirs that feed it (empty when the source is gone)."""
     out: dict[Path, list[Path]] = {}
-    if skill.name in PDFCHECK_SKILLS and (root / "lib" / "pdfcheck").is_dir():
-        out[skill / "scripts" / "pdfcheck"] = [root / "lib" / "pdfcheck"]
-    common = [root / "shared" / d for d in ("references", "rules") if (root / "shared" / d).is_dir()]
-    if common:
-        out[skill / "references" / "comum"] = common
+    if skill.name in PDFCHECK_SKILLS:
+        src = root / "lib" / "pdfcheck"
+        out[skill / "scripts" / "pdfcheck"] = [src] if src.is_dir() else []
+    common = [root / "shared" / d for d in ("references", "rules")]
+    out[skill / "references" / "comum"] = [d for d in common if d.is_dir()]
     return out
 
 
@@ -109,6 +109,9 @@ def sync(root: Path) -> None:
             expected = set().union(*(tree_files(src) for src in srcs))
             for rel in tree_files(dst) - expected:
                 (dst / rel).unlink()
+            for d in sorted((p for p in dst.rglob("*") if p.is_dir()), reverse=True):
+                if not any(d.iterdir()):
+                    d.rmdir()
 
 
 def main(argv: list[str] | None = None, root: Path = ROOT) -> int:

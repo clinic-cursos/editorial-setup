@@ -1,3 +1,4 @@
+import shutil
 import sys
 from pathlib import Path
 
@@ -134,3 +135,24 @@ def test_null_description_fails(tmp_path):
     assert len([e for e in errs if "description" in e]) == 4
     make_skill(tmp_path, name="outra", md_name="null")
     assert any("name" in e for e in run(tmp_path)[0])
+
+
+def _orphan_tree(tmp_path):
+    skill = _shared_tree(tmp_path)
+    shutil.rmtree(tmp_path / "lib")
+    shutil.rmtree(tmp_path / "shared")
+    return skill
+
+
+def test_orphan_copy_without_source_fails(tmp_path):
+    _orphan_tree(tmp_path)
+    errs = run(tmp_path)[0]
+    assert any("pdfcheck" in e for e in errs) and any("g.md" in e for e in errs)
+
+
+def test_sync_removes_orphan_copy(tmp_path):
+    skill = _orphan_tree(tmp_path)
+    package.sync(tmp_path)
+    assert not (skill / "scripts/pdfcheck/a.py").exists()
+    assert not (skill / "references/comum/g.md").exists()
+    assert run(tmp_path) == ([], [])
