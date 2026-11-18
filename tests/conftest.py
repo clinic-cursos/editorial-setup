@@ -175,3 +175,14 @@ def same_page_duplicate_pdf(tmp_path):
     c.drawString(60, 550, PARAGRAPH)
     c.save()
     return p
+
+
+@pytest.fixture
+def coincident_baselines_pdf(tmp_path):
+    p = tmp_path / "coincident.pdf"
+    c = _make(p)
+    c.setFont("Helvetica", 12)
+    c.drawString(80, 700, "Aaaaaaaa Aaaaaaaa")
+    c.drawString(80, 699.95, "Bbbbbbbb Bbbbbbbb")
+    c.save()
+    return p

@@ -9,35 +9,45 @@ MM = 72 / 25.4
 _SUBSET = re.compile(r"^[A-Z]{6}\+")
 _MIN_PARAGRAPH = 100  # caracteres
 _PAGE_TOLERANCE = 1.0  # pt
+_GAP = 15.0  # pt: pares de letras mais próximos que isso formam a mesma região de sobreposição
 
 
-def _lines(page, y_tolerance=1):
+def _lines(page):
     # dedupe_chars: negrito simulado (letra desenhada duas vezes no mesmo lugar) não conta
-    return page.dedupe_chars().extract_text_lines(y_tolerance=y_tolerance, return_chars=False)
+    return page.dedupe_chars().extract_text_lines(y_tolerance=1, return_chars=False)
 
 
-def _crosses(a, b) -> bool:
-    return min(a["x1"], b["x1"]) - max(a["x0"], b["x0"]) > 1 and min(a["bottom"], b["bottom"]) - max(a["top"], b["top"]) > 1
+def _area(c) -> float:
+    return max(c["x1"] - c["x0"], 0) * max(c["bottom"] - c["top"], 0)
+
+
+def _inter(a, b) -> float:
+    return max(min(a["x1"], b["x1"]) - max(a["x0"], b["x0"]), 0) * max(min(a["bottom"], b["bottom"]) - max(a["top"], b["top"]), 0)
 
 
 def check_overlaps(pdf, rules: Rules) -> list[Finding]:
+    # Caixas dos caracteres (após dedupe_chars): cruzamento acima de 30% da área do menor.
+    # Vizinhos na ordem de leitura (kerning) não contam; pares viram um achado por região.
     out = []
     for page in pdf.pages:
-        lines = sorted(_lines(page, y_tolerance=0.1), key=lambda l: l["top"])
-        for i, a in enumerate(lines):
-            for b in lines[i + 1 :]:
-                if b["top"] - a["bottom"] > 1:
+        chars = [c for c in page.dedupe_chars().chars if c["text"].strip() and _area(c) > 0]
+        order = sorted(range(len(chars)), key=lambda i: chars[i]["top"])
+        regions: list[list] = []  # [x0, top, x1, bottom, pares]
+        for n, i in enumerate(order):
+            a = chars[i]
+            for j in order[n + 1 :]:
+                b = chars[j]
+                if b["top"] >= a["bottom"]:
                     break
-                if _crosses(a, b):
-                    out.append(
-                        Finding(
-                            page.page_number,
-                            "overlap",
-                            "error",
-                            f"linhas sobrepostas: «{a['text'][:40]}» e «{b['text'][:40]}»",
-                            (min(a["x0"], b["x0"]), min(a["top"], b["top"]), max(a["x1"], b["x1"]), max(a["bottom"], b["bottom"])),
-                        )
-                    )
+                if abs(i - j) == 1 or _inter(a, b) <= 0.3 * min(_area(a), _area(b)):
+                    continue
+                box = [min(a["x0"], b["x0"]), min(a["top"], b["top"]), max(a["x1"], b["x1"]), max(a["bottom"], b["bottom"]), 1]
+                for r in [r for r in regions if r[0] - _GAP <= box[2] and box[0] <= r[2] + _GAP and r[1] - _GAP <= box[3] and box[1] <= r[3] + _GAP]:
+                    regions.remove(r)
+                    box = [min(box[0], r[0]), min(box[1], r[1]), max(box[2], r[2]), max(box[3], r[3]), box[4] + r[4]]
+                regions.append(box)
+        for x0, top, x1, bottom, n_pairs in regions:
+            out.append(Finding(page.page_number, "overlap", "error", f"caracteres sobrepostos na região ({n_pairs} par(es))", (x0, top, x1, bottom)))
     return out
 
 

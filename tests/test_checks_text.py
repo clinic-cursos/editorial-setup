@@ -90,3 +90,8 @@ def test_standard_caption_repeat_is_allowed(caption_repeat_pdf, open_pdf, test_r
 def test_duplicate_within_same_page(same_page_duplicate_pdf, open_pdf, test_rules):
     found = checks.check_duplicates(open_pdf(same_page_duplicate_pdf), test_rules)
     assert [(f.kind, f.page) for f in found] == [("duplicate-paragraph", 1)]
+
+
+def test_coincident_baselines_overlap_in_one_region(coincident_baselines_pdf, open_pdf, test_rules):
+    found = checks.check_overlaps(open_pdf(coincident_baselines_pdf), test_rules)
+    assert [f.kind for f in found] == ["overlap"]
