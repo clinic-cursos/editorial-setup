@@ -64,7 +64,7 @@ Seis papéis: o Editor-Chefe e os quatro subagentes da instrução da Paula, mai
 | `imagens` | Agente de Arte (externo na instrução; dentro do setup por pedido do Alify) | Imagens complementares com briefing, prompt usado, modelo usado quando disponível e marca de uso de IA | Aprovar a própria imagem; gerar imagem anatômica ou clínica sem passar pela validação científica |
 | `auditor-grafico` | Auditor Gráfico | Relatório de erros por página (sobreposição, corte, duplicação, fonte de reserva, imagem em baixa resolução ou distorcida, margens, paginação, sumário, legenda) e nota da fase | Gerar ou editar imagem; corrigir o layout (só aponta) |
 
-Pastas por time: `agents/editorial/` segue a estrutura combinada para o `agent-service` (um diretório por time). Os demais times não entram nesta V1.
+Pastas por time: `agents/editorial/` segue a estrutura combinada para o `agent-service` (um diretório por time). Os demais times não entram nesta V1. As definições em `agents/editorial/` são no formato do Claude Code; a versão da VPS reaproveita o texto das skills e decide o próprio formato de agente no ADR do orquestrador (`clinic-cursos/infra`, `docs/decisoes/2026-11-18-agents-orchestrator.md`, em proposta).
 
 ## 6. Fluxo, portões e nota
 ### 6.1 Fases
@@ -121,7 +121,14 @@ O Diagramador gera uma fonte editável em HTML com CSS de impressão (`@page`, c
 - Manual de diagramação da Paula: entra em `skills/diagramador/references/manual-clinic.md` quando chegar. Até lá, o arquivo diz "aguardando o manual" e a skill usa os padrões já conhecidos (identidade bordô, branco e cinza; A4; legenda Source Sans 9/11,5 pt cinza), marcando no relatório cada regra que veio de inferência.
 - ABNT: `skills/diagramador/references/abnt.md` resume, com o número da norma, o que se aplica a livro técnico-didático: NBR 6029:2023 (apresentação de livros, confirmada na capa da norma) e, com confiança média até conferir no catálogo da ABNT, NBR 6023 (referências), 10520 (citações), 6024 (numeração progressiva), 6027 (sumário), 6034 (índice) (`stack-layout.md`, B3).
 
-Entrada aceita: manuscrito em Markdown, DOCX ou PDF. PDF já composto (caso de Preenchedores) é extraído para a fonte HTML com o pdfplumber, preservando a ordem, os títulos e os blocos; a fidelidade é conferida comparando o texto de entrada com o de saída (seção 10).
+Entradas (decisão desta sessão):
+- **Caminho de produção:** o manuscrito em Markdown que o Editor Científico entrega e o João aprova. As convenções (metadados no topo, blocos editoriais como `:::ponto-chave`, marca de origem `<!-- slide: 12 -->`) ficam em `shared/references/manuscrito.md`, definidas por quem constrói. DOCX entra convertido para esse Markdown.
+- **Livros já compostos em PDF** (caso de Preenchedores e de Toxina): o PDF é extraído para o Markdown com o pdfplumber, preservando ordem, títulos e blocos; a fidelidade é conferida comparando o texto de entrada com o de saída (seção 10). É o caminho dos livros que já existem, não o principal.
+- Slides e apostila do Board: PDF exportado (padrão). PPTX entra pelo python-pptx (MIT) se a equipe mandar nesse formato.
+
+Aparência do modelo: o `livro.css` reproduz o visual dos PDFs atuais da Clinic (capa bordô, Montserrat nos títulos, Source Sans no texto, títulos e rótulos em bordô). Antes do teste real, o Diagramador renderiza três páginas de amostra (abertura de capítulo, página de texto com caixas, página com imagem e legenda) e o Alify ou a Paula aprovam (regra da casa: mudança visível só com mockup aprovado). Enquanto o manual da Paula não chegar, a nota da fase 3 sai marcada "provisória: manual ausente", e o Editor-Chefe repete essa marca ao reportar.
+
+Motor: só o WeasyPrint na V1, sem segundo motor. Se o teste de plataforma (critério 0) mostrar que o ChatGPT não roda o WeasyPrint, o Diagramador e o Auditor Gráfico rodam no Claude Code ou no Codex, e o ChatGPT fica com os demais papéis.
 
 ### 8.2 Checagem técnica (scripts)
 - `skills/auditor-grafico/scripts/audit_pdf.py`: lê o PDF com pdfplumber e pypdf e lista, por página, sobreposição de caixas de texto, texto fora da área útil, parágrafo duplicado, fonte fora da lista do manual, imagem com DPI efetivo abaixo do mínimo (pixels ÷ (largura exibida em pt ÷ 72)), imagem com proporção alterada, margens, número de página e entradas do sumário. Saída em JSON e Markdown.
@@ -130,13 +137,18 @@ Entrada aceita: manuscrito em Markdown, DOCX ou PDF. PDF já composto (caso de P
 
 Os três compartilham uma biblioteca pequena (`lib/pdfcheck/`), copiada para dentro de cada skill pelo script de empacotamento, porque uma skill não lê arquivo de outra.
 
+Regra de resolução (provisória, a confirmar com a Paula): imagem herdada do original e usada no tamanho dela entra como **aviso**, porque o Diagramador não melhora fotografia; imagem nova, ou ampliada pelo Diagramador, entra como **erro** abaixo de 150 ppi efetivos e como aviso abaixo de 300 ppi. No PDF de Preenchedores, 32 das 33 imagens estão abaixo de 150 ppi (medido com `pdfimages -list` em 18/11/2026); elas viram uma lista de avisos para a Paula pedir originais melhores, como o PDF de padrões visuais já faz nas páginas 50 e 54.
+
+- `skills/auditor-cientifico/scripts/verify_refs.py`: confere cada referência pelas APIs gratuitas do Crossref (DOI) e do PubMed (PMID), comparando título, autores e ano. Sem rede, a referência sai "não verificada" e vai para a lista do João; não é eliminatória sozinha, mas tira os pontos de rastreabilidade dela. "Conferir" é existir e bater os metadados; dizer se a fonte sustenta a afirmação é juízo do auditor, registrado como juízo, não como fato.
+
 ### 8.3 Imagens complementares
 1. `free_space.py` lista as páginas com espaço livre acima do limite (ponto de partida: 25% da altura útil; a Paula confirma).
 2. Para cada página, a skill `imagens` lê o conteúdo da página e escreve o briefing: tema, conceito, paleta (bordô, rosa claro, marsala, cinza), estilo conceitual e clean, proporção do espaço livre, sem texto dentro da imagem.
 3. Gera a imagem pela ferramenta nativa do ambiente (ChatGPT ou Codex). No Claude, que não gera imagem, entrega os briefings para gerar no ChatGPT ou no Codex.
-4. Imagem com conteúdo anatômico, clínico ou de procedimento vira pedido de validação científica e não entra até ser validada.
-5. O Diagramador insere a imagem no espaço medido, sem mover o texto, e roda a checagem de novo.
-6. Cada imagem entra na ficha (seção 7) e na nota editorial de uso de IA do livro.
+4. **Imagem complementar é sempre conceitual** (formas, texturas, objetos simbólicos, composições abstratas), como o pedido da Paula diz. Ela nunca representa anatomia, pele com lesão, procedimento, produto de marca ou resultado de tratamento. Na dúvida, a skill troca o conceito por um mais abstrato, em vez de bloquear. Se a página pedir uma ilustração técnica de verdade, isso vira pedido ao Editor-Chefe para o João validar, fora da fase 4, e não impede a fase de fechar (decisão desta sessão, a confirmar com a Paula).
+5. Caminho do arquivo até o Diagramador: no Codex local e no Claude Code, a imagem fica na pasta do projeto (`imagens/pagina-NN.png`). No ChatGPT, se o ambiente Python não enxergar a imagem gerada na conversa, a Paula baixa e reenvia os arquivos com esse nome; o guia dela explica o passo. O teste de plataforma (critério 0) diz qual caso vale.
+6. O Diagramador insere a imagem no espaço medido, sem mover o texto, e roda a checagem de novo.
+7. Cada imagem entra na ficha (seção 7) e na nota editorial de uso de IA do livro.
 
 Paleta e estilo em `skills/imagens/references/paleta.md`, com os valores de cor tirados dos PDFs da Clinic.
 
@@ -170,12 +182,16 @@ Contingência sem skills no ChatGPT: o `package.py` também gera `dist/chatgpt-p
 ## 10. Critérios de aceite
 Em ordem de construção, seguindo a ordem oficial da Paula (Editor-Chefe, Diagramador, Editor Científico, Auditor Científico, Auditor Gráfico) e pondo o agente de imagens logo depois do Diagramador, porque o pedido de exemplo usa os dois juntos.
 
+Livros de teste, fora do repositório (fotos clínicas e conteúdo do Board não entram no git): o caminho vem da variável `EDITORIAL_SAMPLES_DIR` (nesta máquina, `~/Downloads/livros-paula/` e `~/Downloads/`). **Preenchedores** é o caso positivo, porque é o fluxo do pedido da Paula. **Toxina** é o caso negativo do Auditor Gráfico, porque o briefing diz que ele tem repetição e sobreposição em várias páginas, e o caso inicial que a instrução da Paula pede para o Diagramador. Os testes do repositório usam só PDFs, imagens e capítulos sintéticos.
+
+0. **Teste de plataforma no ChatGPT**, feito pelo Alify, antes do Diagramador: instalar uma skill de teste, rodar `import weasyprint` e `pip list` pelo Python da conversa, gerar uma imagem e ver se o Python enxerga o arquivo dela. O resultado decide o motor no ChatGPT (seção 8.1) e o passo 5 da seção 8.3. Registrado em `docs/medicoes/`.
 1. **Empacotamento:** `python scripts/package.py` sai com código 0, gera os zips das seis skills e os TOML dos seis agentes; um teste com uma skill inválida (nome com `claude`, `description` acima de 1.024) faz o script sair com erro.
 2. **Editor-Chefe** (critério da instrução da Paula, fase 1): num projeto de teste, cria a ficha com todos os campos da seção 7, delega uma tarefa a um papel, recebe o resultado, aplica o portão de nota (um caso que passa com 92 e outro que volta com 85) e registra tudo no histórico.
 3. **Checagem de PDF** (`tests/`): em PDFs pequenos de exemplo, acusa uma sobreposição injetada, um texto fora da margem, um parágrafo duplicado, uma fonte de reserva e uma imagem abaixo do DPI mínimo; num PDF limpo, zero erros.
-4. **Diagramador**, com o PDF de Preenchedores (fora do repositório): PDF A4; só as fontes do manual (nenhuma DejaVu); zero sobreposição, corte e duplicação na checagem; números do sumário iguais à paginação; texto de saída igual ao de entrada em pelo menos 99,5% dos caracteres, sem contar cabeçalho, rodapé e números de página.
+4. **Diagramador**, com o PDF de Preenchedores: três páginas de amostra aprovadas pelo Alify ou pela Paula antes do livro inteiro; PDF A4; só as fontes do manual (nenhuma DejaVu); zero sobreposição, corte e duplicação na checagem; números do sumário iguais à paginação; texto de saída igual ao de entrada em pelo menos 99,5% dos caracteres, sem contar cabeçalho, rodapé e números de página.
 5. **Imagens**, no mesmo livro: lista das páginas com espaço livre acima do limite; uma imagem por página selecionada, na proporção do espaço; depois da reinserção, a checagem continua com zero erros e a paginação não muda.
-6. **Editor Científico e Auditor Científico**, com um capítulo de teste: tabela slide a capítulo sem slide órfão; toda afirmação nova com fonte; o auditor confere cada DOI ou PMID e acusa uma referência inventada plantada no texto.
+6. **Editor Científico e Auditor Científico**, com um capítulo sintético (slides de teste em PDF, escritos para o teste): tabela slide a capítulo sem slide órfão; toda afirmação nova com fonte; o `verify_refs.py` confere cada DOI ou PMID e acusa uma referência inventada plantada no texto.
+6a. **Auditor Gráfico** no PDF de Toxina: acusa erros de repetição ou sobreposição nas páginas onde existem, e os avisos de resolução.
 7. **Instalação:** o Alify (ou a Paula) instala os zips no ChatGPT e no claude.ai e o plugin no Claude Code e no Codex, e roda o pedido de exemplo no ChatGPT. Teste manual, registrado em `docs/medicoes/`.
 
 ## 11. Limites conhecidos e o que fica em aberto
@@ -184,7 +200,8 @@ Em ordem de construção, seguindo a ordem oficial da Paula (Editor-Chefe, Diagr
 - A lista de bibliotecas do ambiente Python do ChatGPT não é publicada; o WeasyPrint aparece só em lista da comunidade. Se faltar, o Diagramador gera o PDF pelo ReportLab a partir da mesma estrutura, com aviso no relatório.
 - O chat do ChatGPT e do claude.ai não grava a ficha nos arquivos do Projeto; a Paula substitui à mão.
 - Limite de 30 MB por arquivo no claude.ai; o PDF de Preenchedores tem 4,8 MB.
-- Manual de diagramação da Paula: não chegou. Limite de espaço livre (25%) e DPI mínimo: a confirmar com ela.
+- Manual de diagramação da Paula: não chegou. Limite de espaço livre (25%), regra de resolução (seção 8.2) e a regra das imagens só conceituais (seção 8.3): valores provisórios desta sessão, a confirmar com ela.
+- A auditoria de referências depende de rede: o sandbox da API do Claude não tem internet, e no claude.ai Enterprise a rede vem desligada por padrão (`stack-layout.md`, B1).
 - A conta `miguel-fd2` tem leitura no repositório pela permissão base da org; o Alify a usa em outra máquina e decidiu mantê-la.
 
 ## 12. O que fica com quem constrói
