@@ -116,3 +116,14 @@ def open_pdf():
     yield _open
     for pdf in opened:
         pdf.close()
+
+
+@pytest.fixture
+def near_overlap_pdf(tmp_path):
+    p = tmp_path / "near_overlap.pdf"
+    c = _make(p)
+    c.setFont("Helvetica", 12)
+    c.drawString(80, 700, "Bloco de cima")
+    c.drawString(80, 699.5, "Bloco de baixo")
+    c.save()
+    return p

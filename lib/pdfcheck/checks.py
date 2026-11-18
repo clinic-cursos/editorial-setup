@@ -11,9 +11,9 @@ _MIN_PARAGRAPH = 100  # caracteres
 _PAGE_TOLERANCE = 1.0  # pt
 
 
-def _lines(page):
+def _lines(page, y_tolerance=1):
     # dedupe_chars: negrito simulado (letra desenhada duas vezes no mesmo lugar) não conta
-    return page.dedupe_chars().extract_text_lines(y_tolerance=1, return_chars=False)
+    return page.dedupe_chars().extract_text_lines(y_tolerance=y_tolerance, return_chars=False)
 
 
 def _crosses(a, b) -> bool:
@@ -23,7 +23,7 @@ def _crosses(a, b) -> bool:
 def check_overlaps(pdf, rules: Rules) -> list[Finding]:
     out = []
     for page in pdf.pages:
-        lines = sorted(_lines(page), key=lambda l: l["top"])
+        lines = sorted(_lines(page, y_tolerance=0.1), key=lambda l: l["top"])
         for i, a in enumerate(lines):
             for b in lines[i + 1 :]:
                 if b["top"] - a["bottom"] > 1:

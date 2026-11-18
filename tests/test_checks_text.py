@@ -64,3 +64,8 @@ def test_page_without_text_is_warning(image_only_pdf, open_pdf, test_rules):
 def test_letter_size_is_page_size_error(letter_pdf, open_pdf, test_rules):
     found = checks.check_page_size(open_pdf(letter_pdf), test_rules)
     assert [(f.kind, f.severity) for f in found] == [("page-size", "error")]
+
+
+def test_near_coincident_lines_overlap(near_overlap_pdf, open_pdf, test_rules):
+    found = checks.check_overlaps(open_pdf(near_overlap_pdf), test_rules)
+    assert [f.kind for f in found] == ["overlap"]
