@@ -83,3 +83,16 @@ def test_hook_fails_open_on_bad_json():
     for script, args in (("editorial_guard.py", ()), ("subagent_return.py", ()), ("subagent_return.py", ("--stop",))):
         proc = run(script, None, *args, raw="{não é json")
         assert proc.returncode == 0 and proc.stdout.strip() == "" and proc.stderr.strip()
+
+
+def test_stop_reminds_when_skill_used(tmp_path):
+    done = "A fase 2 está concluída."
+    for line in ('{"type":"tool_use","name":"Skill","input":{"skill":"clinic-editorial:editor-chefe"}}',
+                 "<command-name>/editor-chefe</command-name>"):
+        t = tmp_path / "t.jsonl"
+        t.write_text(line + "\n", encoding="utf-8")
+        stop = {"hook_event_name": "Stop", "stop_hook_active": False, "transcript_path": str(t), "last_assistant_message": done}
+        assert decision(run("subagent_return.py", stop, "--stop"))["decision"] == "block"
+    t.write_text('{"name":"Skill","input":{"skill":"run"}}\n', encoding="utf-8")
+    assert decision(run("subagent_return.py", stop, "--stop")) == {}
+
