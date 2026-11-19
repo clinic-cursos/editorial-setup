@@ -1,4 +1,5 @@
 import importlib.util
+import http.client
 import io
 import json
 from pathlib import Path
@@ -159,3 +160,11 @@ def test_no_comma_name_suffix(monkeypatch, tmp_path, capsys, author, family, exp
     assert verify_refs.main([str(path)]) == expected
     status = json.loads(capsys.readouterr().out)[0]["status"]
     assert status == ("ok" if expected == 0 else "divergent")
+
+
+def test_incomplete_read_unverified(monkeypatch, tmp_path, capsys):
+    err = http.client.IncompleteRead(b"par")
+    path, _ = run(monkeypatch, tmp_path, [REF], {"https://api.crossref.org/works/": err})
+    assert verify_refs.main([str(path)]) == 0
+    out = json.loads(capsys.readouterr().out)[0]
+    assert out["status"] == "unverified" and out["reason"] == "IncompleteRead"

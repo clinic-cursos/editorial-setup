@@ -2,6 +2,7 @@
 """
 
 import argparse
+import http.client
 from difflib import SequenceMatcher
 import json
 import re
@@ -122,7 +123,7 @@ def check(ref: dict, offline: bool) -> dict:
         except urllib.error.HTTPError as error:  # 429, 5xx: a API não respondeu, a referência não foi julgada
             out["reason"] = f"http {error.code}"
             statuses.append(("unverified", f"{name} {value}: {out['reason']}"))
-        except (OSError, json.JSONDecodeError, KeyError) as error:  # URLError e timeout são OSError
+        except (OSError, http.client.HTTPException, json.JSONDecodeError, KeyError) as error:  # URLError e timeout são OSError; IncompleteRead é HTTPException
             out["reason"] = type(error).__name__
             statuses.append(("unverified", f"{name} {value}: sem resposta utilizável ({error})"))
     for wanted in ("not-found", "divergent", "unverified", "ok"):
