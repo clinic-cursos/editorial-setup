@@ -28,6 +28,9 @@ def test_example_script_builds_pptx(tmp_path):
     assert [x.split("\n")[0] for x in first_text[14:]] == [
         "PRECIFICAÇÃO", "PRECIFICAÇÃO", "CLINIC CURSOS   ×   GALDERMA",
         "CLINIC CURSOS   ×   ILIKIA", "CONTINUE SUA", "Obrigado!"]
+    # the two pricing slides share a header, so tell them apart by title
+    titles = [[sh.text_frame.text for sh in s.shapes if sh.has_text_frame and sh.text_frame.text][1] for s in slides]
+    assert titles[14:16] == ["Como compor seu preço", "Aumente seu lucro com técnicas de venda"]
 
 
 def test_prompts_markdown_written(tmp_path):
