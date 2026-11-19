@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 
 import pytest
+from PIL import Image
+from reportlab.lib.utils import ImageReader
 from reportlab.lib.pagesizes import A4
 
 from lib.pdfcheck import checks
@@ -153,6 +155,15 @@ def test_free_space_ignores_running_footer(open_pdf, layout_pdf, test_rules):
     assert candidate.fraction == pytest.approx(
         (candidate.bottom - candidate.top) / (page.height - top_margin - bottom_margin)
     )
+
+
+def test_image_in_footer_band_counts_as_object(open_pdf, layout_pdf, test_rules):
+    def draw(document):
+        document.drawString(60, 740, "Parágrafo curto.")
+        image = ImageReader(Image.new("RGB", (600, 300), "#800020"))
+        document.drawImage(image, 60, 5, 40, 20)  # imagem na faixa do rodapé
+
+    assert checks.free_space(open_pdf(layout_pdf(draw)), test_rules) == []
 
 
 def test_free_space_begins_below_image(open_pdf, placed_image_pdf, test_rules):

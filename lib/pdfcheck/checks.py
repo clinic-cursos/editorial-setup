@@ -274,8 +274,10 @@ def free_space(pdf, rules: Rules) -> list[FreeSpace]:
         useful_height = bottom - text_top
         if useful_height <= 0 or x1 <= x0:
             continue
-        objects = chain(page.chars, page.images, page.lines, page.rects, page.curves)
-        top = max((obj["bottom"] for obj in objects if obj["top"] < bottom and obj["bottom"] > text_top), default=None)
+        # só o texto das faixas sai da conta; imagem, linha e retângulo contam onde estiverem
+        text = (c for c in page.chars if c["top"] < bottom and c["bottom"] > text_top)
+        objects = chain(text, page.images, page.lines, page.rects, page.curves)
+        top = max((obj["bottom"] for obj in objects), default=None)
         if top is None:
             continue
         top = max(top, text_top)
