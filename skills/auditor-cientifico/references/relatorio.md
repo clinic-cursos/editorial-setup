@@ -8,6 +8,7 @@ Ambiente: <Claude Code, Codex ou chat>, com ou sem rede. `verify_refs.py`: <rodo
 Nota: <0 a 100>. Resultado: <passa ou reprova>. Eliminatórios: <nenhum ou lista>.
 
 ## Nota pela rubrica da fase 1
+Rubrica usada: <a do pacote, ou esta cópia (data da cópia: 2026-11-19), se a do pacote faltou>. Pesos iniciais, a ajustar com a Paula.
 
 | Critério | Peso | Pontos | Justificativa |
 | --- | --- | --- | --- |

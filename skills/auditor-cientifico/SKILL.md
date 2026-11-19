@@ -9,7 +9,7 @@ Audite o manuscrito da fase 1 de forma independente de quem o produziu. Aponte o
 ## Entradas
 - Pedido do Editor-Chefe, com a versão do manuscrito a auditar. Em conversa nova (chat), o pacote de auditoria: manuscrito, tabela de rastreabilidade, tabela slide a capítulo e materiais originais do Board.
 - Se faltar o manuscrito, uma das tabelas ou o original necessário para conferir um trecho, indique o arquivo e retorne `PRECISA_DE_DADO`.
-- Rubrica em `references/rubricas/fase-1-ampliacao.md` do Editor-Chefe. Se não vier no pacote, peça ao Editor-Chefe; nunca invente pesos.
+- Rubrica: vale a da fase 1 que vem no pacote (`references/rubricas/fase-1-ampliacao.md` do Editor-Chefe). Se ela faltar, não pare a auditoria: use os pesos e eliminatórios do modelo em `references/relatorio.md` e registre no relatório que usou essa cópia, com a data da cópia (2026-11-19).
 - Leia [governança](references/comum/governanca.md), [glossário](references/comum/glossario.md) e [convenção do manuscrito](references/comum/manuscrito.md) antes de auditar.
 
 ## Onde você roda
@@ -20,7 +20,7 @@ Audite o manuscrito da fase 1 de forma independente de quem o produziu. Aponte o
 ## Processo
 
 1. **Inventarie o pacote.** Confira que manuscrito, tabela de rastreabilidade e tabela slide a capítulo são da mesma versão. Se não forem, retorne `PRECISA_DE_DADO`.
-2. **Confira as referências.** Monte um JSON com a lista de referências (`key`, `title`, `authors`, `year`, `doi` ou `pmid`) e rode `python scripts/verify_refs.py refs.json` (acrescente `--offline` sem rede). Capítulo sem referência não chama o script: registre "sem referências" e siga. Códigos de saída: 0 tudo `ok` ou `unverified`; 1 com `not-found` ou `divergent`; 2 entrada inválida (inclusive lista vazia). Leia o JSON de saída, não só o código:
+2. **Confira as referências.** Monte um JSON com a lista de referências (`key`, `title`, `authors`, `year`, `doi` ou `pmid`) e rode, no repositório, `uv run --locked python skills/auditor-cientifico/scripts/verify_refs.py refs.json`; fora dele (skill instalada, chat com execução de código), de dentro da pasta da skill, `python3 scripts/verify_refs.py refs.json`, sem dependência além do Python. Acrescente `--offline` sem rede. Capítulo sem referência não chama o script: registre "sem referências" e siga. Códigos de saída: 0 tudo `ok` ou `unverified`; 1 com `not-found` ou `divergent`; 2 entrada inválida (inclusive lista vazia). Leia o JSON de saída, não só o código:
    - `not-found`: referência que não existe, eliminatório.
    - `divergent`: título, ano ou primeiro autor diferem da fonte; registre a diferença e recomende a correção.
    - `unverified` (sem rede, fonte sem ano, autor ou título, resposta malformada, sem DOI nem PMID): vai para a conferência humana. Nunca conta como conferido, e tira os pontos de rastreabilidade dela sem ser eliminatório sozinho.
