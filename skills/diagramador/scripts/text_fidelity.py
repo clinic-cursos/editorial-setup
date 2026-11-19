@@ -88,10 +88,18 @@ def _tokens(text: str, vocabulary: set[str]) -> list[str]:
         dashed, plain = f"{left}-{right}", left + right
         return f"{left}-" if dashed in vocabulary and plain not in vocabulary else left
 
-    both = {w for w in vocabulary if "-" in w and w.replace("-", "") in vocabulary}  # as duas grafias no original
+    def normalize_compound(m):
+        compound = m[0]
+        plain = compound.replace("-", "")
+        if not plain.isalpha():
+            return compound
+        if compound in vocabulary and plain in vocabulary:
+            return plain
+        return compound.replace("-", " ")
+
     # O lookahead deixa a palavra à direita disponível para a próxima quebra.
     text = re.sub(r"(\w+)-\s+(?=(\w+))", join, _normalized(text))
-    return re.sub(r"\w+(?:-\w+)+", lambda m: m[0].replace("-", "") if m[0] in both else m[0], text).split()
+    return re.sub(r"\w+(?:-\w+)+", normalize_compound, text).split()
 
 
 def _analyze(original: str, output: str) -> tuple[tuple[float, float], list[str], list[str]]:

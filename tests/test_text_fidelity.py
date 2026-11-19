@@ -168,6 +168,25 @@ def test_compound_with_both_forms_in_original_matches(tmp_path):
     assert fidelity(str(a), str(b)) == (1.0, 1.0)
 
 
+@pytest.mark.parametrize(("original", "output"), [("5-10 U", "510 U"), ("510 U", "5-10 U")])
+@pytest.mark.parametrize("context", [[], ["Valores de referência: 5-10 U e 510 U."]])
+def test_compact_range_change_is_reported(tmp_path, capsys, original, output, context):
+    a = write(tmp_path, "a.md", [original, *context])
+    b = write(tmp_path, "b.md", [output, *context])
+    assert main([str(a), str(b)]) == 1
+    assert "número alterado" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(("original", "output"), [
+    ("ácido-hialurônico", "ácido hialurônico"),
+    ("ácido hialurônico", "ácido-hialurônico"),
+])
+def test_letter_compound_matches_spaced_form(tmp_path, original, output):
+    a = write(tmp_path, "a.md", [original])
+    b = write(tmp_path, "b.md", [output])
+    assert fidelity(str(a), str(b)) == (1.0, 1.0)
+
+
 FONT = Path(__file__).resolve().parent.parent / "skills/diagramador/assets/fonts/SourceSans3-Regular.ttf"
 WORDS = [f"palavra{i}" for i in range(300)]
 FILLER = " ".join(WORDS)  # mantém a razão acima do limite, para só a checagem de número reprovar
