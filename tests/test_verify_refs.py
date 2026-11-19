@@ -86,3 +86,21 @@ def test_rate_limited_unverified(monkeypatch, tmp_path, capsys):
     assert verify_refs.main([str(path)]) == 0
     out = json.loads(capsys.readouterr().out)[0]
     assert out["status"] == "unverified" and out["reason"] == "http 429"
+
+
+def test_author_prefix_divergent(monkeypatch, tmp_path, capsys):
+    crossref = {"message": {**CROSSREF["message"], "author": [{"family": "Liu", "given": "Ming"}]}}
+    ref = {**REF, "authors": ["Li, Ming"]}
+    path, _ = run(monkeypatch, tmp_path, [ref], {"https://api.crossref.org/works/": crossref})
+    assert verify_refs.main([str(path)]) == 1
+    assert json.loads(capsys.readouterr().out)[0]["status"] == "divergent"
+
+
+def test_pubmed_initials_and_accents_match(monkeypatch, tmp_path, capsys):
+    pubmed = {"result": {"1": {"title": "Deep learning.", "authors": [{"name": "Muñoz AB"}], "pubdate": "2015 May"}}}
+    ref = {**REF, "authors": ["Munoz, Ana"], "pmid": "1"}
+    del ref["doi"]
+    path, _ = run(monkeypatch, tmp_path, [ref], {"https://eutils.ncbi.nlm.nih.gov/": pubmed})
+    assert verify_refs.main([str(path)]) == 0
+    assert json.loads(capsys.readouterr().out)[0]["status"] == "ok"
+

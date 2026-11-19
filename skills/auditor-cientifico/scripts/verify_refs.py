@@ -5,6 +5,7 @@ from difflib import SequenceMatcher
 import json
 import re
 import sys
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -69,15 +70,23 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().rstrip(".").casefold()
 
 
+def _last_name(name: str) -> str:
+    name = unicodedata.normalize("NFKD", name)
+    name = "".join(c for c in name if not unicodedata.combining(c))
+    tokens = _norm(name).split()
+    if len(tokens) > 1 and re.fullmatch(r"[a-z]{1,3}", tokens[-1]) and name.split()[-1].isupper():
+        tokens.pop()  # PubMed: "Sobrenome Iniciais"
+    return tokens[-1] if tokens else ""
+
+
 def _compare(ref: dict, remote: dict) -> list[str]:
     problems = []
     if SequenceMatcher(None, _norm(ref.get("title", "")), _norm(remote["title"])).ratio() < TITLE_RATIO:
         problems.append(f"title: '{ref.get('title')}' x '{remote['title']}'")
     if remote["year"] is not None and ref.get("year") != remote["year"]:
         problems.append(f"year: {ref.get('year')} x {remote['year']}")
-    surname = _surname(ref.get("authors"))
-    if surname.casefold() not in remote["first_author"].casefold():
-        problems.append(f"first author: '{surname}' x '{remote['first_author']}'")
+    if _last_name(_surname(ref.get("authors"))) != _last_name(remote["first_author"]):
+        problems.append(f"first author: '{_surname(ref.get('authors'))}' x '{remote['first_author']}'")
     return problems
 
 
