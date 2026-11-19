@@ -239,3 +239,25 @@ def test_figure_after_references_stays_in_body(tmp_path):
     md = extract(path, tmp_path)[0].read_text(encoding="utf-8")
     assert "- [@silva2020] SILVA" in md
     assert md.index("#fig-1") < md.index("## Referências")
+
+
+def test_title_crossing_columns_warns(tmp_path):
+    path = tmp_path / "columns-title.pdf"
+    c = canvas.Canvas(str(path), pagesize=A4)
+    text(c, 740, "Titulo largo que atravessa o vao entre as duas colunas da pagina inteira", 14)
+    for n in range(6):
+        text(c, 700 - 14 * n, f"Esquerda linha {n + 1} do texto na primeira coluna")
+        c.drawString(330, 700 - 14 * n, f"Direita linha {n + 1} do texto na segunda coluna")
+    c.save()
+    assert "verifique a ordem do texto desta página" in extract(path, tmp_path)[2]
+
+
+def test_compact_references_warn(tmp_path):
+    path = tmp_path / "compact-refs.pdf"
+    c = canvas.Canvas(str(path), pagesize=A4)
+    text(c, 760, BODY[0])
+    text(c, 700, "Referências", 14, WINE)
+    text(c, 660, "SILVA, A. B. Toxina botulinica em dermatologia. Sao Paulo: Editora, 2020.")
+    text(c, 646, "COSTA, C. Acido hialuronico na pratica clinica. Rio de Janeiro: Editora, 2019.")
+    c.save()
+    assert "verifique a separação das referências" in extract(path, tmp_path)[2]

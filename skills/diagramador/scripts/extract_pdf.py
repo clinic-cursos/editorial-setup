@@ -53,10 +53,15 @@ def classify(line, body):
     return "li" if LIST_ITEM.match(line["text"]) else "p"
 
 
-def gutter(page):
-    """x do meio do vão vertical largo e vazio entre dois grupos de texto, ou None."""
+def gutter(page, max_size=None):
+    """x do meio do vão vertical largo e vazio entre dois grupos de texto, ou None.
+
+    Com `max_size`, ignora as palavras maiores (títulos que atravessam o vão)."""
     top, bottom = page.height * HEADER_FRACTION, page.height * FOOTER_FRACTION
-    words = [w for w in page.extract_words() if w["top"] >= top and w["bottom"] <= bottom]
+    words = [
+        w for w in page.extract_words(extra_attrs=["size"])
+        if w["top"] >= top and w["bottom"] <= bottom and (max_size is None or w["size"] <= max_size)
+    ]
     gaps, edge = [], 0.0
     for word in sorted(words, key=lambda w: w["x0"]):
         mid = (edge + word["x0"]) / 2
@@ -75,6 +80,9 @@ def page_items(page, body, images_dir, output, figures, warnings, number):
     height = page.height
     items = []
     split = gutter(page)
+    # shortcut: título que atravessa o vão impede a detecção das colunas; só avisa, trocar por corte da região do corpo
+    if split is None and gutter(page, body * 1.15) is not None:
+        warnings.append(f"página {number}: possíveis duas colunas com título largo; verifique a ordem do texto desta página")
     if split is not None:
         warnings.append(f"página {number}: duas colunas, lidas coluna a coluna")
     columns = [page] if split is None else [page.crop((0, 0, split, height)), page.crop((split, 0, page.width, height))]
@@ -109,7 +117,7 @@ def page_items(page, body, images_dir, output, figures, warnings, number):
 
 
 def render(source, output, images_dir):
-    warnings, blocks, list_items, references, in_references = [], [], [], [], False
+    warnings, blocks, list_items, references, in_references, joined = [], [], [], [], False, False
     figures = {"count": 0, "files": [], "saved": {}, "reader": PdfReader(str(source))}
     with pdfplumber.open(source) as pdf:
         body = body_size(pdf.pages)
@@ -134,6 +142,7 @@ def render(source, output, images_dir):
                     marker = LIST_ITEM.match(text) if tag == "li" else None
                     if previous and top - previous[1] <= REFERENCE_GAP * size and not marker and references:
                         references[-1] += " " + text
+                        joined = True
                     else:
                         references.append(text[marker.end():] if marker else text)
                     previous = (tag, top, size)
@@ -164,6 +173,9 @@ def render(source, output, images_dir):
                         blocks.append(text if tag == "p" else f"{tag} {text}")
                 previous = (tag, top, size)
         flush(blocks, list_items)
+    if joined:
+        # shortcut: referências coladas sem salto entre entradas ficam numa só; só avisa, trocar por recuo ou marcador
+        warnings.append("verifique a separação das referências: entradas com mais de uma linha foram unidas")
     if references:  # o leitor exige as referências no fim do manuscrito
         taken = set()
         blocks.append("## Referências")
