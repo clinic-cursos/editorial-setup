@@ -1,3 +1,4 @@
+import re
 import shutil
 import subprocess
 import sys
@@ -71,19 +72,42 @@ def test_project_bundle_has_instructions(built_repository):
     root = built_repository
     project = root / "dist" / "chatgpt-projeto"
     skills = root / "skills"
-    assert (project / "instrucoes.md").read_bytes() == (skills / "editor-chefe" / "SKILL.md").read_bytes()
+    instructions = (project / "instrucoes.md").read_text(encoding="utf-8")
+    for name in (
+        "editor-chefe-fluxo.md", "editor-chefe-ficha-projeto.md",
+        "editor-chefe-rubricas-fase-1-ampliacao.md",
+        "editor-chefe-rubricas-fase-3-4-diagramacao.md",
+        "diagramador-manual-clinic.md", "governanca.md", "retorno.md",
+    ):
+        assert f"`{name}`" in instructions
+        assert (project / name).is_file()
+    assert (
+        "`editor-chefe-rubricas-fase-1-ampliacao.md` e `editor-chefe-rubricas-fase-3-4-diagramacao.md`"
+        in instructions
+    )
     expected = {"instrucoes.md"}
     for source in skills.glob("*/SKILL.md"):
         skill = source.parent.name
         if source.parent.name != "editor-chefe":
             name = f"{skill}-SKILL.md"
-            assert (project / name).read_bytes() == source.read_bytes()
             expected.add(name)
         references = source.parent / "references"
         for reference in references.rglob("*"):
             if reference.is_file():
                 category, *parts = reference.relative_to(references).parts
                 name = "-".join(parts) if category == "comum" else "-".join((skill, category, *parts))
-                assert (project / name).read_bytes() == reference.read_bytes()
+                if reference.suffix != ".md" or b"references/" not in reference.read_bytes():
+                    assert (project / name).read_bytes() == reference.read_bytes()
                 expected.add(name)
     assert {path.name for path in project.iterdir()} == expected
+
+    for document in project.glob("*.md"):
+        text = document.read_text(encoding="utf-8")
+        for path in re.findall(r"(?:[\w-]+/)?references/[\w./-]+", text):
+            assert (project / path).is_file(), (document.name, path)
+    assert "`editor-chefe-rubricas-fase-1-ampliacao.md`" in (
+        project / "auditor-cientifico-SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert "`diagramador-abnt.md`" in (
+        project / "auditor-grafico-rubrica.md"
+    ).read_text(encoding="utf-8")

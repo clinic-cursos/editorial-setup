@@ -13,6 +13,10 @@ ROOT = Path(__file__).resolve().parent.parent
 PDFCHECK_SKILLS = ("diagramador", "imagens", "auditor-grafico")
 NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc")
+REFERENCE_PATH = re.compile(
+    r"(?<![\w./-])(?P<quote>`?)(?:(?P<skill>[a-z0-9-]+)/)?"
+    r"(?P<path>references/(?:[\w.-]+/)*(?:[\w.-]*[\w-])?)(?P=quote)"
+)
 
 
 def parse_frontmatter(text: str) -> dict[str, str] | None:
@@ -175,6 +179,47 @@ def codex_agent(source: Path) -> str:
     )
 
 
+def write_project(skills_dir: Path, project: Path, files: dict[Path, str]) -> None:
+    references: dict[str, dict[str, str]] = {}
+    for source, name in files.items():
+        skill, folder, *_ = source.parts
+        if folder == "references":
+            references.setdefault(skill, {})[source.relative_to(skill).as_posix()] = name
+
+    for source, name in files.items():
+        original = skills_dir / source
+        target = project / name
+        if source.suffix != ".md":
+            shutil.copyfile(original, target)
+            continue
+
+        def replace(match: re.Match[str]) -> str:
+            path = match["path"]
+            explicit_skill = match["skill"]
+            owner = explicit_skill or source.parts[0]
+
+            def find_names(paths: dict[str, str]) -> list[str]:
+                if path.endswith("/"):
+                    return [name for key, name in paths.items() if key.startswith(path)]
+                return [paths[path]] if path in paths else []
+
+            names = find_names(references.get(owner, {}))
+            if not names and not explicit_skill:
+                matches = [
+                    candidate for paths in references.values() if (candidate := find_names(paths))
+                ]
+                if len(matches) == 1:
+                    names = matches[0]
+            if not names:
+                raise ValueError(f"{source}: unresolved Project reference {match[0]}")
+            quote = match["quote"]
+            labels = [f"{quote}{name}{quote}" for name in names]
+            return " e ".join((", ".join(labels[:-1]), labels[-1])) if len(labels) > 1 else labels[0]
+
+        text = original.read_text(encoding="utf-8")
+        target.write_text(REFERENCE_PATH.sub(replace, text), encoding="utf-8")
+
+
 def build(root: Path) -> None:
     skills = sorted(path.parent for path in (root / "skills").glob("*/SKILL.md") if path.is_file())
     agents = sorted((root / "agents" / "editorial").glob("*.md"))
@@ -192,8 +237,8 @@ def build(root: Path) -> None:
         codex = output / "codex" / "agents"
         for directory in (*platforms, project, codex):
             directory.mkdir(parents=True)
-        shutil.copyfile(instructions, project / "instrucoes.md")
-
+        project_files = {}
+        skills_dir = root / "skills"
         for skill in skills:
             files = sorted(tree_files(skill))
             archive = platforms[0] / f"{skill.name}.zip"
@@ -202,8 +247,10 @@ def build(root: Path) -> None:
                     bundle.write(skill / relative, relative.as_posix())
             shutil.copyfile(archive, platforms[1] / archive.name)
 
-            if skill != instructions.parent:
-                shutil.copyfile(skill / "SKILL.md", project / f"{skill.name}-SKILL.md")
+            skill_file = (skill / "SKILL.md").relative_to(skills_dir)
+            project_files[skill_file] = (
+                "instrucoes.md" if skill == instructions.parent else f"{skill.name}-SKILL.md"
+            )
             for relative in files:
                 folder, *parts = relative.parts
                 if folder != "references" or not parts:
@@ -215,8 +262,9 @@ def build(root: Path) -> None:
                     name = "-".join(parts[1:])
                 else:
                     name = "-".join((skill.name, *parts))
-                shutil.copyfile(skill / relative, project / name)
+                project_files[(skill / relative).relative_to(skills_dir)] = name
 
+        write_project(skills_dir, project, project_files)
         for source in agents:
             (codex / f"{source.stem}.toml").write_text(codex_agent(source), encoding="utf-8")
 
