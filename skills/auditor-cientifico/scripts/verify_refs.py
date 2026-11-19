@@ -149,6 +149,8 @@ def main(argv=None) -> int:
     try:
         with open(args.refs, encoding="utf-8") as handle:
             refs = json.load(handle)
+        if not isinstance(refs, list) or not refs or not all(isinstance(r, dict) and r.get("key") and r.get("title") for r in refs):
+            raise ValueError("esperava uma lista não vazia de objetos, cada um com key e title")
         results = [check(ref, args.offline) for ref in refs]
     except (OSError, ValueError, TypeError, AttributeError) as error:
         print(f"Não consegui ler {args.refs}: {error}", file=sys.stderr)

@@ -199,3 +199,12 @@ def test_malformed_source_unverified(monkeypatch, tmp_path, capsys):
     out = json.loads(capsys.readouterr().out)
     assert [r["status"] for r in out] == ["unverified", "unverified", "ok"]
     assert out[0]["reason"].startswith("resposta malformada:") and out[1]["reason"].startswith("resposta malformada:")
+
+
+@pytest.mark.parametrize("content", [{}, [], [{"title": "x"}], [{"key": "k"}], ["texto"]])
+def test_invalid_input_exit_2(tmp_path, capsys, content):
+    path = tmp_path / "refs.json"
+    path.write_text(json.dumps(content), encoding="utf-8")
+    assert verify_refs.main([str(path), "--offline"]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == "" and captured.err
