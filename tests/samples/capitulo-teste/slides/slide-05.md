@@ -2,5 +2,5 @@
 
 Escalas de intensidade (material sintético escrito para teste).
 
-- Ponto um do slide 5.
-- Ponto dois do slide 5.
+
+- Manter a mesma escala em todas as consultas.

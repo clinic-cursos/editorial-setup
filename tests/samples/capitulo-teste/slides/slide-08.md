@@ -2,5 +2,6 @@
 
 Reavaliação e seguimento (material sintético escrito para teste).
 
-- Ponto um do slide 8.
-- Ponto dois do slide 8.
+
+- Agendar o seguimento.
+- Registrar a resposta.
