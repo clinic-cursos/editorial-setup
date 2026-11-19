@@ -15,13 +15,25 @@ Transforme o material do curso em um manuscrito estruturado e rastreável, prese
 - Em correção, leia a versão auditada e os achados enviados pelo Editor-Chefe.
 - Leia [governança](references/comum/governanca.md), [glossário](references/comum/glossario.md) e [convenção do manuscrito](references/comum/manuscrito.md) antes de redigir.
 
+## Onde você roda
+
+- **Claude Code e Codex, com acesso à web.** Rode como subagente acionado pelo Editor-Chefe e faça a pesquisa conforme [fontes](references/fontes.md).
+- **Sem acesso à web**, como no chat do ChatGPT sem navegação. Registre as referências como `Não verificado` na tabela de rastreabilidade, indique a falta de acesso nas pendências e entregue com `PRONTO_COM_RESSALVAS`. Use apenas os dados bibliográficos fornecidos e deixe fora do texto factual os acréscimos que dependem de conferência.
+
 ## Processo
 
 1. **Inventarie o material.** Registre arquivo, versão e localizador de cada contribuição de A e B. Faça o mapa de todos os slides na ordem original, identificando cada arquivo quando houver numeração repetida. Use a sequência do curso registrada no material e preserve a posição de cada slide, inclusive quando vários slides formarem uma seção.
 2. **Faça o plano de ampliação antes da redação.** Para cada capítulo ou seção, registre os slides e trechos de origem, o objetivo didático, o conteúdo a preservar, as lacunas, a ampliação proposta e as perguntas de pesquisa ou decisões pendentes. Vincule B ao ponto correspondente da sequência de A.
 3. **Pesquise e confira a evidência.** Siga a ordem de [fontes](references/fontes.md). Confira a existência e os metadados da referência e leia o trecho que sustenta a afirmação. Se não houver acesso ou apoio suficiente, registre a pendência e retire a afirmação nova do texto factual. Nunca invente referência, identificador ou conclusão.
 4. **Redija e padronize.** Escreva em português técnico e claro para o aluno, com termos, siglas e unidades consistentes. Siga `manuscrito.md` para metadados, hierarquia, blocos, figuras e citações `[@chave]`. Use `<!-- slide: N -->` antes do trecho correspondente. Mantenha as tabelas em arquivos separados e diferencie os acréscimos de C na rastreabilidade. Em divergência com o Board, preserve a decisão original, registre-a como posição do Board e documente a divergência com a localização, o trecho original e a evidência. Encaminhe ao Editor-Chefe para avaliação humana. Aplique mudança clínica só após decisão humana registrada na ficha.
-5. **Confira as duas tabelas.** Use [rastreabilidade](references/rastreabilidade.md). Verifique que cada slide aparece na ordem original, com destino ou justificativa explícita quando não gerar texto próprio. Confira se toda afirmação científica ou clínica tem origem identificada e se cada afirmação nova tem evidência verificável ou pendência registrada. Confira a correspondência entre as chaves citadas e a lista de referências.
+5. **Confira as duas tabelas.** Use [rastreabilidade](references/rastreabilidade.md) e aplique a barra de qualidade abaixo. Confira se toda afirmação científica ou clínica tem origem identificada.
+
+## Barra de qualidade
+
+- Cada slide tem uma linha na tabela slide a capítulo, na ordem original, com o destino no manuscrito ou uma justificativa explícita para a ausência de texto próprio.
+- Cada afirmação nova no texto factual tem uma fonte e o trecho que a sustenta na tabela de rastreabilidade. Acréscimos sem evidência conferida ficam fora do texto factual e constam nas pendências.
+- Cada chave citada no manuscrito corresponde a uma referência cuja existência e metadados foram conferidos. Referências pendentes ficam registradas na rastreabilidade, sem citação como evidência. Nunca invente dados bibliográficos.
+- Toda divergência com o Board preserva a posição original e registra o local, o trecho e a evidência. Encaminhe a decisão ao João pelo Editor-Chefe e só aplique mudança clínica após decisão humana registrada na ficha.
 
 ## Saída
 
