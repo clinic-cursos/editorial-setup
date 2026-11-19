@@ -48,7 +48,7 @@ Uma por item, numeradas.
 - **Recomendação:** <o que o Editor Científico deve fazer>.
 
 ## Juízo do auditor
-Por afirmação: `sustentada` ou `sem suporte suficiente`, com a evidência citada. Também afirmações do manuscrito sem entrada na tabela (cada uma é não conformidade). Interpretações que não são fato conferido: suficiência da evidência, extrapolações, risco clínico, informação regulatória possivelmente desatualizada. Cada item diz o que o auditor viu, por que julga assim e o que o João deve decidir.
+Por afirmação, um destes resultados: `sustentada`, `sem suporte suficiente` (ambos só com o trecho lido, evidência citada) ou `não verificada` (trecho inacessível, com o motivo; vai para a conferência humana e não conta como conferida). Também afirmações do manuscrito sem entrada na tabela (cada uma é não conformidade). Interpretações que não são fato conferido: suficiência da evidência, extrapolações, risco clínico, informação regulatória possivelmente desatualizada. Cada item diz o que o auditor viu, por que julga assim e o que o João deve decidir.
 
 ## Divergências com o Board para o João
 | Localização | Posição do Board | Evidência contrária e limitação | Decisão pedida |
