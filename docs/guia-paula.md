@@ -52,6 +52,12 @@ Se o teste mostrar que o ChatGPT não consegue executar o WeasyPrint, ou se a co
 
 Quando o Python da conversa não enxergar uma imagem gerada pelo ChatGPT, baixe-a com o nome indicado, como `pagina-12.png`, e anexe o arquivo à conversa para a reinserção. Se a diagramação estiver com a equipe, envie os PNGs junto com o briefing e a página de destino. Imagens complementares são conceituais. Se uma página precisar de ilustração técnica, encaminhe o pedido para validação científica com o João antes de qualquer inclusão.
 
+## O que a V1 ainda não faz bem
+
+- **Já testado:** o Editor-Chefe organiza a ficha e encaminha as fases. A ampliação e a auditoria científica passaram no ensaio com um capítulo de teste, com pontos para o João avaliar. [Ensaio do Editor-Chefe](medicoes/2026-11-ensaio-editor-chefe.md) · [Ensaio científico](medicoes/2026-11-ensaio-cientifico.md)
+- **Diagramação:** o Diagramador gera um PDF, mas os ensaios com livros reais ainda não passaram. No livro de Preenchedores, houve problemas no sumário, nas imagens e na preservação do texto. Use o PDF como rascunho para revisão. [Ensaio de Preenchedores](medicoes/2026-11-ensaio-preenchedores.md)
+- **Auditoria gráfica:** o Auditor Gráfico pode apontar texto sobreposto ou repetido em páginas que estão corretas. Abra o PDF e confira visualmente as páginas sinalizadas antes de pedir correção. [Ensaio do Auditor Gráfico](medicoes/2026-11-ensaio-toxina-auditoria.md)
+
 ## Como melhorar o setup
 
 Dite a sugestão ao Editor-Chefe e peça uma linha com data, papel, o que mudar, por quê e exemplo. Envie a linha ao Alify ou use diretamente o [modelo de melhorias](melhorias.md). Use exemplos sem trechos de livro, fotos clínicas ou dados de alunos.
