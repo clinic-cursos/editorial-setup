@@ -18,6 +18,7 @@ from pdfminer.pdftypes import resolve_all, stream_value
 from pdfminer.utils import MATRIX_IDENTITY, apply_matrix_pt, apply_matrix_rect, get_bound
 from pdfplumber.page import PDFPageAggregatorWithMarkedContent, Page
 from pypdf import PdfReader
+from pypdf.errors import PyPdfError
 
 HEADER_FRACTION, FOOTER_FRACTION = 0.07, 0.93
 PARAGRAPH_GAP = 2.0  # salto entre linhas, em corpos de fonte, que abre outro parágrafo
@@ -312,8 +313,7 @@ def gutter(page, max_size=None):
     return mid if min(left, len(words) - left) >= MIN_COLUMN_WORDS else None
 
 
-def page_items(page, body, images_dir, output, figures, warnings, number):
-    """(top, bloco) da página, na ordem de leitura."""
+def page_lines(page, body, warnings, number):
     height = page.height
     items = []
     split = gutter(page)
@@ -336,6 +336,85 @@ def page_items(page, body, images_dir, output, figures, warnings, number):
             if any(abs(line["top"] - w["top"]) < 2 for w in wide):
                 continue  # pedaço do título largo, já emitido inteiro
             items.append((column, line["top"], "line", line))
+    return items, split
+
+
+def outline_destinations(reader, entries, depth=0):
+    for entry in entries:
+        if isinstance(entry, list):
+            yield from outline_destinations(reader, entry, depth + 1)
+        else:
+            yield reader.get_destination_page_number(entry), normalize_heading(entry.title), depth
+
+
+def title_spans(items, title):
+    for start, (column, top, _, line) in enumerate(items):
+        text = normalize_heading(line["text"])
+        end = start + 1
+        while title.startswith(text + " ") and end < len(items):
+            next_column, next_top, _, next_line = items[end]
+            if next_column != column or next_top - top > PARAGRAPH_GAP * next_line["chars"][0]["size"]:
+                break
+            text += " " + normalize_heading(next_line["text"])
+            top = next_top
+            end += 1
+        if text == title:
+            yield range(start, end)
+
+
+def outline_layouts(reader, pages, filtered, body, warnings):
+    """Usa o índice quando cada capítulo aponta para um único título visível."""
+    try:
+        destinations = list(outline_destinations(reader, reader.outline))
+    except (PyPdfError, AttributeError, KeyError, TypeError, ValueError):
+        warnings.append("índice interno ilegível: níveis inferidos pelo tamanho dos glifos")
+        return {}
+    if not destinations:
+        return {}
+    titles = defaultdict(dict)
+    for index, title, depth in sorted(destinations, key=lambda destination: destination[2]):
+        if index is not None and 0 <= index < len(pages) and title:
+            titles[index + 1].setdefault(title, depth)
+        elif depth == 0:
+            warnings.append("índice interno com destino de capítulo inválido: níveis inferidos pelo tamanho dos glifos")
+            return {}
+    if not any(depth == 0 for _, _, depth in destinations):
+        return {}
+
+    layouts = {}
+    for number, page_titles in titles.items():
+        page = filtered[number][0] if number in filtered else pages[number - 1]
+        page_warnings = []
+        items, split = page_lines(page, body, page_warnings, number)
+        replacements, consumed = {}, set()
+        for title, depth in page_titles.items():
+            spans = list(title_spans(items, title))
+            if len(spans) != 1 or consumed.intersection(spans[0]):
+                if depth == 0:
+                    warnings.append(f"página {number}: título de capítulo do índice sem correspondência única; níveis inferidos pelo tamanho dos glifos")
+                    return {}
+                continue
+            span = spans[0]
+            column, top, kind, line = items[span.start]
+            text = " ".join(items[i][3]["text"].strip() for i in span)
+            replacements[span.start] = (column, top, kind, {**line, "text": text, "outline_tag": "#" * min(depth + 1, 3)})
+            consumed.update(span)
+        layouts[number] = (
+            [replacements[i] if i in replacements else item
+             for i, item in enumerate(items) if i in replacements or i not in consumed],
+            split,
+            page_warnings,
+        )
+    return layouts
+
+
+def page_items(page, body, images_dir, output, figures, warnings, number, layout=None):
+    """(top, bloco) da página, na ordem de leitura."""
+    if layout is None:
+        items, split = page_lines(page, body, warnings, number)
+    else:
+        items, split, page_warnings = layout
+        warnings.extend(page_warnings)
     if page.find_tables():
         warnings.append(f"página {number}: tabela convertida em parágrafos")
     source = figures["reader"].pages[number - 1]
@@ -391,6 +470,7 @@ def render(source, output, images_dir):
             raise ValueError("o PDF não tem texto extraível (talvez seja escaneado)")
         info = pdf.metadata or {}
         filtered = toc_pages(pages, body)
+        layouts = outline_layouts(figures["reader"], pages, filtered, body, warnings)
         for number, page in enumerate(pages, 1):
             if any(obj.get("clip_status") == "review" for group in (page.chars, page.images) for obj in group):
                 warnings.append(f"página {number}: recorte parcial ou ambíguo; confira o texto e as imagens no original")
@@ -401,7 +481,7 @@ def render(source, output, images_dir):
                 else:
                     warnings.append(f"página {number}: sumário com texto de corpo, mantido para conferência")
             previous = None  # (tipo, top, tamanho) da linha anterior
-            for top, kind, payload in page_items(page, body, images_dir, output, figures, warnings, number):
+            for top, kind, payload in page_items(page, body, images_dir, output, figures, warnings, number, layouts.get(number)):
                 if previous and top < previous[1]:  # voltou ao topo: outra coluna
                     previous = None
                 if kind == "figure":
@@ -410,7 +490,8 @@ def render(source, output, images_dir):
                     blocks.append(payload)
                     previous = None
                     continue
-                tag = classify(payload, body)
+                outline_tag = payload.get("outline_tag")
+                tag = outline_tag or classify(payload, body)
                 text = payload["text"].strip()
                 size = payload["chars"][0]["size"]
                 if in_references and tag in ("p", "li"):  # bibliografia: uma entrada por referência
@@ -422,15 +503,15 @@ def render(source, output, images_dir):
                         references.append(text[marker.end():] if marker else text)
                     previous = (tag, top, size)
                     continue
-                if tag in ("#", "##") and REFERENCES_TITLE.fullmatch(text):
+                if (outline_tag or tag in ("#", "##")) and REFERENCES_TITLE.fullmatch(text):
                     flush(blocks, list_items)
                     in_references = True
                     previous = None
                     continue
-                if tag in ("#", "##"):
+                if outline_tag or tag in ("#", "##"):
                     in_references = False
                 close = previous and top - previous[1] <= PARAGRAPH_GAP * size
-                joins = close and previous[0] == tag
+                joins = close and previous[0] == tag and not outline_tag
                 if tag == "li":
                     marker = LIST_ITEM.match(text)
                     mark = f"{int(marker[1])}. " if marker[1] else "- "  # mantém o número e o tipo da origem
@@ -445,8 +526,9 @@ def render(source, output, images_dir):
                     if joins and blocks:
                         blocks[-1] += " " + text
                     else:
-                        blocks.append(text if tag == "p" else f"{tag} {text}")
-                previous = (tag, top, size)
+                        marker = "##" if layouts and tag == "#" and not outline_tag else tag
+                        blocks.append(text if tag == "p" else f"{marker} {text}")
+                previous = None if outline_tag else (tag, top, size)
         flush(blocks, list_items)
     if joined:
         # shortcut: referências coladas sem salto entre entradas ficam numa só; só avisa, trocar por recuo ou marcador
