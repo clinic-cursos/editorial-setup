@@ -133,3 +133,10 @@ def test_number_difference_is_listed_with_context(tmp_path, capsys):
     err = capsys.readouterr().err
     assert "5" in err and "6" in err and "ml por" in err
 
+
+
+def test_cli_prints_four_decimals(tmp_path, capsys):
+    a = write(tmp_path, "a.md", PARAGRAPHS)
+    b = write(tmp_path, "b.md", PARAGRAPHS[:2])
+    main([str(a), str(b)])
+    assert all(len(x.split(".")[1]) == 4 for x in capsys.readouterr().out.split())
