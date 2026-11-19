@@ -381,11 +381,15 @@ Critérios de aceite:
 Verificação: grep -q "aulas" skills/editor-chefe/SKILL.md && uv run --locked python scripts/package.py --check
 
 ## Status
-- Feito (18 e 19/11/2026, onda 1 e onda 2, PR da `feat/wave-1`):
-  - 1.1 base do repositório e `package.py --check` e `--sync`; 1.2 referências comuns; 1.3 skill e agente do Editor-Chefe; 1.6 hooks do plugin; 1.7 ajustes vindos do ensaio (cartão novo, achados 3 a 7 de `docs/medicoes/2026-11-ensaio-editor-chefe.md`).
-  - 1.4 ensaio do Editor-Chefe no Claude Code 2.1.325: `Resultado: APROVADO` nos cinco casos; a variante de chat ficou não conclusiva até existirem as skills dos outros papéis.
-  - 2.1 e 2.2 checagens de PDF (`lib/pdfcheck/`), 2.3 skill e roteiro do teste no ChatGPT.
-- Em andamento: revisão final do PR da onda 1.
-- Travado: 1.5 (apresentação à Paula) fica com o Alify, junto com o envio do repositório, sem travar a construção; 2.4 e 6.3 esperam a Paula, sem travar a construção; 3.6 espera o Alify; o manual de diagramação (a Paula manda depois) e o design system dos documentos (Alify, Paula e Julie) ainda não existem: o 3.5 nasce com o lugar do manual e o 3.1 com os valores visuais em `tokens.css`, e cada um vira um cartão novo quando chegar.
-- Pendências para cartões seguintes: achado 1 do ensaio (manifesto do plugin) no 6.1; achado 2 (leitura de `references/` em sessão não interativa precisa de `--add-dir` ou sessão interativa) no guia da equipe, 6.2; o lembrete da ficha no `Stop` não foi exercido no ensaio; repetir a variante de chat depois da onda 4.
-- Próximo passo: merge da onda 1 depois da revisão final; onda 3 (Diagramador e imagens) numa branch `feat/wave-3`, com os cartões 3.1 a 3.8.
+- Feito (V1 na `main` em 19/11/2026, PR #3, merge `fe8551b`):
+  - Ondas 1 e 2: base, referências, Editor-Chefe, hooks, checagens de PDF, ensaio do Editor-Chefe aprovado.
+  - Onda 3: Diagramador (leitura de PDF e DOCX, composição, fidelidade, layout, inserção de imagens), imagens complementares e o ensaio com livros reais (`scripts/run_sample.py`).
+  - Onda 4: conferência de referências, Editor Científico, Auditor Científico e o ensaio científico (APROVADO, nota 92, `docs/medicoes/2026-11-ensaio-cientifico.md`).
+  - Onda 5: Auditor Gráfico (5.1).
+  - Onda 6: pacotes para ChatGPT, claude.ai, Claude Code e Codex (6.1) e guias (6.2: `docs/guia-paula.md`, `docs/guia-equipe.md`).
+  - Onda 7: material da Julie (aulas, estilo da casa nas imagens, amostras de paleta, gatilho no Editor-Chefe).
+  - Onda 3b (correções dos livros reais, depois dos diagnósticos em `docs/superpowers/debug/`): imagens desenhadas por objeto, ano não vira marcador, sumário com título quebrado e só com entradas confirmadas, ruído no check_duplicates, inserção numa composição, figuras no tamanho do original (mockup aprovado pelo Alify), ensaio sem teto de imagens, texto e imagem escondidos por recorte, capítulos pelo índice interno do PDF, deduplicação de caracteres reaproveitada, hífen sem igualar números.
+- Em andamento: nada.
+- Travado: o cartão 3.8 segue com os relatórios REPROVADOS até um novo ensaio com os livros reais depois da 3b; 6.3 (instalação no ChatGPT) é da Paula; o manual de diagramação e o design system dos documentos ainda não chegaram; decisões pendentes com a Paula, a Julie e o João: paleta dos livros, arredondamento na precificação das aulas, divergência do slide 7 com o CDC no ensaio científico.
+- Melhoria contínua (revisões mais profundas adiadas a pedido do Alify): identidade da imagem herdada só por pixels em `check_images`; "médio-alto" igual a "médio alto" na fidelidade; URL quebrada no fim da linha gera falso alarme; Auditor Gráfico com falsos alarmes de sobreposição no Toxina (cartão 5.2: geometria visível em `lib/pdfcheck`); `verify_refs.py` buscar pelo título quando não há identificador e acusar ano no futuro.
+- Próximo passo: novo ensaio do 3.8 com os dois livros reais; cartão 5.2; instalação da Paula (6.3).
