@@ -23,22 +23,41 @@ MIN_GUTTER = 0.04  # largura mínima do vão entre colunas, em fração da pági
 MIN_COLUMN_WORDS = 12
 REFERENCE_GAP = 1.7  # salto entre linhas, em corpos de fonte, que abre outra referência
 TOC_TITLE = re.compile(r"sum[áa]rio(?:\s*\(continua(?:ção)?\))?")  # mesmo padrão de check_toc
-TOC_ENTRY = re.compile(r".+?(?:\s+|[.·…]{2,}|…)\s*[0-9]+")  # mesmo formato de check_toc
+TOC_ENTRY = re.compile(r".+?(?:(?P<leader>(?:[.·…]\s*){2,}|…)\s*|\s+)[0-9]+")
+TOC_ALIGNMENT_TOLERANCE = 2  # pontos
 
 
 def toc_page_kind(page) -> Literal["toc-only", "mixed"] | None:
     """Classifica a página pelo título e pelas linhas seguintes do corpo."""
     top, bottom = page.height * HEADER_FRACTION, page.height * FOOTER_FRACTION
     lines = (
-        line["text"].strip()
+        line
         for line in page.extract_text_lines(return_chars=False)
         if top <= line["top"] and line["bottom"] <= bottom and line["text"].strip()
     )
-    title = " ".join(unicodedata.normalize("NFKC", next(lines, "")).casefold().split())
+    title_text = next(lines, {"text": ""})["text"]
+    title = " ".join(unicodedata.normalize("NFKC", title_text).casefold().split())
     # shortcut: páginas de continuação do sumário sem título são mantidas.
-    if TOC_TITLE.fullmatch(title):
-        return "toc-only" if all(TOC_ENTRY.fullmatch(line) for line in lines) else "mixed"
-    return None
+    if not TOC_TITLE.fullmatch(title):
+        return None
+
+    with_leader, without_leader = [], []
+    for line in lines:
+        entry = TOC_ENTRY.fullmatch(line["text"].strip())
+        if not entry:
+            return "mixed"
+        edges = with_leader if entry["leader"] else without_leader
+        edges.append(line["x1"])
+    if len(with_leader) + len(without_leader) < 3:
+        return "mixed"
+
+    if len(without_leader) == 1:
+        edge = without_leader[0]
+        if not any(abs(edge - other) <= TOC_ALIGNMENT_TOLERANCE for other in with_leader):
+            return "mixed"
+    elif without_leader and max(without_leader) - min(without_leader) > TOC_ALIGNMENT_TOLERANCE:
+        return "mixed"
+    return "toc-only"
 
 
 def is_wine(color):
