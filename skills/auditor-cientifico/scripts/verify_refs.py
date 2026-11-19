@@ -1,4 +1,7 @@
-"""Confira DOI e PMID de uma lista de referências no Crossref e no PubMed (APIs gratuitas)."""
+"""Confira DOI e PMID de uma lista de referências no Crossref e no PubMed (APIs gratuitas).
+
+Os autores de cada referência vão no formato "Sobrenome, Nome".
+"""
 
 import argparse
 from difflib import SequenceMatcher
@@ -53,6 +56,7 @@ def _pubmed(pmid: str) -> dict:
     if not item or "error" in item:
         raise NotFound(pmid)
     return {
+        "pubmed": True,  # o autor vem como "Sobrenome Iniciais"
         "title": item.get("title", ""),
         "first_author": ((item.get("authors") or [{}])[0]).get("name", ""),
         "year": _year(item.get("pubdate", "")),
@@ -71,15 +75,16 @@ def _norm(text: str) -> str:
 
 
 # A partícula varia entre as bases ("da Costa" x "de Costa"), então não conta; o resto do sobrenome, inteiro, conta.
+# Sem vírgula ("Nome Sobrenome"), só a última palavra vale como sobrenome; sobrenome composto então sai divergent.
 PARTICLES = {"da", "de", "do", "dos", "das", "di", "del", "della", "van", "von", "der", "den", "la", "le", "du"}
 
 
-def _surname_tokens(name: str) -> list[str]:
+def _surname_tokens(name: str, pubmed: bool = False) -> list[str]:
     name = unicodedata.normalize("NFKD", name)
     name = "".join(c for c in name if not unicodedata.combining(c))
     raw = name.split()
     tokens = re.sub(r"[^\w\s]", " ", name).casefold().split()
-    if len(tokens) > 1 and raw[-1].isupper() and len(tokens[-1]) <= 3:
+    if pubmed and len(tokens) > 1 and raw[-1].isupper() and len(tokens[-1]) <= 3:
         tokens.pop()  # PubMed: "Sobrenome Iniciais"
     return [t for t in tokens if t not in PARTICLES]
 
@@ -93,7 +98,7 @@ def _compare(ref: dict, remote: dict) -> tuple[list[str], list[str]]:
         missing.append("a fonte não trouxe o ano")
     elif ref.get("year") != remote["year"]:
         problems.append(f"year: {ref.get('year')} x {remote['year']}")
-    if _surname_tokens(_surname(ref.get("authors"))) != _surname_tokens(remote["first_author"]):
+    if _surname_tokens(_surname(ref.get("authors"))) != _surname_tokens(remote["first_author"], remote.get("pubmed", False)):
         problems.append(f"first author: '{_surname(ref.get('authors'))}' x '{remote['first_author']}'")
     return problems, missing
 

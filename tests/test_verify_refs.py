@@ -134,3 +134,11 @@ def test_particles_ignored(monkeypatch, tmp_path, capsys):
     path, _ = run(monkeypatch, tmp_path, [ref], {"https://eutils.ncbi.nlm.nih.gov/": pubmed})
     assert verify_refs.main([str(path)]) == 0
     assert json.loads(capsys.readouterr().out)[0]["status"] == "ok"
+
+
+def test_crossref_family_kept_whole(monkeypatch, tmp_path, capsys):
+    crossref = {"message": {**CROSSREF["message"], "author": [{"family": "Kim LI"}]}}
+    ref = {**REF, "authors": ["Kim, Ana"]}
+    path, _ = run(monkeypatch, tmp_path, [ref], {"https://api.crossref.org/works/": crossref})
+    assert verify_refs.main([str(path)]) == 1
+    assert json.loads(capsys.readouterr().out)[0]["status"] == "divergent"
