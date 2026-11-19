@@ -22,7 +22,7 @@ Soma dos pontos: <igual à nota>.
 
 | Eliminatório | Avaliado | Achado |
 | --- | --- | --- |
-| Referência que não existe | [sim ou não] | <nenhum ou número do achado; só vale se todas as consultas deram `not-found` definitivo; com qualquer `unverified`, a referência fica `não verificada`, sem eliminatório> |
+| Referência que não existe | [sim ou não] | <nenhum ou número do achado; só vale se todas as consultas, inclusive a busca pelo título citado quando o DOI ou PMID dá `not-found` ou `divergent` por título, deram `not-found` definitivo; com qualquer `unverified`, a referência fica `não verificada`, sem eliminatório> |
 | Conteúdo de slide ausente sem justificativa | [sim ou não] | |
 | Divergência com o Board não sinalizada | [sim ou não] | |
 
