@@ -11,7 +11,7 @@ import unicodedata
 import pdfplumber
 
 from build_book import design_text
-from manuscript import ManuscriptError, cite, parse, walk
+from manuscript import ManuscriptError, cite, parse
 
 THRESHOLD = 0.995
 LIGATURES = str.maketrans({"ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl", "ﬅ": "st", "ﬆ": "st"})
@@ -23,16 +23,22 @@ LEADER = re.compile(r"(?:\s*\.){3,}\s*\d+")
 def _markdown_text(path: str) -> tuple[str, list[str]]:
     """Texto do manuscrito (com citações renderizadas) e o texto que o modelo acrescenta por desenho."""
     manuscript = parse(Path(path).read_text(encoding="utf-8"))
-    parts = []
-    for block in walk(manuscript.blocks):
+    parts: list[str] = []
+
+    def emit(block):
         if block.type == "list":
-            parts += [f"{n}. {i}" if block.ordered else f"• {i}" for n, i in enumerate(block.items, 1)]
+            parts.extend(f"{n}. {i}" if block.ordered else f"• {i}" for n, i in enumerate(block.items, 1))
         elif block.type == "references":
-            parts += [f"• {d}" for _, d in block.entries]  # o modelo põe marcador
-        elif block.kind == "faq":
-            parts += [f"{q} {a}" for q, a in block.entries]
-        else:
+            parts.extend(f"• {d}" for _, d in block.entries)  # o modelo põe marcador
+        elif block.type != "box":
             parts.append(block.text)
+        for child in block.children:  # no faq a introdução vem antes das perguntas
+            emit(child)
+        if block.kind == "faq":
+            parts.extend(f"{q} {a}" for q, a in block.entries)
+
+    for block in manuscript.blocks:
+        emit(block)
     return "\n".join(cite(p, manuscript.refs) for p in parts), design_text(manuscript)
 
 

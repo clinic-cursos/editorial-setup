@@ -47,10 +47,9 @@ def _render(block, base: Path, out_dir: Path, refs: dict[str, str]) -> str:
         return f'<{tag} id="{block.id}">{items}</{tag}>'
     if block.type == "box":
         css = CSS_CLASS.get(block.kind, block.kind)
+        inner = "".join(_render(c, base, out_dir, refs) for c in block.children)
         if block.kind == "faq":
-            inner = "<dl>" + "".join(f"<dt>{e(q)}</dt><dd>{e(a)}</dd>" for q, a in block.entries) + "</dl>"
-        else:
-            inner = "".join(_render(c, base, out_dir, refs) for c in block.children)
+            inner += "<dl>" + "".join(f"<dt>{e(q)}</dt><dd>{e(a)}</dd>" for q, a in block.entries) + "</dl>"
         return f'<div class="{css}" id="{block.id}"><p class="rotulo">{LABELS[block.kind]}</p>{inner}</div>'
     if block.type == "figure":
         image = base / block.src

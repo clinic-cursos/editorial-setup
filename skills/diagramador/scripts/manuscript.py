@@ -63,19 +63,15 @@ def _meta(lines: list[str]) -> tuple[dict[str, str], int]:
     return meta, number
 
 
-def _faq(lines, first_number) -> list[tuple[str, str]]:
-    """Linha que termina em '?' é pergunta; as linhas seguintes, até a próxima pergunta, são a resposta."""
+def _faq_pairs(lines) -> list[tuple[str, str]]:
+    """As linhas seguintes a cada pergunta, até a próxima, são a resposta."""
     pairs: list[list[str]] = []
-    for offset, raw in enumerate(lines):
+    for raw in lines:
         line = raw.strip()
-        if not line:
-            continue
         if line.endswith("?"):
             pairs.append([line, ""])
-        elif pairs:
+        elif line:
             pairs[-1][1] = f"{pairs[-1][1]} {line}".strip()
-        else:
-            raise _error(first_number + offset, "o :::faq começa por uma pergunta (linha terminada em '?')")
     return [(q, a) for q, a in pairs]
 
 
@@ -123,10 +119,14 @@ def _parse_blocks(lines, first_number, counter, *, inside_box=False) -> list[Blo
             if end is None:
                 raise _error(number, f"bloco {line!r} sem ':::' de fechamento")
             box = new(type="box", kind=name)
-            if name == "faq":
-                box.entries = _faq(lines[i:end], first_number + i)
-            else:
-                box.children = _parse_blocks(lines[i:end], first_number + i, counter, inside_box=True)
+            inner, start = lines[i:end], first_number + i
+            if name == "faq":  # linha terminada em '?' é pergunta; o que vem antes é introdução
+                questions = [k for k, line in enumerate(inner) if line.strip().endswith("?")]
+                if not questions:
+                    raise _error(number, "o :::faq precisa de ao menos uma pergunta (linha terminada em '?')")
+                box.entries = _faq_pairs(inner[questions[0]:])
+                inner = inner[: questions[0]]
+            box.children = _parse_blocks(inner, start, counter, inside_box=True)
             i = end + 1
         elif m := _HEADING.fullmatch(line):
             new(type="heading", level=len(m[1]), text=m[2].strip())
