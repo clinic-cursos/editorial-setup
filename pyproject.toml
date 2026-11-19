@@ -1,0 +1,21 @@
+[project]
+name = "editorial-setup"
+version = "0.1.0"
+description = "Setup editorial de IA da Clinic Editora"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pdfplumber",
+    "pypdf",
+    "weasyprint",
+    "python-docx",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "reportlab",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
