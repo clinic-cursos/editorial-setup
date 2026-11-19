@@ -56,16 +56,27 @@ def test_sample_has_eight_slides():
 def test_every_slide_mapped():
     slides = {int(p.stem.split("-")[1]) for p in (SAMPLE / "slides").glob("slide-*.md")}
     table = (SAMPLE / "slide-a-capitulo.md").read_text(encoding="utf-8")
-    mapped = {int(m) for m in re.findall(r"^\|[^|]*\|\s*(\d+)\s*\|", table, re.M)}
-    assert slides - mapped == set(), "orphan slides"
+    manuscript = (SAMPLE / "manuscrito.md").read_text(encoding="utf-8")
+    # slide number -> heading it sits under, from the markers in the manuscript
+    under, heading = {}, None
+    for line in manuscript.splitlines():
+        if re.match(r"#{1,2} ", line):
+            heading = line.lstrip("#").strip()
+        elif m := re.match(r"<!-- slide: (\d+) -->", line):
+            under[int(m.group(1))] = heading
+    rows = {}
     for line in table.splitlines():
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         if len(cells) == 5 and cells[1].isdigit():
-            assert cells[3] or cells[4], f"slide {cells[1]} has no destination or justification"
-    manuscript = (SAMPLE / "manuscrito.md").read_text(encoding="utf-8")
-    marked = {int(m) for m in re.findall(r"<!-- slide: (\d+) -->", manuscript)}
-    cover_like = {int(m) for m in re.findall(r"^\|[^|]*\|\s*(\d+)\s*\|[^|]*\|\s*Sem texto próprio", table, re.M)}
-    assert slides - marked - cover_like == set(), "slides without a manuscript marker"
+            rows[int(cells[1])] = cells
+    assert slides - rows.keys() == set(), "orphan slides"
+    for n, cells in rows.items():
+        destination, justification = cells[3], cells[4]
+        if destination == "Sem texto próprio":
+            assert justification, f"slide {n} has no text and no justification"
+            assert n not in under, f"slide {n} is marked as textless but has a manuscript marker"
+        else:
+            assert under.get(n) == destination, f"slide {n}: destination {destination!r} is not the heading it sits under ({under.get(n)!r})"
 
 
 def test_planted_reference_flagged(monkeypatch, capsys):
