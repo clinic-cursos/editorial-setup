@@ -110,11 +110,19 @@ Os scripts leem `assets/` pelo caminho relativo à própria pasta, então nada p
 
 ## Execução
 
+No repositório:
+
 ```
-# no repositório: uv run --locked python skills/aulas/scripts/clinic_deck.py roteiro.json "Nome da Aula.pptx"
-# fora dele: exige python-pptx (pip install python-pptx; Pillow vem junto)
-python3 scripts/clinic_deck.py roteiro.json "Nome da Aula.pptx"
+uv run --locked python skills/aulas/scripts/clinic_deck.py roteiro.json "Aula.pptx"
 ```
+
+Fora dele (skill instalada no ChatGPT, Codex ou Claude), com `python-pptx` instalado (`pip install python-pptx`), na pasta da skill:
+
+```
+python3 scripts/clinic_deck.py roteiro.json "Aula.pptx"
+```
+
+`roteiro.json` e `Aula.pptx` são nomes de exemplo: troque pelos do projeto.
 
 Exemplo mínimo de roteiro:
 
