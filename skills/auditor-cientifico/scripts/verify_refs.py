@@ -70,13 +70,18 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().rstrip(".").casefold()
 
 
-def _last_name(name: str) -> str:
+# A partícula varia entre as bases ("da Costa" x "de Costa"), então não conta; o resto do sobrenome, inteiro, conta.
+PARTICLES = {"da", "de", "do", "dos", "das", "di", "del", "della", "van", "von", "der", "den", "la", "le", "du"}
+
+
+def _surname_tokens(name: str) -> list[str]:
     name = unicodedata.normalize("NFKD", name)
     name = "".join(c for c in name if not unicodedata.combining(c))
-    tokens = _norm(name).split()
-    if len(tokens) > 1 and re.fullmatch(r"[a-z]{1,3}", tokens[-1]) and name.split()[-1].isupper():
+    raw = name.split()
+    tokens = re.sub(r"[^\w\s]", " ", name).casefold().split()
+    if len(tokens) > 1 and raw[-1].isupper() and len(tokens[-1]) <= 3:
         tokens.pop()  # PubMed: "Sobrenome Iniciais"
-    return tokens[-1] if tokens else ""
+    return [t for t in tokens if t not in PARTICLES]
 
 
 def _compare(ref: dict, remote: dict) -> tuple[list[str], list[str]]:
@@ -88,7 +93,7 @@ def _compare(ref: dict, remote: dict) -> tuple[list[str], list[str]]:
         missing.append("a fonte não trouxe o ano")
     elif ref.get("year") != remote["year"]:
         problems.append(f"year: {ref.get('year')} x {remote['year']}")
-    if _last_name(_surname(ref.get("authors"))) != _last_name(remote["first_author"]):
+    if _surname_tokens(_surname(ref.get("authors"))) != _surname_tokens(remote["first_author"]):
         problems.append(f"first author: '{_surname(ref.get('authors'))}' x '{remote['first_author']}'")
     return problems, missing
 
