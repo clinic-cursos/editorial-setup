@@ -113,7 +113,7 @@ def work(tmp_path):
     return tmp_path / "work"
 
 
-def fake_steps(monkeypatch, inserted_stdout):
+def fake_steps(monkeypatch, inserted_stdout, ratios="1.0000 1.0000\n", fidelity_stderr=""):
     """Respostas fixas de cada script do fluxo; os arquivos que o sample lê são criados aqui."""
     class Doc:
         pages = [object()]
@@ -136,7 +136,7 @@ def fake_steps(monkeypatch, inserted_stdout):
             (out("--out") / "layout.json").write_text('{"b0001": 1}', encoding="utf-8")
             return done(inserted_stdout)
         elif script.name == "text_fidelity.py":
-            return done("1.0000 1.0000\n")
+            return subprocess.CompletedProcess(args, 0, ratios, fidelity_stderr)
         elif script.name == "check_layout.py":
             return done("Nenhum achado.\n")
         return done()
@@ -157,3 +157,10 @@ def test_sample_with_zero_inserted_images_writes_reprovado(monkeypatch, tmp_path
 def test_sample_approves_when_everything_passes_with_an_image(monkeypatch, tmp_path):
     fake_steps(monkeypatch, "imagem inserida na página 1\n")
     assert run_sample.sample(tmp_path / "livro.pdf", work(tmp_path))[0] == "Resultado: APROVADO"
+
+
+def test_sample_does_not_fail_on_informative_fidelity_stderr(monkeypatch, tmp_path):
+    fake_steps(monkeypatch, "imagem inserida na página 1\n", ratios="0.9990 0.9990\n", fidelity_stderr="trecho perdido: a\ntrecho a mais: b\n")
+    body = run_sample.sample(tmp_path / "livro.pdf", work(tmp_path))
+    assert body[0] == "Resultado: APROVADO"
+    assert any("0.9990 0.9990 (2 linhas de diferença)" in line for line in body)
