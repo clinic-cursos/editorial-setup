@@ -14,6 +14,7 @@ from .rules import Rules
 MM = 72 / 25.4
 _SUBSET = re.compile(r"^[A-Z]{6}\+")
 _MIN_PARAGRAPH = 100  # caracteres
+_LEADER = re.compile(r"[.·…]{3,}")  # pontilhado do sumário
 _PAGE_TOLERANCE = 1.0  # pt
 _GAP = 15.0  # pt: pares de letras mais próximos que isso formam a mesma região de sobreposição
 _FOLIO = re.compile(r"[0-9]+")
@@ -89,8 +90,11 @@ def check_duplicates(pdf, rules: Rules) -> list[Finding]:
     allowed = [" ".join(a.split()).casefold() for a in rules.allowed_repeats]
     seen: dict[int, tuple[int, int]] = {}  # hash -> (página, posição) da primeira ocorrência
     out = []
+    pages = _band_lines(pdf, rules)
+    running = _running_lines(pages)  # cabeçalho e rodapé corridos não são parágrafo
     for page in pdf.pages:
-        text = " ".join(" ".join(l["text"] for l in _lines(page)).split()).casefold()
+        kept = (line["text"] for line, _, _ in pages[page.page_number] if id(line) not in running)
+        text = _LEADER.sub(" ", " ".join(" ".join(kept).split()).casefold())
         for a in allowed:
             text = text.replace(a, "\x00")  # texto de repetição proposital sai antes da busca
         sources = set()
@@ -302,15 +306,21 @@ def _running_lines(pages: dict) -> set:
     return running
 
 
-def free_space(pdf, rules: Rules) -> list[FreeSpace]:
-    margin = rules.safe_zone_mm * MM
-    out = []
+def _band_lines(pdf, rules: Rules) -> dict:
+    """Por página: (linha, texto normalizado, está na faixa de cabeçalho ou rodapé)."""
     pages = {}
     for page in pdf.pages:
         text_top = page.bbox[1] + rules.page_margins_mm["top"] * MM
         bottom = page.bbox[3] - rules.page_margins_mm["bottom"] * MM
         pages[page.page_number] = [(line, _normalized(line["text"]), line["bottom"] <= text_top or line["top"] >= bottom)
                                    for line in _lines(page, return_chars=True)]
+    return pages
+
+
+def free_space(pdf, rules: Rules) -> list[FreeSpace]:
+    margin = rules.safe_zone_mm * MM
+    out = []
+    pages = _band_lines(pdf, rules)
     running = _running_lines(pages)
     for page in pdf.pages:
         x0, y0, x1, y1 = page.bbox
