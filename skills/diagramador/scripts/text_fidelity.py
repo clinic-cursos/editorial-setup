@@ -10,7 +10,7 @@ import unicodedata
 import pdfplumber
 
 from build_book import LABELS
-from extract_pdf import HEADER_FRACTION, FOOTER_FRACTION, toc_page_kind
+from extract_pdf import HEADER_FRACTION, FOOTER_FRACTION, body_size, toc_pages
 from manuscript import ManuscriptError, cite, parse
 
 THRESHOLD = 0.995
@@ -51,15 +51,18 @@ def _markdown_text(path: str) -> str:
 
 def _pdf_pages(path: str, *, drop_toc: bool) -> list[str]:
     with pdfplumber.open(path) as pdf:
-        return [
-            (page.crop((0, page.height * HEADER_FRACTION, page.width, page.height * FOOTER_FRACTION)).extract_text() or "")
-            for page in pdf.pages
-            if not drop_toc or toc_page_kind(page) != "toc-only"
-        ]
+        filtered = toc_pages(pdf.pages, body_size(pdf.pages)) if drop_toc else {}
+        pages = []
+        for number, page in enumerate(pdf.pages, 1):
+            if number in filtered:
+                page, _ = filtered[number]
+            area = (0, page.height * HEADER_FRACTION, page.width, page.height * FOOTER_FRACTION)
+            pages.append(page.crop(area).extract_text() or "")
+        return pages
 
 
 def _pdf_text(path: str, *, template: bool = False) -> str:
-    """Descarta o sumário original ou, com `template`, os elementos do modelo."""
+    """Remove entradas confirmadas do original ou, com `template`, os elementos do modelo."""
     pages = _pdf_pages(path, drop_toc=not template)
     if template and len(pages) > 2 and "expediente" in pages[1].casefold() and "sumário" in pages[2].casefold():
         start = 3

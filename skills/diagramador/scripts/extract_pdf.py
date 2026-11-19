@@ -1,13 +1,12 @@
 """Converta um PDF já composto para o formato de manuscrito da Clinic Editora (melhor tentativa)."""
 
 import argparse
-from collections import Counter
+from collections import Counter, defaultdict
 from os.path import relpath
 from pathlib import Path
 import json
 import re
 import sys
-from typing import Literal
 import unicodedata
 
 import pdfplumber
@@ -23,41 +22,41 @@ MIN_GUTTER = 0.04  # largura mínima do vão entre colunas, em fração da pági
 MIN_COLUMN_WORDS = 12
 REFERENCE_GAP = 1.7  # salto entre linhas, em corpos de fonte, que abre outra referência
 TOC_TITLE = re.compile(r"sum[áa]rio(?:\s*\(continua(?:ção)?\))?")  # mesmo padrão de check_toc
-TOC_ENTRY = re.compile(r".+?(?:(?P<leader>(?:[.·…]\s*){2,}|…)\s*|\s+)[0-9]+")
-TOC_ALIGNMENT_TOLERANCE = 2  # pontos
+TOC_ENTRY = re.compile(r"(?P<title>.+?)(?:(?:[.·…]\s*){2,}|…\s*|\s+)[0-9]+")
 
 
-def toc_page_kind(page) -> Literal["toc-only", "mixed"] | None:
-    """Classifica a página pelo título e pelas linhas seguintes do corpo."""
-    top, bottom = page.height * HEADER_FRACTION, page.height * FOOTER_FRACTION
-    lines = (
-        line
-        for line in page.extract_text_lines(return_chars=False)
-        if top <= line["top"] and line["bottom"] <= bottom and line["text"].strip()
-    )
-    title_text = next(lines, {"text": ""})["text"]
-    title = " ".join(unicodedata.normalize("NFKC", title_text).casefold().split())
-    # shortcut: páginas de continuação do sumário sem título são mantidas.
-    if not TOC_TITLE.fullmatch(title):
-        return None
+def normalize_heading(text):
+    return " ".join(unicodedata.normalize("NFKC", text).casefold().split())
 
-    with_leader, without_leader = [], []
-    for line in lines:
-        entry = TOC_ENTRY.fullmatch(line["text"].strip())
-        if not entry:
-            return "mixed"
-        edges = with_leader if entry["leader"] else without_leader
-        edges.append(line["x1"])
-    if len(with_leader) + len(without_leader) < 3:
-        return "mixed"
 
-    if len(without_leader) == 1:
-        edge = without_leader[0]
-        if not any(abs(edge - other) <= TOC_ALIGNMENT_TOLERANCE for other in with_leader):
-            return "mixed"
-    elif without_leader and max(without_leader) - min(without_leader) > TOC_ALIGNMENT_TOLERANCE:
-        return "mixed"
-    return "toc-only"
+def toc_pages(pages, body):
+    """Retorna páginas candidatas com somente os caracteres das entradas confirmadas removidos."""
+    candidates, headings = {}, defaultdict(set)
+    for number, page in enumerate(pages, 1):
+        top, bottom = page.height * HEADER_FRACTION, page.height * FOOTER_FRACTION
+        lines = [
+            line for line in page.extract_text_lines()
+            if top <= line["top"] and line["bottom"] <= bottom and line["text"].strip()
+        ]
+        if lines and TOC_TITLE.fullmatch(normalize_heading(lines[0]["text"])):
+            candidates[number] = lines[1:]
+        for title in page_headings(lines, body):
+            headings[normalize_heading(title)].add(number)
+
+    filtered = {}
+    for number, lines in candidates.items():
+        removed, count = set(), 0
+        for line in lines:
+            entry = TOC_ENTRY.fullmatch(line["text"].strip())
+            if entry and headings.get(normalize_heading(entry["title"]), set()) - {number}:
+                removed.update(id(char) for char in line["chars"])
+                count += 1
+        page = pages[number - 1]
+        if removed:
+            # As linhas do pdfplumber apontam para os mesmos caracteres da página.
+            page = page.filter(lambda obj, removed=removed: id(obj) not in removed)
+        filtered[number] = (page, count)
+    return filtered
 
 
 def is_wine(color):
@@ -89,6 +88,22 @@ def classify(line, body):
     if ratio >= 1.15:
         return "###"
     return "li" if LIST_ITEM.match(line["text"]) else "p"
+
+
+def page_headings(lines, body):
+    titles, previous = [], None
+    for line in lines:
+        tag = classify(line, body)
+        if tag not in ("#", "##"):
+            previous = None
+            continue
+        top, size = line["top"], line["chars"][0]["size"]
+        if previous and previous[0] == tag and top - previous[1] <= PARAGRAPH_GAP * size:
+            titles[-1] += " " + line["text"].strip()
+        else:
+            titles.append(line["text"].strip())
+        previous = (tag, top)
+    return titles
 
 
 def gutter(page, max_size=None):
@@ -188,13 +203,14 @@ def render(source, output, images_dir):
         if not body:
             raise ValueError("o PDF não tem texto extraível (talvez seja escaneado)")
         info = pdf.metadata or {}
+        filtered = toc_pages(pdf.pages, body)
         for number, page in enumerate(pdf.pages, 1):
-            toc_kind = toc_page_kind(page)
-            if toc_kind == "toc-only":
-                warnings.append(f"página {number}: sumário do original descartado")
-                continue
-            if toc_kind == "mixed":
-                warnings.append(f"página {number}: sumário com texto de corpo, mantido para conferência")
+            if number in filtered:
+                page, count = filtered[number]
+                if count:
+                    warnings.append(f"página {number}: entradas de sumário confirmadas removidas")
+                else:
+                    warnings.append(f"página {number}: sumário com texto de corpo, mantido para conferência")
             previous = None  # (tipo, top, tamanho) da linha anterior
             for top, kind, payload in page_items(page, body, images_dir, output, figures, warnings, number):
                 if previous and top < previous[1]:  # voltou ao topo: outra coluna
