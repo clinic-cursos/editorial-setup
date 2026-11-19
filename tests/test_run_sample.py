@@ -113,10 +113,11 @@ def work(tmp_path):
     return tmp_path / "work"
 
 
-def fake_steps(monkeypatch, inserted_stdout, ratios="1.0000 1.0000\n", fidelity_stderr=""):
+def fake_steps(monkeypatch, inserted_stdout, ratios="1.0000 1.0000\n", fidelity_stderr="", v2_layout='{"b0001": 1}', v2_pages=1):
     """Respostas fixas de cada script do fluxo; os arquivos que o sample lê são criados aqui."""
     class Doc:
-        pages = [object()]
+        def __init__(self, path):
+            self.pages = [object()] * (v2_pages if "v2" in str(path) else 1)
         def __enter__(self): return self
         def __exit__(self, *exc): return False
 
@@ -133,7 +134,7 @@ def fake_steps(monkeypatch, inserted_stdout, ratios="1.0000 1.0000\n", fidelity_
             out("--json").write_text('[{"page": 1, "width_mm": 190.0, "height_mm": 100.0, "ratio": 1.9, "fraction": 0.5}]', encoding="utf-8")
         elif script.name == "insert_images.py":
             (out("--out")).mkdir(parents=True)
-            (out("--out") / "layout.json").write_text('{"b0001": 1}', encoding="utf-8")
+            (out("--out") / "layout.json").write_text(v2_layout, encoding="utf-8")
             return done(inserted_stdout)
         elif script.name == "text_fidelity.py":
             return subprocess.CompletedProcess(args, 0, ratios, fidelity_stderr)
@@ -142,7 +143,7 @@ def fake_steps(monkeypatch, inserted_stdout, ratios="1.0000 1.0000\n", fidelity_
         return done()
 
     monkeypatch.setattr(run_sample, "run", fake_run)
-    monkeypatch.setattr(run_sample.pdfplumber, "open", lambda *a, **k: Doc())
+    monkeypatch.setattr(run_sample.pdfplumber, "open", lambda path, *a, **k: Doc(path))
     monkeypatch.setattr(run_sample, "fonts", lambda path: run_sample.collections.Counter({"Montserrat": 1}))
 
 
@@ -164,3 +165,11 @@ def test_sample_does_not_fail_on_informative_fidelity_stderr(monkeypatch, tmp_pa
     body = run_sample.sample(tmp_path / "livro.pdf", work(tmp_path))
     assert body[0] == "Resultado: APROVADO"
     assert any("0.9990 0.9990 (2 linhas de diferença)" in line for line in body)
+
+
+@pytest.mark.parametrize("extra", [{"v2_pages": 2}, {"v2_layout": '{"b0001": 2}'}])
+def test_sample_reprovado_when_images_change_the_pagination(monkeypatch, tmp_path, extra):
+    fake_steps(monkeypatch, "imagem inserida na página 1\n", **extra)
+    body = run_sample.sample(tmp_path / "livro.pdf", work(tmp_path))
+    assert body[0] == "Resultado: REPROVADO"
+    assert any("a paginação mudou depois das imagens" in line for line in body)
