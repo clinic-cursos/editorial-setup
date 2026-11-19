@@ -224,3 +224,10 @@ def test_dash_marker_before_number_is_flagged_for_review(tmp_path, layout_pdf, c
     # Escolha: traço seguido de dígito é ambíguo (lista ou intervalo); acusa e deixa uma pessoa conferir.
     assert _compare(tmp_path, layout_pdf, "1. 10 dias", "01 - 10 dias") == 1
     assert "número alterado" in capsys.readouterr().err
+
+
+def test_list_starting_at_four_matches_built_pdf(tmp_path):
+    source = tmp_path / "m.md"
+    source.write_text(META + "# Cap\n\n4. quarto item da lista\n5. quinto item da lista\n", encoding="utf-8")
+    built = build(str(source), str(tmp_path / "out"))
+    assert fidelity(str(source), built.pdf) == (1.0, 1.0)

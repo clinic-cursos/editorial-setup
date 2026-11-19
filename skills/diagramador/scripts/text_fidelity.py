@@ -35,7 +35,7 @@ def _markdown_text(path: str) -> str:
 
     def emit(block):
         if block.type == "list":
-            parts.extend(f"{n}. {i}" if block.ordered else f"• {i}" for n, i in enumerate(block.items, 1))
+            parts.extend(f"{n}. {i}" if block.ordered else f"• {i}" for n, i in enumerate(block.items, block.start))
         elif block.type == "references":
             parts.extend(f"• {d}" for _, d in block.entries)  # o modelo põe marcador
         elif block.type != "box":

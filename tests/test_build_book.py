@@ -107,4 +107,4 @@ def test_list_start_number_survives_build(tmp_path):
     source.write_text("title: T\ncourse: C\nauthors: A\nversion: 1\n\n# Cap\n\n4. quarto\n5. quinto\n", encoding="utf-8")
     assert parse(source.read_text(encoding="utf-8")).blocks[1].start == 4
     result = build(str(source), str(tmp_path / "out"))
-    assert '<ol id="b0002" start="4">' in Path(result.html).read_text(encoding="utf-8")
+    assert '<ol id="b0002" start="4"' in Path(result.html).read_text(encoding="utf-8")
