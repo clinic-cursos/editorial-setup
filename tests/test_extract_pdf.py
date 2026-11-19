@@ -4,6 +4,9 @@ import sys
 
 from PIL import Image
 import pytest
+import reportlab
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
@@ -160,3 +163,20 @@ def test_images_dir_with_space_fails(book_pdf, tmp_path):
     assert result.returncode == 2
     assert "use um nome de pasta sem espaços" in result.stderr
     assert not out.exists()
+
+
+def test_list_numbering_preserved_across_pages(tmp_path):
+    path = tmp_path / "lists.pdf"
+    c = canvas.Canvas(str(path), pagesize=A4)
+    for y, line in ((700, "3. Terceiro item da lista numerada"), (680, "4 — Quarto item com marcador de travessao")):
+        text(c, y, line)
+    c.showPage()
+    text(c, 700, "05. Quinto item na pagina seguinte")
+    pdfmetrics.registerFont(TTFont("Vera", str(Path(reportlab.__file__).parent / "fonts" / "Vera.ttf")))  # Helvetica não tem "•"
+    c.setFont("Vera", 10)
+    c.drawString(60, 650, "• Item solto com marcador")
+    c.drawString(60, 636, "• Outro item solto")
+    c.save()
+    md = extract(path, tmp_path)[0].read_text(encoding="utf-8")
+    assert "3. Terceiro item" in md and "4. Quarto item" in md and "5. Quinto item" in md
+    assert "- Item solto com marcador\n- Outro item solto" in md

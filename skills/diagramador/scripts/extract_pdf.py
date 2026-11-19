@@ -13,7 +13,7 @@ from pypdf import PdfReader
 # Mesma faixa de cabeçalho e rodapé do text_fidelity.py.
 HEADER_FRACTION, FOOTER_FRACTION = 0.07, 0.93
 PARAGRAPH_GAP = 2.0  # salto entre linhas, em corpos de fonte, que abre outro parágrafo
-LIST_ITEM = re.compile(r"(?:\d+\s*(?:—|–|-|\.|\))|[•▪●])\s+(?=\S)")
+LIST_ITEM = re.compile(r"(?:(\d+)\s*(?:—|–|-|\.|\))|[•▪●])\s+(?=\S)")
 PLACEHOLDER = "A preencher"
 
 
@@ -102,7 +102,11 @@ def render(source, output, images_dir):
                 close = previous and top - previous[1] <= PARAGRAPH_GAP * size
                 joins = close and previous[0] == tag
                 if tag == "li":
-                    list_items.append(LIST_ITEM.sub("", text, count=1))
+                    marker = LIST_ITEM.match(text)
+                    mark = f"{int(marker[1])}. " if marker[1] else "- "  # mantém o número e o tipo da origem
+                    if list_items and list_items[-1].startswith("- ") != (not marker[1]):
+                        flush(blocks, list_items)
+                    list_items.append(mark + text[marker.end():])
                 elif tag == "p" and close and previous[0] == "li":
                     list_items[-1] += " " + text
                     tag = "li"
@@ -128,7 +132,7 @@ def render(source, output, images_dir):
 
 def flush(blocks, list_items):
     if list_items:
-        blocks.append("\n".join(f"{n}. {item}" for n, item in enumerate(list_items, 1)))
+        blocks.append("\n".join(list_items))
         list_items.clear()
 
 
