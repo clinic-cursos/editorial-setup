@@ -102,7 +102,7 @@ Você atua como diretor de arte. Para cada espaço de imagem, decida o que ilust
 Origem: design system das aulas enviado pela Julie em 19/11/2026 (`docs/fontes/2026-11-19-julie-design-system/`). O visual e as regras são dela; aqui só mudaram os caminhos, que passam a apontar para a pasta da skill.
 
 - `scripts/clinic_deck.py`: o gerador.
-- `scripts/bold_deck.py`: variação de exploração ousada do gerador.
+- `scripts/bold_deck.py`: demonstração de estilo "bold" com conteúdo fixo (não lê roteiro). Serve só de referência visual; não use para gerar aula. Os textos clínicos fixos dela são marcadores `[EXEMPLO: ...]`.
 - `assets/`: logos, foto de fundo, QR codes e ícones das parcerias (`assets/parcerias/`), como arquivos de imagem.
 - `references/exemplo_roteiro.json`: roteiro de exemplo; mostra só o formato, e todo conteúdo clínico nele é marcador `[EXEMPLO: ...]` a substituir.
 

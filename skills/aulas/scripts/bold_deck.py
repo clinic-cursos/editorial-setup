@@ -228,7 +228,7 @@ def s_pilares(prs):
         b = text(s, 5.75, y + 0.32, 3.7, 0.5, t, size=9.5, color=CINZA_CLARO)
         l = line(s, 4.8, y + 0.85, W - M, y + 0.85, color=NOITE2, w=0.75)
         an.add(n, gap=0, eff="up"); an.add(a, gap=60); an.add(b, gap=200)
-    text(s, 4.75, H - 0.4, 4.8, 0.25, "Swift A, et al. The Facial Aging Process from the “Inside Out”. Aesthet Surg J. 2021;41(10):1107-19.", size=6.5, color=CINZA)
+    text(s, 4.75, H - 0.4, 4.8, 0.25, "[EXEMPLO: confirmar referência]", size=6.5, color=CINZA)
     morph(s); an.build()
 
 
@@ -279,8 +279,8 @@ def s_numero(prs):
     big_arc(s, 2.2, -0.7, 7.0, VINHO, 0.55, 180, 360)
     logo(s, True)
     kicker(s, "Duração e efeitos", M, 0.55)
-    an.add(text(s, 0, 1.55, W, 1.8, "3–4", size=130, color=BRANCO, font=FONTE_FORTE, bold=True, align=PP_ALIGN.CENTER, spacing=0.8), eff="up", dur=800, gap=300)
-    an.add(text(s, 0, 3.25, W, 0.5, "MESES DE EFEITO, EM BULA", size=16, color=ROSE, bold=True, align=PP_ALIGN.CENTER), gap=400)
+    an.add(text(s, 0, 1.55, W, 1.8, "[EXEMPLO]", size=60, color=BRANCO, font=FONTE_FORTE, bold=True, align=PP_ALIGN.CENTER, spacing=0.8), eff="up", dur=800, gap=300)
+    an.add(text(s, 0, 3.25, W, 0.5, "[EXEMPLO: DURAÇÃO DO EFEITO, CONFERIDA NA BULA]", size=16, color=ROSE, bold=True, align=PP_ALIGN.CENTER), gap=400)
     an.add(text(s, 2.0, 3.9, 6, 0.8, "A duração varia entre sorotipos, refletindo a meia-vida intracelular da cadeia leve.",
                 size=10, color=CINZA_CLARO, align=PP_ALIGN.CENTER))
     morph(s); an.build()
@@ -294,8 +294,8 @@ def s_contra(prs):
     logo(s, False)
     title(s, "Contraindicações", M, 0.45, 4.5, 0.6, size=24)
     for k, (lab, items, fg, sub) in enumerate([
-        ("Absolutas", ["Hipersensibilidade à TBA ou componentes", "Gestantes", "Quadro psicológico: expectativas irreais, instabilidade"], BRANCO, ROSE_CLARO),
-        ("Relativas", ["Doenças neuromusculares", "Doença autoimune", "Antibióticos (aminoglicosídeos)", "Vacinas recentes (COVID, gripe, HPV)"], PRETO, TEXTO)]):
+        ("Absolutas", ["[EXEMPLO: contraindicação, enviada pelo professor]"], BRANCO, ROSE_CLARO),
+        ("Relativas", ["[EXEMPLO: contraindicação relativa, enviada pelo professor]"], PRETO, TEXTO)]):
         x = M + k * (W / 2)
         an.add(text(s, x, 1.3, 4, 0.5, lab.upper(), size=20, color=fg if k == 0 else VINHO, font=FONTE_FORTE, bold=True), eff="up", gap=200)
         for i, it in enumerate(items):
@@ -303,7 +303,7 @@ def s_contra(prs):
             mk = text(s, x, y, 0.4, 0.4, "✕" if k == 0 else "!", size=13, color=ROSE if k == 0 else VINHO, bold=True)
             t = text(s, x + 0.42, y + 0.02, 3.9, 0.55, it, size=11, color=sub)
             an.add(mk, gap=0); an.add(t, gap=150, eff="left")
-    text(s, M, H - 0.55, 4.2, 0.4, "*Lactantes: dados atuais não mostram contraindicação.", size=7.5, color=ROSE_CLARO, italic=True)
+    text(s, M, H - 0.55, 4.2, 0.4, "[EXEMPLO: ressalva, enviada pelo professor]", size=7.5, color=ROSE_CLARO, italic=True)
     morph(s); an.build()
 
 
@@ -315,16 +315,15 @@ def s_glabela(prs):
     kicker(s, "Planejamento", 4.0, 0.42, VINHO)
     title(s, "Glabela", 4.0, 0.62, 5, 0.7, color=PRETO, size=32)
     text(s, 4.0, 1.28, 5, 0.3, [[("M. Prócero", {"bold": True, "color": VINHO}), ("  ·  ", {}), ("M. Corrugadores do supercílio", {"bold": True, "color": VINHO})]], size=9)
-    steps = ["Um ponto em cada corrugador, no início da sobrancelha", "Um ponto central no prócero",
-             "Pinçar a pele", "Agulha a 90°"]
+    steps = ["[EXEMPLO: passo da técnica, enviado pelo professor]"] * 4
     for i, t in enumerate(steps):
         y = 1.8 + i * 0.52
         n = text(s, 4.0, y, 0.5, 0.45, f"{i+1}", size=18, color=ROSE, font=FONTE_FORTE, bold=True)
         b = text(s, 4.45, y + 0.06, 3.1, 0.45, t, size=10, color=TEXTO)
         an.add(n, gap=0); an.add(b, gap=160, eff="left")
     k = name(rect(s, 7.65, 1.8, 1.9, 2.0, fill=VINHO), "!!kpi")
-    a = text(s, 7.65, 2.0, 1.9, 0.9, "2–5", size=40, color=BRANCO, font=FONTE_FORTE, bold=True, align=PP_ALIGN.CENTER)
-    b = text(s, 7.75, 2.9, 1.7, 0.7, "UI de toxina por ponto", size=9.5, color=ROSE_CLARO, align=PP_ALIGN.CENTER)
+    a = text(s, 7.65, 2.0, 1.9, 0.9, "[EXEMPLO]", size=24, color=BRANCO, font=FONTE_FORTE, bold=True, align=PP_ALIGN.CENTER)
+    b = text(s, 7.75, 2.9, 1.7, 0.7, "[EXEMPLO: dose por ponto, conferida pelo professor]", size=9.5, color=ROSE_CLARO, align=PP_ALIGN.CENTER)
     an.add(k, gap=0, eff="up"); an.add(a, gap=0, eff="up"); an.add(b, gap=200)
     morph(s); an.build()
 
@@ -335,7 +334,7 @@ def s_agulha(prs):
     ppic(s, 0.25, 0.2, W - 1.55, 2.5, "Ilustração médica 3D em corte transversal da pele em camadas (epiderme, derme e gordura subcutânea) com um vaso sanguíneo na derme. À esquerda, agulha fina perfurando o vaso, com pequeno ponto de sangramento. À direita, cânula de ponta romba desviando suavemente do mesmo vaso. Composição dividida ao meio", "Agulha ou cânula", dark=True, nm="!!foto")
     logo(s, True)
     title(s, "Agulha ou cânula?", M, 2.85, 6, 0.6, size=24, hl="cânula?")
-    cols = [("Agulha", ["Traumatiza o vaso: **aspire 10–20 s**", "Permite superficializar (contorno labial)", "Exige mais prática"]),
+    cols = [("Agulha", ["[EXEMPLO: conduta, enviada pelo professor]", "Permite superficializar (contorno labial)", "Exige mais prática"]),
             ("Cânula", ["Ponta romba: **desvia do vaso**", "Precisa de pertuito prévio", "Menos dor, mais segura em áreas críticas"])]
     for k, (h, its) in enumerate(cols):
         x = M + k * 4.6
@@ -345,7 +344,7 @@ def s_agulha(prs):
             an.add(text(s, x, 3.78 + i * 0.3, 4.3, 0.3, [segs], size=9.5, color=CINZA_CLARO), gap=90, eff="left")
     r = rect(s, 0, H - 0.42, W, 0.42, fill=VINHO)
     t = text(s, M, H - 0.42, W - 2 * M, 0.42, [[("ATENÇÃO  ", {"bold": True, "color": ROSE_CLARO}),
-             ("Cânulas finas podem agir como agulha. Mais segura: 22G × 50 mm ou 22G × 70 mm.", {})]], size=9.5,
+             ("[EXEMPLO: orientação de segurança e calibre, enviada pelo professor]", {})]], size=9.5,
              color=BRANCO, anchor=MSO_ANCHOR.MIDDLE)
     an.add(r, gap=0); an.add(t, gap=0)
     morph(s); an.build()
@@ -359,9 +358,9 @@ def s_alerta(prs):
     logo(s, True, M + 0.1)
     an.add(text(s, M + 0.1, 1.05, 5, 0.3, "⚠  REAÇÕES DE MAIOR GRAVIDADE", size=10, color=ALERTA, bold=True))
     title(s, "Reconhecer cedo muda o desfecho.", M + 0.1, 1.35, 5.8, 1.0, size=24)
-    its = [("Isquemia", "dor intensa, palidez, livedo, alteração de cor e temperatura"),
-           ("Necrose", "isquemia persistente que compromete a viabilidade do tecido"),
-           ("Infecção", "dor progressiva, calor, eritema em expansão, secreção")]
+    its = [("Isquemia", "[EXEMPLO: sinais, enviados pelo professor]"),
+           ("Necrose", "[EXEMPLO: definição, enviada pelo professor]"),
+           ("Infecção", "[EXEMPLO: sinais, enviados pelo professor]")]
     for i, (h, t) in enumerate(its):
         y = 2.55 + i * 0.75
         n = rect(s, M + 0.1, y + 0.05, 0.08, 0.55, fill=ALERTA if i < 2 else ROSE)
@@ -377,16 +376,16 @@ def s_hialuronidase(prs):
     logo(s, False)
     kicker(s, "Hialuronidase", M, 0.5, VINHO)
     an.add(title(s, "Tenha sempre\nno consultório.", M, 0.78, 6.2, 1.7, color=PRETO, size=38, hl="sempre", hlc=VINHO), eff="up", dur=700, gap=350)
-    regras = [("2×", "o volume de AH aplicado, para remoção completa"),
-              ("7 dias", "de intervalo, se precisar repetir"),
-              ("6 h", "de meia-vida: descarte após reconstituir")]
+    regras = [("[EXEMPLO]", "[EXEMPLO: quantidade, conferida pelo professor]"),
+              ("[EXEMPLO]", "[EXEMPLO: intervalo, conferido pelo professor]"),
+              ("[EXEMPLO]", "[EXEMPLO: prazo de uso, conferido pelo professor]")]
     for i, (n, t) in enumerate(regras):
         x = M + i * 2.75
         a = text(s, x, 2.9, 2.6, 0.75, n, size=34, color=VINHO, font=FONTE_FORTE, bold=True)
         l = rect(s, x + 0.03, 3.68, 0.5, 0.04, fill=ROSE)
         b = text(s, x, 3.8, 2.4, 0.7, t, size=10, color=TEXTO)
         an.add(a, gap=0, eff="up"); an.add(l, gap=0); an.add(b, gap=250)
-    text(s, M, H - 0.5, 7, 0.3, "Pó liofilizado: reconstituir com soro fisiológico estéril antes da aplicação.", size=8, color=CINZA, italic=True)
+    text(s, M, H - 0.5, 7, 0.3, "[EXEMPLO: orientação de preparo, conferida pelo professor]", size=8, color=CINZA, italic=True)
     morph(s); an.build()
 
 
@@ -422,12 +421,12 @@ def s_from_layout(prs, d):
     morph(s); an.build()
 
 
-HOF_PRECOS = {"tipo": "precificacao", "procedimentos": [
-    {"nome": "Toxina botulínica 50 UI", "produto": 400, "preco": 1100, "custo_fixo": 28, "insumos": 40},
-    {"nome": "Preenchimento 1 mL", "produto": 300, "preco": 1200, "custo_fixo": 28, "insumos": 40},
-    {"nome": "Harmonização 4 mL + TBA", "estrategia": "Upsell", "produto": 1600, "preco": 5000, "custo_fixo": 28, "insumos": 40},
-    {"nome": "Skinbooster (mescla)", "estrategia": "Downsell", "produto": 45, "preco": 300, "custo_fixo": 28, "insumos": 40},
-    {"nome": "Bioestimulador (Sculptra)", "estrategia": "Cross-sell", "produto": 1000, "preco": 3500, "custo_fixo": 28, "insumos": 40}]}
+HOF_PRECOS = {"tipo": "precificacao", "nota": "[EXEMPLO: valores ilustrativos, substituir pelos da clínica]", "procedimentos": [
+    {"nome": "[EXEMPLO: procedimento]", "produto": 400, "preco": 1100, "custo_fixo": 28, "insumos": 40},
+    {"nome": "[EXEMPLO: procedimento]", "produto": 300, "preco": 1200, "custo_fixo": 28, "insumos": 40},
+    {"nome": "[EXEMPLO: procedimento]", "estrategia": "Upsell", "produto": 1600, "preco": 5000, "custo_fixo": 28, "insumos": 40},
+    {"nome": "[EXEMPLO: procedimento]", "estrategia": "Downsell", "produto": 45, "preco": 300, "custo_fixo": 28, "insumos": 40},
+    {"nome": "[EXEMPLO: procedimento]", "estrategia": "Cross-sell", "produto": 1000, "preco": 3500, "custo_fixo": 28, "insumos": 40}]}
 
 
 def main(out):
