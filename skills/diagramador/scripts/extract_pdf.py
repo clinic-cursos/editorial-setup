@@ -2,14 +2,21 @@
 
 import argparse
 from collections import Counter, defaultdict
+from contextlib import contextmanager
 from os.path import relpath
 from pathlib import Path
 import json
+from math import isfinite
 import re
 import sys
 import unicodedata
 
 import pdfplumber
+from pdfminer.pdfinterp import PDFPageInterpreter
+from pdfminer.pdffont import PDFType3Font
+from pdfminer.pdftypes import resolve_all, stream_value
+from pdfminer.utils import MATRIX_IDENTITY, apply_matrix_pt, apply_matrix_rect, get_bound
+from pdfplumber.page import PDFPageAggregatorWithMarkedContent, Page
 from pypdf import PdfReader
 
 HEADER_FRACTION, FOOTER_FRACTION = 0.07, 0.93
@@ -23,6 +30,183 @@ MIN_COLUMN_WORDS = 12
 REFERENCE_GAP = 1.7  # salto entre linhas, em corpos de fonte, que abre outra referência
 TOC_TITLE = re.compile(r"sum[áa]rio(?:\s*\(continua(?:ção)?\))?")  # mesmo padrão de check_toc
 TOC_ENTRY = re.compile(r"(?P<title>.+?)(?:(?:[.·…]\s*){2,}|…\s*|\s+)[0-9]+")
+CLIP_TOLERANCE = 0.02
+
+
+def intersect_boxes(first, second):
+    return (max(first[0], second[0]), max(first[1], second[1]),
+            min(first[2], second[2]), min(first[3], second[3]))
+
+
+def separated(box):
+    x0, y0, x1, y1 = box
+    return x0 > x1 + CLIP_TOLERANCE or y0 > y1 + CLIP_TOLERANCE
+
+
+class ClipPath(list):
+    def __init__(self, interpreter):
+        super().__init__()
+        self.interpreter = interpreter
+        self.matrices = []
+
+    def append(self, segment):
+        super().append(segment)
+        # The path is built in device space, even if cm or Q changes the matrix.
+        self.matrices.append(self.interpreter.ctm)
+
+    def bounds(self):
+        points = [
+            apply_matrix_pt(matrix, (x, y))
+            for (_, *coords), matrix in zip(self, self.matrices)
+            for x, y in zip(coords[::2], coords[1::2])
+        ]
+        if not points or not all(isfinite(value) for point in points for value in point):
+            return None, False
+        # Bezier control points enclose the curve. Concavity, holes and rotation
+        # can leave gaps inside that outer box, so report an ambiguous overlap.
+        rectangle = (
+            "".join(segment[0] for segment in self) in ("mlll", "mlllh", "mllll", "mllllh")
+            and (len(points) == 4 or points[0] == points[-1])
+            and len(set(points)) == 4
+            and all((x0 == x1) != (y0 == y1)
+                    for (x0, y0), (x1, y1) in zip(points[:4], points[1:4] + points[:1]))
+        )
+        return get_bound(points), rectangle
+
+
+class ClipInterpreter(PDFPageInterpreter):
+    @property
+    def curpath(self):
+        return self._path
+
+    @curpath.setter
+    def curpath(self, _):
+        # pdfminer clears curpath on every path-ending operator, including n.
+        if self.pending_clip:
+            self.narrow_clip(*self._path.bounds())
+            self.pending_clip = False
+        self._path = ClipPath(self)
+
+    def narrow_clip(self, bounds, exact):
+        current, current_exact = self.device.clip
+        if bounds is not None:
+            current = bounds if current is None else intersect_boxes(current, bounds)
+        self.device.clip = current, current_exact and exact
+
+    def clip_box(self, box, ctm):
+        if not box or len(box) != 4 or not all(isinstance(v, (int, float)) and isfinite(v) for v in box):
+            self.narrow_clip(None, False)
+            return
+        a, b, c, d, _, _ = ctm
+        self.narrow_clip(apply_matrix_rect(ctm, box), (b == c == 0) or (a == d == 0))
+
+    def process_page(self, page):
+        self.page_boxes = (page.mediabox, page.cropbox)
+        super().process_page(page)
+
+    def render_contents(self, resources, streams, ctm=MATRIX_IDENTITY):
+        self.pending_clip = False
+        boxes = getattr(self, "page_boxes", None)
+        if boxes is None:
+            # The base interpreter only recurses here for a Form XObject.
+            boxes = (resolve_all(stream_value(streams[0])["BBox"]),)
+        for box in boxes:
+            self.clip_box(box, ctm)
+        super().render_contents(resources, streams, ctm)
+
+    def get_current_state(self):
+        return super().get_current_state(), self.device.clip
+
+    def set_current_state(self, state):
+        graphics, self.device.clip = state
+        super().set_current_state(graphics)
+
+    def do_W(self):
+        self.pending_clip = True
+
+    do_W_a = do_W
+
+    def do_F(self):
+        # The obsolete fill operator still ends the path.
+        self.do_n()
+
+    def do_Do(self, xobjid):
+        clip = self.device.clip
+        try:
+            super().do_Do(xobjid)
+        finally:
+            self.device.clip = clip
+            self.device.set_ctm(self.ctm)
+
+
+class ClipAggregator(PDFPageAggregatorWithMarkedContent):
+    clip = (None, True)
+
+    def status(self, box, proven=True):
+        bounds, exact = self.clip
+        if bounds is not None:
+            overlap = intersect_boxes(bounds, box)
+            if separated(bounds) or (proven and separated(overlap)):
+                return "hidden"
+            if overlap != box or not proven:
+                return "review"
+        return "visible" if exact else "review"
+
+    def render_string(self, textstate, seq, ncs, graphicstate):
+        self.stroked = textstate.render in (1, 2, 5, 6)
+        super().render_string(textstate, seq, ncs, graphicstate)
+
+    def render_char(self, matrix, font, fontsize, scaling, rise, cid, ncs, graphicstate):
+        advance = super().render_char(matrix, font, fontsize, scaling, rise, cid, ncs, graphicstate)
+        char = self.cur_item._objs[-1]
+        x0, y0, x1, y1 = font.bbox
+        # Advance boxes can miss ink overhangs. Enclose the font's ink bounds
+        # as well, or retain glyphs whose geometry cannot be established here.
+        proven = (not self.stroked and not font.is_vertical() and not isinstance(font, PDFType3Font)
+                  and x0 < x1 and y0 < y1 and all(map(isfinite, font.bbox)))
+        box = char.bbox
+        if proven:
+            sx, sy = fontsize * scaling * font.hscale, fontsize * font.vscale
+            ink = apply_matrix_rect(matrix, (x0 * sx, y0 * sy + rise, x1 * sx, y1 * sy + rise))
+            box = (min(box[0], ink[0]), min(box[1], ink[1]), max(box[2], ink[2]), max(box[3], ink[3]))
+        status = self.status(box, proven)
+        if status == "hidden":
+            # Keep the advance so subsequent glyphs retain their positions.
+            self.cur_item._objs.pop()
+        else:
+            char.clip_status = status
+        return advance
+
+    def render_image(self, name, stream):
+        super().render_image(name, stream)
+        image = self.cur_item._objs[-1]
+        image.clip_status = self.status(image.bbox)
+
+
+class ClippedPage(Page):
+    @property
+    def layout(self):
+        if not hasattr(self, "_layout"):
+            device = ClipAggregator(self.pdf.rsrcmgr, pageno=self.page_number, laparams=self.pdf.laparams)
+            ClipInterpreter(self.pdf.rsrcmgr, device).process_page(self.page_obj)
+            self._layout = device.get_result()
+        return self._layout
+
+    def process_object(self, obj):
+        result = super().process_object(obj)
+        if (status := getattr(obj, "clip_status", "visible")) != "visible":
+            result["clip_status"] = status
+        return result
+
+
+@contextmanager
+def visible_pages(pdf):
+    pages = [ClippedPage(pdf, page.page_obj, page.page_number, page.initial_doctop) for page in pdf.pages]
+    try:
+        yield pages
+    finally:
+        for page in pages:
+            page.close()
 
 
 def normalize_heading(text):
@@ -174,6 +358,9 @@ def page_items(page, body, images_dir, output, figures, warnings, number):
     for placed in page.images:
         objid = placed["stream"].objid
         path = by_object.get(objid) if objid is not None else next(inline, None)
+        # Inline image keys follow stream order, including hidden occurrences.
+        if placed.get("clip_status") == "hidden":
+            continue
         if path is None:
             warnings.append(f"página {number}: imagem sem dados extraíveis ignorada")
             continue
@@ -198,13 +385,15 @@ def page_items(page, body, images_dir, output, figures, warnings, number):
 def render(source, output, images_dir):
     warnings, blocks, list_items, references, in_references, joined = [], [], [], [], False, False
     figures = {"count": 0, "files": [], "saved": {}, "origin": {}, "reader": PdfReader(str(source))}
-    with pdfplumber.open(source) as pdf:
-        body = body_size(pdf.pages)
+    with pdfplumber.open(source) as pdf, visible_pages(pdf) as pages:
+        body = body_size(pages)
         if not body:
             raise ValueError("o PDF não tem texto extraível (talvez seja escaneado)")
         info = pdf.metadata or {}
-        filtered = toc_pages(pdf.pages, body)
-        for number, page in enumerate(pdf.pages, 1):
+        filtered = toc_pages(pages, body)
+        for number, page in enumerate(pages, 1):
+            if any(obj.get("clip_status") == "review" for group in (page.chars, page.images) for obj in group):
+                warnings.append(f"página {number}: recorte parcial ou ambíguo; confira o texto e as imagens no original")
             if number in filtered:
                 page, count = filtered[number]
                 if count:

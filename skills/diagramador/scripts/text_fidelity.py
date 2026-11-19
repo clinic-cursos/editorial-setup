@@ -10,7 +10,7 @@ import unicodedata
 import pdfplumber
 
 from build_book import LABELS
-from extract_pdf import HEADER_FRACTION, FOOTER_FRACTION, body_size, toc_pages
+from extract_pdf import HEADER_FRACTION, FOOTER_FRACTION, body_size, toc_pages, visible_pages
 from manuscript import ManuscriptError, cite, parse
 
 THRESHOLD = 0.995
@@ -50,10 +50,10 @@ def _markdown_text(path: str) -> str:
 
 
 def _pdf_pages(path: str, *, drop_toc: bool) -> list[str]:
-    with pdfplumber.open(path) as pdf:
-        filtered = toc_pages(pdf.pages, body_size(pdf.pages)) if drop_toc else {}
+    with pdfplumber.open(path) as pdf, visible_pages(pdf) as source_pages:
+        filtered = toc_pages(source_pages, body_size(source_pages)) if drop_toc else {}
         pages = []
-        for number, page in enumerate(pdf.pages, 1):
+        for number, page in enumerate(source_pages, 1):
             if number in filtered:
                 page, _ = filtered[number]
             area = (0, page.height * HEADER_FRACTION, page.width, page.height * FOOTER_FRACTION)
