@@ -249,7 +249,10 @@ def test_title_crossing_columns_warns(tmp_path):
         text(c, 700 - 14 * n, f"Esquerda linha {n + 1} do texto na primeira coluna")
         c.drawString(330, 700 - 14 * n, f"Direita linha {n + 1} do texto na segunda coluna")
     c.save()
-    assert "verifique a ordem do texto desta página" in extract(path, tmp_path)[2]
+    out, _, stderr = extract(path, tmp_path)
+    md = out.read_text(encoding="utf-8")
+    assert "verifique a ordem do texto desta página" in stderr
+    assert md.index("Titulo largo") < md.index("Esquerda linha 1") < md.index("Esquerda linha 6") < md.index("Direita linha 1")
 
 
 def test_compact_references_warn(tmp_path):

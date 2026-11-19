@@ -80,16 +80,24 @@ def page_items(page, body, images_dir, output, figures, warnings, number):
     height = page.height
     items = []
     split = gutter(page)
-    # shortcut: título que atravessa o vão impede a detecção das colunas; só avisa, trocar por corte da região do corpo
-    if split is None and gutter(page, body * 1.15) is not None:
-        warnings.append(f"página {number}: possíveis duas colunas com título largo; verifique a ordem do texto desta página")
+    wide = []  # linhas de título que atravessam o vão; saem antes das colunas
     if split is not None:
         warnings.append(f"página {number}: duas colunas, lidas coluna a coluna")
+    elif (split := gutter(page, body * 1.15)) is not None:
+        warnings.append(f"página {number}: possíveis duas colunas com título largo; verifique a ordem do texto desta página")
+        wide = [
+            line for line in page.extract_text_lines(return_chars=True)
+            if line["chars"][0]["size"] > body * 1.15 and line["x0"] < split < line["x1"]
+            and height * HEADER_FRACTION <= line["top"] and line["bottom"] <= height * FOOTER_FRACTION
+        ]
+        items.extend((-1, line["top"], "line", line) for line in wide)
     columns = [page] if split is None else [page.crop((0, 0, split, height)), page.crop((split, 0, page.width, height))]
     for column, region in enumerate(columns):
         for line in region.extract_text_lines(return_chars=True):
             if line["top"] < height * HEADER_FRACTION or line["bottom"] > height * FOOTER_FRACTION:
                 continue
+            if any(abs(line["top"] - w["top"]) < 2 for w in wide):
+                continue  # pedaço do título largo, já emitido inteiro
             items.append((column, line["top"], "line", line))
     if page.find_tables():
         warnings.append(f"página {number}: tabela convertida em parágrafos")
