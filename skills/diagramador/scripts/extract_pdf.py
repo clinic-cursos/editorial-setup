@@ -17,6 +17,8 @@ PARAGRAPH_GAP = 2.0  # salto entre linhas, em corpos de fonte, que abre outro pa
 LIST_ITEM = re.compile(r"(?:(\d+)\s*(?:—|–|-|\.|\))|[•▪●])\s+(?=\S)")
 PLACEHOLDER = "A preencher"
 REFERENCES_TITLE = re.compile(r"refer[eê]ncias( bibliogr[aá]ficas)?", re.IGNORECASE)
+MIN_GUTTER = 0.04  # largura mínima do vão entre colunas, em fração da página
+MIN_COLUMN_WORDS = 12
 REFERENCE_GAP = 1.7  # salto entre linhas, em corpos de fonte, que abre outra referência
 
 
@@ -51,14 +53,36 @@ def classify(line, body):
     return "li" if LIST_ITEM.match(line["text"]) else "p"
 
 
+def gutter(page):
+    """x do meio do vão vertical largo e vazio entre dois grupos de texto, ou None."""
+    top, bottom = page.height * HEADER_FRACTION, page.height * FOOTER_FRACTION
+    words = [w for w in page.extract_words() if w["top"] >= top and w["bottom"] <= bottom]
+    gaps, edge = [], 0.0
+    for word in sorted(words, key=lambda w: w["x0"]):
+        mid = (edge + word["x0"]) / 2
+        if word["x0"] - edge >= page.width * MIN_GUTTER and 0.3 * page.width <= mid <= 0.7 * page.width:
+            gaps.append((word["x0"] - edge, mid))
+        edge = max(edge, word["x1"])
+    if not gaps:
+        return None
+    mid = max(gaps)[1]
+    left = sum(w["x1"] <= mid for w in words)
+    return mid if min(left, len(words) - left) >= MIN_COLUMN_WORDS else None
+
+
 def page_items(page, body, images_dir, output, figures, warnings, number):
     """(top, bloco) da página, na ordem de leitura."""
     height = page.height
     items = []
-    for line in page.extract_text_lines(return_chars=True):
-        if line["top"] < height * HEADER_FRACTION or line["bottom"] > height * FOOTER_FRACTION:
-            continue
-        items.append((line["top"], "line", line))
+    split = gutter(page)
+    if split is not None:
+        warnings.append(f"página {number}: duas colunas, lidas coluna a coluna")
+    columns = [page] if split is None else [page.crop((0, 0, split, height)), page.crop((split, 0, page.width, height))]
+    for column, region in enumerate(columns):
+        for line in region.extract_text_lines(return_chars=True):
+            if line["top"] < height * HEADER_FRACTION or line["bottom"] > height * FOOTER_FRACTION:
+                continue
+            items.append((column, line["top"], "line", line))
     if page.find_tables():
         warnings.append(f"página {number}: tabela convertida em parágrafos")
     # pypdf nomeia a imagem como o XObject mais a extensão; o nome é a identidade do recurso.
@@ -79,8 +103,9 @@ def page_items(page, body, images_dir, output, figures, warnings, number):
             figures["saved"][key] = filename
             figures["files"].append((filename, image.data))
         relative = Path(relpath(figures["saved"][key], output.parent)).as_posix()
-        items.append((placed["top"], "figure", f"![]({relative}){{#{fig_id}}}"))
-    return sorted(items, key=lambda item: item[0])
+        column = int(split is not None and (placed["x0"] + placed["x1"]) / 2 > split)
+        items.append((column, placed["top"], "figure", f"![]({relative}){{#{fig_id}}}"))
+    return [item[1:] for item in sorted(items, key=lambda item: item[:2])]
 
 
 def render(source, output, images_dir):
@@ -94,6 +119,8 @@ def render(source, output, images_dir):
         for number, page in enumerate(pdf.pages, 1):
             previous = None  # (tipo, top, tamanho) da linha anterior
             for top, kind, payload in page_items(page, body, images_dir, output, figures, warnings, number):
+                if previous and top < previous[1]:  # voltou ao topo: outra coluna
+                    previous = None
                 if kind == "figure":
                     references = None
                     flush(blocks, list_items)

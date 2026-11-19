@@ -199,3 +199,19 @@ def test_references_section_extracted_in_reader_format(tmp_path):
     assert "- [@costa2019] Costa C. Acido hialuronico" in md
     manuscript = parse(md)
     assert manuscript.refs.keys() == {"silva2020", "costa2019"}
+
+
+def test_two_column_page_read_column_by_column(tmp_path):
+    path = tmp_path / "columns.pdf"
+    c = canvas.Canvas(str(path), pagesize=A4)
+    for n in range(6):
+        c.setFont("Helvetica", 10)
+        c.setFillColorRGB(*INK)
+        c.drawString(60, 700 - 14 * n, f"Esquerda linha {n + 1} do texto na primeira coluna")
+        c.drawString(330, 700 - 14 * n, f"Direita linha {n + 1} do texto na segunda coluna")
+    c.save()
+    out, _, stderr = extract(path, tmp_path)
+    md = out.read_text(encoding="utf-8")
+    assert md.index("Esquerda linha 6") < md.index("Direita linha 1")
+    assert "Esquerda linha 1 do texto na primeira coluna Esquerda linha 2" in md
+    assert "duas colunas" in stderr
