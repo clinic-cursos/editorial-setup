@@ -87,7 +87,7 @@ def check_safe_zone(pdf, rules: Rules) -> list[Finding]:
 def check_duplicates(pdf, rules: Rules) -> list[Finding]:
     # Janela deslizante de _MIN_PARAGRAPH caracteres do texto normalizado da página: acha o
     # trecho repetido mesmo quando título ou entrelinha diferentes mudam o agrupamento em parágrafos.
-    allowed = [" ".join(a.split()).casefold() for a in rules.allowed_repeats]
+    allowed = [_LEADER.sub(" ", " ".join(a.split()).casefold()) for a in rules.allowed_repeats]
     seen: dict[int, tuple[int, int]] = {}  # hash -> (página, posição) da primeira ocorrência
     out = []
     pages = _band_lines(pdf, rules)

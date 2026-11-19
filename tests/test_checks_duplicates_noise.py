@@ -1,5 +1,7 @@
 """check_duplicates não confunde cabeçalho corrido nem pontilhado do sumário com parágrafo repetido."""
 
+import dataclasses
+
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
@@ -61,3 +63,20 @@ def test_real_body_repetition_is_still_flagged_with_running_header(tmp_path, ope
     c.save()
     found = checks.check_duplicates(open_pdf(path), test_rules)
     assert [(f.page, f.kind) for f in found] == [(3, "duplicate-paragraph")], found
+
+
+def test_allowed_repeat_with_ellipsis_is_not_flagged(tmp_path, open_pdf, test_rules):
+    notice = ("Aviso legal permitido que se repete de proposito em varias paginas do livro... "
+              "e que contem reticencias no meio do texto corrido para o teste.")
+    path = tmp_path / "ellipsis.pdf"
+    c = canvas.Canvas(str(path), pagesize=A4)
+    c.setFont("Helvetica", 9)
+    for n in range(2):
+        c.drawString(62, 700, notice[:80])
+        c.drawString(62, 688, notice[80:])
+        c.drawString(62, 600, f"Conteudo unico {n} {n * 13}.")
+        c.showPage()
+    c.save()
+    rules = dataclasses.replace(test_rules, allowed_repeats=[notice])
+    assert checks.check_duplicates(open_pdf(path), rules) == []
+
