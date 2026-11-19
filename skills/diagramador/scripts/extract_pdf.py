@@ -15,7 +15,8 @@ from pypdf import PdfReader
 # Mesma faixa de cabeçalho e rodapé do text_fidelity.py.
 HEADER_FRACTION, FOOTER_FRACTION = 0.07, 0.93
 PARAGRAPH_GAP = 2.0  # salto entre linhas, em corpos de fonte, que abre outro parágrafo
-LIST_ITEM = re.compile(r"(?:(\d+)\s*(?:—|–|-|\.|\))|[•▪●])\s+(?=\S)")
+# até 3 dígitos: com mais, um ano ("2024. ") seria lido como marcador de lista
+LIST_ITEM = re.compile(r"(?:(\d{1,3})\s*(?:—|–|-|\.|\))|[•▪●])\s+(?=\S)")
 PLACEHOLDER = "A preencher"
 REFERENCES_TITLE = re.compile(r"refer[eê]ncias( bibliogr[aá]ficas)?", re.IGNORECASE)
 MIN_GUTTER = 0.04  # largura mínima do vão entre colunas, em fração da página

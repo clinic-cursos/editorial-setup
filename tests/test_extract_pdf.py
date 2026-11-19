@@ -271,3 +271,41 @@ def test_origin_json_records_effective_ppi(book_pdf, tmp_path):
     _, images, _ = extract(book_pdf, tmp_path)
     origin = json.loads((images / "origem.json").read_text(encoding="utf-8"))
     assert origin == {"fig-1.png": {"pixels": [40, 30], "ppi": 36.0}}  # 40 px em 80 pt
+
+
+def _extract_md(pdf, tmp_path):
+    out, images = tmp_path / "texto" / "manuscrito.md", tmp_path / "texto" / "imagens"
+    done = subprocess.run(
+        [sys.executable, str(SCRIPT), str(pdf), "--out", str(out), "--images", str(images)],
+        capture_output=True, text=True,
+    )
+    assert done.returncode == 0, done.stderr
+    return out.read_text(encoding="utf-8")
+
+
+# Linha de referência que começa com "2024. " casava com LIST_ITEM e perdia o ano.
+def test_reference_line_starting_with_year_keeps_the_year(tmp_path):
+    pdf = tmp_path / "ano.pdf"
+    c = canvas.Canvas(str(pdf), pagesize=A4)
+    text(c, 760, "Texto do capitulo antes da bibliografia do livro de teste.")
+    text(c, 700, "Referências", 14, WINE)
+    text(c, 660, "COSTA, C. Acido hialuronico na pratica clinica. Rev Derm.")
+    text(c, 646, "2024. PMID: 12345678.")
+    c.save()
+    md = _extract_md(pdf, tmp_path)
+    assert "Rev Derm. 2024. PMID: 12345678." in md
+    assert len(parse(md).refs) == 1
+
+
+def test_body_line_starting_with_year_is_a_paragraph_not_a_list_item(tmp_path):
+    pdf = tmp_path / "corpo.pdf"
+    c = canvas.Canvas(str(pdf), pagesize=A4)
+    text(c, 780, "Introducao as diretrizes", 20, WINE)
+    text(c, 740, BODY[0])
+    text(c, 726, BODY[1])
+    text(c, 700, "2023. Primeira diretriz publicada sobre o uso de preenchedores.")
+    text(c, 686, "2024. Atualizacao da diretriz com novos criterios de seguranca.")
+    c.save()
+    md = _extract_md(pdf, tmp_path)
+    # como parágrafo, as duas linhas se juntam; como lista, ficariam em linhas separadas
+    assert "preenchedores. 2024. Atualizacao" in md
