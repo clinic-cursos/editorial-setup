@@ -8,15 +8,15 @@ Ambiente: <Claude Code, Codex ou chat>, com ou sem rede. `verify_refs.py`: <rodo
 Nota: <0 a 100>. Resultado: <passa ou reprova>. Eliminatórios: <nenhum ou lista>.
 
 ## Nota pela rubrica da fase 1
-Rubrica usada: <a do pacote, ou esta cópia (data da cópia: 2026-11-19), se a do pacote faltou>. Pesos iniciais, a ajustar com a Paula.
+Rubrica usada: <a do pacote, ou esta cópia (data da cópia: 2026-11-19), se a do pacote faltou>. Cópia de `fase-1-ampliacao.md` de 2026-11-19; um teste a compara com a oficial. Pesos iniciais, a ajustar com a Paula.
 
-| Critério | Peso | Pontos | Justificativa |
-| --- | --- | --- | --- |
-| Fidelidade aos slides e à apostila | 25 | | |
-| Rastreabilidade | 25 | | |
-| Correção científica conferida pelo auditor | 20 | | |
-| Clareza didática | 15 | | |
-| Terminologia e padronização | 15 | | |
+| Critério | Peso | O que conta | Pontos | Justificativa |
+| --- | --- | --- | --- | --- |
+| Fidelidade aos slides e à apostila | 25 | Todo slide tem correspondente no manuscrito (tabela slide a capítulo sem órfão); sequência didática preservada | | |
+| Rastreabilidade | 25 | Toda afirmação nova com fonte verificável (DOI ou PMID quando houver), na tabela de rastreabilidade | | |
+| Correção científica conferida pelo auditor | 20 | Afirmações conferidas contra a fonte; juízo registrado como juízo, não como fato | | |
+| Clareza didática | 15 | Texto compreensível ao aluno, blocos editoriais usados com função | | |
+| Terminologia e padronização | 15 | Termos do glossário e do Board, siglas e unidades padronizadas | | |
 
 Soma dos pontos: <igual à nota>.
 
