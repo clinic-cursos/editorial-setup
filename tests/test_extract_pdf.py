@@ -226,3 +226,16 @@ def test_images_dir_with_whitespace_fails(book_pdf, tmp_path):
     assert result.returncode == 2
     assert "use um nome de pasta sem espaços" in result.stderr
     assert not out.exists()
+
+
+def test_figure_after_references_stays_in_body(tmp_path):
+    path = tmp_path / "refs-figure.pdf"
+    c = canvas.Canvas(str(path), pagesize=A4)
+    text(c, 760, BODY[0])
+    text(c, 700, "Referências", 14, WINE)
+    text(c, 660, "SILVA, A. B. Toxina botulinica em dermatologia. Sao Paulo: Editora, 2020.")
+    c.drawImage(ImageReader(Image.new("RGB", (40, 30), "red")), 60, 400, width=80, height=60)
+    c.save()
+    md = extract(path, tmp_path)[0].read_text(encoding="utf-8")
+    assert "- [@silva2020] SILVA" in md
+    assert md.index("#fig-1") < md.index("## Referências")

@@ -109,7 +109,7 @@ def page_items(page, body, images_dir, output, figures, warnings, number):
 
 
 def render(source, output, images_dir):
-    warnings, blocks, list_items, references = [], [], [], None
+    warnings, blocks, list_items, references, in_references = [], [], [], [], False
     figures = {"count": 0, "files": [], "saved": {}, "reader": PdfReader(str(source))}
     with pdfplumber.open(source) as pdf:
         body = body_size(pdf.pages)
@@ -122,7 +122,7 @@ def render(source, output, images_dir):
                 if previous and top < previous[1]:  # voltou ao topo: outra coluna
                     previous = None
                 if kind == "figure":
-                    references = None
+                    in_references = False
                     flush(blocks, list_items)
                     blocks.append(payload)
                     previous = None
@@ -130,7 +130,7 @@ def render(source, output, images_dir):
                 tag = classify(payload, body)
                 text = payload["text"].strip()
                 size = payload["chars"][0]["size"]
-                if references is not None and tag in ("p", "li"):  # bibliografia: uma entrada por referência
+                if in_references and tag in ("p", "li"):  # bibliografia: uma entrada por referência
                     marker = LIST_ITEM.match(text) if tag == "li" else None
                     if previous and top - previous[1] <= REFERENCE_GAP * size and not marker and references:
                         references[-1] += " " + text
@@ -140,11 +140,11 @@ def render(source, output, images_dir):
                     continue
                 if tag in ("#", "##") and REFERENCES_TITLE.fullmatch(text):
                     flush(blocks, list_items)
-                    references = references or []
+                    in_references = True
                     previous = None
                     continue
                 if tag in ("#", "##"):
-                    references = None
+                    in_references = False
                 close = previous and top - previous[1] <= PARAGRAPH_GAP * size
                 joins = close and previous[0] == tag
                 if tag == "li":
