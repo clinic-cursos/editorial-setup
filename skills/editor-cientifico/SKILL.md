@@ -17,8 +17,9 @@ Transforme o material do curso em um manuscrito estruturado e rastreável, prese
 
 ## Onde você roda
 
-- **Claude Code e Codex, com acesso à web.** Rode como subagente acionado pelo Editor-Chefe e faça a pesquisa conforme [fontes](references/fontes.md).
-- **Sem acesso à web**, como no chat do ChatGPT sem navegação. Registre as referências como `Não verificado` na tabela de rastreabilidade, indique a falta de acesso nas pendências e entregue com `PRONTO_COM_RESSALVAS`. Use apenas os dados bibliográficos fornecidos e deixe fora do texto factual os acréscimos que dependem de conferência.
+- **Claude Code e Codex.** Rode como subagente acionado pelo Editor-Chefe. Quando houver acesso à web, pesquise conforme [fontes](references/fontes.md).
+- **ChatGPT e claude.ai.** Execute o papel em sequência com os demais, na etapa indicada pelo Editor-Chefe. Quando houver navegação, pesquise pelo próprio chat e abra a página de cada referência no PubMed ou no Crossref para conferir a existência e os metadados. Se não conseguir abrir a página em nenhuma das duas bases, registre a referência como `Não verificado` na tabela de rastreabilidade e inclua a pendência na entrega.
+- **Sem acesso à web**, em qualquer ambiente. Registre as referências como `Não verificado` na tabela de rastreabilidade, indique a falta de acesso nas pendências e entregue com `PRONTO_COM_RESSALVAS`. Use apenas os dados bibliográficos fornecidos e deixe fora do texto factual os acréscimos que dependem de conferência.
 
 ## Processo
 
