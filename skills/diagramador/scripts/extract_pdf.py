@@ -58,25 +58,28 @@ def page_items(page, body, images_dir, output, figures, warnings, number):
         items.append((line["top"], "line", line))
     if page.find_tables():
         warnings.append(f"página {number}: tabela convertida em parágrafos")
-    # shortcut: assume que pdfplumber e pypdf listam as imagens na mesma ordem; trocar por casamento por nome se falhar
-    reader_images = list(figures["reader"].pages[number - 1].images)
-    for index, placed in enumerate(page.images):
-        if index >= len(reader_images):
+    # pypdf nomeia a imagem como o XObject mais a extensão; o nome é a identidade do recurso
+    reader_images = {Path(i.name).with_suffix("").name: i for i in figures["reader"].pages[number - 1].images}
+    for placed in page.images:
+        image = reader_images.get(placed["name"])
+        if image is None:
             warnings.append(f"página {number}: imagem sem dados extraíveis ignorada")
             continue
-        image = reader_images[index]
         figures["count"] += 1
         fig_id = f"fig-{figures['count']}"
-        filename = images_dir / f"{fig_id}{Path(image.name).suffix or '.png'}"
-        figures["files"].append((filename, image.data))
-        relative = Path(relpath(filename, output.parent)).as_posix()
+        key = image.indirect_reference.idnum if image.indirect_reference else (number, placed["name"])
+        if key not in figures["saved"]:  # imagem reutilizada é gravada uma vez só
+            filename = images_dir / f"{fig_id}{Path(image.name).suffix or '.png'}"
+            figures["saved"][key] = filename
+            figures["files"].append((filename, image.data))
+        relative = Path(relpath(figures["saved"][key], output.parent)).as_posix()
         items.append((placed["top"], "figure", f"![]({relative}){{#{fig_id}}}"))
     return sorted(items, key=lambda item: item[0])
 
 
 def render(source, output, images_dir):
     warnings, blocks, list_items = [], [], []
-    figures = {"count": 0, "files": [], "reader": PdfReader(str(source))}
+    figures = {"count": 0, "files": [], "saved": {}, "reader": PdfReader(str(source))}
     with pdfplumber.open(source) as pdf:
         body = body_size(pdf.pages)
         if not body:

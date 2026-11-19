@@ -116,3 +116,22 @@ def test_images_dir_outside_manuscript_dir_fails(book_pdf, tmp_path):
     assert result.returncode == 2
     assert "dentro da pasta do manuscrito" in result.stderr
     assert not out.exists()
+
+
+def test_reused_image_referenced_twice(tmp_path):
+    path = tmp_path / "reuse.pdf"
+    c = canvas.Canvas(str(path), pagesize=A4)
+    red = ImageReader(Image.new("RGB", (40, 30), "red"))
+    blue = ImageReader(Image.new("RGB", (40, 30), "blue"))
+    for y, image in ((700, blue), (560, red), (420, red)):
+        c.drawImage(image, 60, y, width=80, height=60)
+    text(c, 300, BODY[0])
+    c.save()
+    out, images, _ = extract(path, tmp_path)
+    md = out.read_text(encoding="utf-8")
+    refs = [line for line in md.splitlines() if line.startswith("![")]
+    files = [line.split("](")[1].split(")")[0] for line in refs]
+    assert len(refs) == 3 and len({r.split("#")[1] for r in refs}) == 3
+    assert files[1] == files[2] != files[0]  # a mesma imagem aponta para um só arquivo
+    assert len(list(images.iterdir())) == 2
+    assert Image.open(out.parent / files[0]).getpixel((0, 0))[2] > 200  # azul primeiro
