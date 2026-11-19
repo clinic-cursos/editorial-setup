@@ -1,6 +1,4 @@
 """Confira DOI e PMID de uma lista de referências no Crossref e no PubMed (APIs gratuitas).
-
-Os autores de cada referência vão no formato "Sobrenome, Nome".
 """
 
 import argparse
@@ -63,11 +61,8 @@ def _pubmed(pmid: str) -> dict:
     }
 
 
-def _surname(authors) -> str:
-    first = authors if isinstance(authors, str) else (authors or [""])[0]
-    if "," in first:
-        return first.split(",")[0].strip()
-    return first.split()[-1] if first.split() else ""
+def _first_author(authors) -> str:
+    return (authors if isinstance(authors, str) else (authors or [""])[0]).strip()
 
 
 def _norm(text: str) -> str:
@@ -75,7 +70,8 @@ def _norm(text: str) -> str:
 
 
 # A partícula varia entre as bases ("da Costa" x "de Costa"), então não conta; o resto do sobrenome, inteiro, conta.
-# Sem vírgula ("Nome Sobrenome"), só a última palavra vale como sobrenome; sobrenome composto então sai divergent.
+# Com vírgula ("Sobrenome, Nome") o sobrenome é o que vem antes dela; sem vírgula, o sobrenome da fonte tem de ser
+# igual aos últimos tokens do nome ("Ana Silva Santos" casa com "Silva Santos" e com "Santos", não com "Pereira Santos").
 PARTICLES = {"da", "de", "do", "dos", "das", "di", "del", "della", "van", "von", "der", "den", "la", "le", "du"}
 
 
@@ -98,8 +94,14 @@ def _compare(ref: dict, remote: dict) -> tuple[list[str], list[str]]:
         missing.append("a fonte não trouxe o ano")
     elif ref.get("year") != remote["year"]:
         problems.append(f"year: {ref.get('year')} x {remote['year']}")
-    if _surname_tokens(_surname(ref.get("authors"))) != _surname_tokens(remote["first_author"], remote.get("pubmed", False)):
-        problems.append(f"first author: '{_surname(ref.get('authors'))}' x '{remote['first_author']}'")
+    author = _first_author(ref.get("authors"))
+    remote_tokens = _surname_tokens(remote["first_author"], remote.get("pubmed", False))
+    if "," in author:
+        same = _surname_tokens(author.split(",")[0]) == remote_tokens
+    else:
+        same = bool(remote_tokens) and _surname_tokens(author)[-len(remote_tokens):] == remote_tokens
+    if not same:
+        problems.append(f"first author: '{author}' x '{remote['first_author']}'")
     return problems, missing
 
 

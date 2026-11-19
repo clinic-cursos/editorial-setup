@@ -142,3 +142,20 @@ def test_crossref_family_kept_whole(monkeypatch, tmp_path, capsys):
     path, _ = run(monkeypatch, tmp_path, [ref], {"https://api.crossref.org/works/": crossref})
     assert verify_refs.main([str(path)]) == 1
     assert json.loads(capsys.readouterr().out)[0]["status"] == "divergent"
+
+
+@pytest.mark.parametrize(
+    "author, family, expected",
+    [
+        ("Ana Silva Santos", "Silva Santos", 0),
+        ("Ana Pereira Santos", "Silva Santos", 1),
+        ("Ana Santos", "Silva Santos", 1),
+        ("Ana Silva Santos", "Santos", 0),
+    ],
+)
+def test_no_comma_name_suffix(monkeypatch, tmp_path, capsys, author, family, expected):
+    crossref = {"message": {**CROSSREF["message"], "author": [{"family": family}]}}
+    path, _ = run(monkeypatch, tmp_path, [{**REF, "authors": [author]}], {"https://api.crossref.org/works/": crossref})
+    assert verify_refs.main([str(path)]) == expected
+    status = json.loads(capsys.readouterr().out)[0]["status"]
+    assert status == ("ok" if expected == 0 else "divergent")
