@@ -104,3 +104,10 @@ def test_pubmed_initials_and_accents_match(monkeypatch, tmp_path, capsys):
     assert verify_refs.main([str(path)]) == 0
     assert json.loads(capsys.readouterr().out)[0]["status"] == "ok"
 
+
+def test_missing_year_unverified(monkeypatch, tmp_path, capsys):
+    crossref = {"message": {k: v for k, v in CROSSREF["message"].items() if k != "issued"}}
+    path, _ = run(monkeypatch, tmp_path, [REF], {"https://api.crossref.org/works/": crossref})
+    assert verify_refs.main([str(path)]) == 0
+    out = json.loads(capsys.readouterr().out)[0]
+    assert out["status"] == "unverified" and "ano" in out["detail"]

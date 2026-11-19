@@ -79,15 +79,18 @@ def _last_name(name: str) -> str:
     return tokens[-1] if tokens else ""
 
 
-def _compare(ref: dict, remote: dict) -> list[str]:
-    problems = []
+def _compare(ref: dict, remote: dict) -> tuple[list[str], list[str]]:
+    """Devolve (divergências, o que a fonte não trouxe)."""
+    problems, missing = [], []
     if SequenceMatcher(None, _norm(ref.get("title", "")), _norm(remote["title"])).ratio() < TITLE_RATIO:
         problems.append(f"title: '{ref.get('title')}' x '{remote['title']}'")
-    if remote["year"] is not None and ref.get("year") != remote["year"]:
+    if remote["year"] is None:
+        missing.append("a fonte não trouxe o ano")
+    elif ref.get("year") != remote["year"]:
         problems.append(f"year: {ref.get('year')} x {remote['year']}")
     if _last_name(_surname(ref.get("authors"))) != _last_name(remote["first_author"]):
         problems.append(f"first author: '{_surname(ref.get('authors'))}' x '{remote['first_author']}'")
-    return problems
+    return problems, missing
 
 
 def check(ref: dict, offline: bool) -> dict:
@@ -99,8 +102,9 @@ def check(ref: dict, offline: bool) -> dict:
     statuses = []
     for name, value, fetch in ids:
         try:
-            problems = _compare(ref, fetch(str(value)))
-            statuses.append(("divergent" if problems else "ok", f"{name} {value}: " + "; ".join(problems)))
+            problems, missing = _compare(ref, fetch(str(value)))
+            status = "divergent" if problems else "unverified" if missing else "ok"
+            statuses.append((status, f"{name} {value}: " + "; ".join(problems + missing)))
         except NotFound:
             statuses.append(("not-found", f"{name} {value}: não encontrado"))
         except urllib.error.HTTPError as error:  # 429, 5xx: a API não respondeu, a referência não foi julgada
