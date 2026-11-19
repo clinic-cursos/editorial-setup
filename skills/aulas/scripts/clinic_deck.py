@@ -779,6 +779,8 @@ def layout_precificacao(prs, s, d):
             return p.get(key, "")
         if not p.get("preco"):
             return "R$ —"
+        if key == "_lucro" and any(p.get(k) in (None, "") for k in ("produto", "custo_fixo", "insumos")):
+            return "R$ —"  # missing cost must not count as zero
         taxa = round(pr * tx / 100); imp = round(pr * tp / 100)
         return {"_taxa": taxa, "_imp": imp, "_lucro": pr - prod - cf - ins - taxa - imp}.get(key, p.get(key))
 

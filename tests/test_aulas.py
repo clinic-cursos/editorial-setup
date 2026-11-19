@@ -85,3 +85,14 @@ def test_custom_pricing_keeps_the_cost_slide_when_declared(tmp_path):
     assert col(2) == ["R$ 40", "R$ 10", "R$ 5", "R$ 6", "R$ 16", "R$ 200", "R$ 123"]
     # R$ 150: imposto 12 (8%); the 3% fee is R$ 4,50, a half-real, so taxa and lucro are left out of the exact check
     assert [col(1)[i] for i in (0, 1, 2, 4, 5)] == ["R$ 40", "R$ 10", "R$ 5", "R$ 12", "R$ 150"]
+
+
+def test_profit_is_pending_when_a_cost_is_missing(tmp_path):
+    spec = {"titulo": "T", "slides": [
+        {"tipo": "custos"}, {"tipo": "precificacao", "procedimentos": [{"nome": "Fios", "preco": 200}]},
+        {"tipo": "encerramento"}]}
+    out, _ = build(tmp_path, spec)
+    table = next(sh.table for sh in list(Presentation(str(out)).slides)[1].shapes if sh.has_table)
+    col = [table.cell(i, 1).text for i in range(1, 8)]
+    assert col[:3] == ["R$ —"] * 3  # produto, custo fixo, insumos pending
+    assert col[6] == "R$ —"  # profit must not count missing costs as zero
