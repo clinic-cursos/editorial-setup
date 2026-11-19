@@ -94,3 +94,14 @@ def test_round_trip_fidelity(book_pdf, tmp_path):
     assert min(fidelity(str(book_pdf), str(out))) >= 0.995
     built = build(str(out), str(tmp_path / "build"))
     assert min(fidelity(str(out), built.pdf)) >= 0.995
+
+
+def test_bordo_uppercase_label_wins_over_size(tmp_path):
+    path = tmp_path / "label.pdf"
+    c = canvas.Canvas(str(path), pagesize=A4)
+    text(c, 700, "ROTULO EM DESTAQUE", 14, WINE)
+    for n in range(6):
+        text(c, 660 - 14 * n, BODY[n % 2])
+    c.save()
+    md = extract(path, tmp_path)[0].read_text(encoding="utf-8")
+    assert "\n### ROTULO EM DESTAQUE\n" in md

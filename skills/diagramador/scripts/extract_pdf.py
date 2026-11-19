@@ -37,11 +37,13 @@ def body_size(pages):
 def classify(line, body):
     first = next(c for c in line["chars"] if c["text"].strip())
     ratio = first["size"] / body
+    if is_wine(first.get("non_stroking_color")) and is_caps(line["text"]):
+        return "###"  # o rótulo vale mesmo quando o tamanho pediria título maior
     if ratio >= 1.6:
         return "#"
     if ratio >= 1.3:
         return "##"
-    if ratio >= 1.15 or (is_wine(first.get("non_stroking_color")) and is_caps(line["text"])):
+    if ratio >= 1.15:
         return "###"
     return "li" if LIST_ITEM.match(line["text"]) else "p"
 
