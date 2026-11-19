@@ -26,9 +26,9 @@ Soma dos pontos: <igual à nota>.
 | Divergência com o Board não sinalizada | sim | |
 
 ## Conferido
-O que o script ou a leitura da fonte confirmou. Cada linha traz o que foi conferido, como e o resultado.
+Só fatos verificáveis: metadados, resultado do `verify_refs.py` e trechos consultados. Sustentar ou não a afirmação é juízo e fica na seção abaixo.
 
-| Referência ou afirmação | Como foi conferida | Resultado (`ok`, `divergent`, `not-found`, `sustentada`, `sem suporte suficiente`) | Evidência |
+| Referência ou trecho | Como foi conferido | Resultado (`ok`, `divergent`, `not-found`, trecho localizado) | Evidência |
 | --- | --- | --- | --- |
 
 ## Referências não verificadas
@@ -48,7 +48,7 @@ Uma por item, numeradas.
 - **Recomendação:** <o que o Editor Científico deve fazer>.
 
 ## Juízo do auditor
-Interpretações que não são fato conferido: suficiência da evidência, extrapolações, risco clínico, informação regulatória possivelmente desatualizada. Cada item diz o que o auditor viu, por que julga assim e o que o João deve decidir.
+Por afirmação: `sustentada` ou `sem suporte suficiente`, com a evidência citada. Também afirmações do manuscrito sem entrada na tabela (cada uma é não conformidade). Interpretações que não são fato conferido: suficiência da evidência, extrapolações, risco clínico, informação regulatória possivelmente desatualizada. Cada item diz o que o auditor viu, por que julga assim e o que o João deve decidir.
 
 ## Divergências com o Board para o João
 | Localização | Posição do Board | Evidência contrária e limitação | Decisão pedida |
