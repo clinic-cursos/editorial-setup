@@ -56,3 +56,8 @@ def test_absolute_input_is_refused(samples, tmp_path):
 
 def test_input_inside_samples_is_accepted(samples):
     assert run_sample.input_path("livro.pdf", samples) == (samples / "livro.pdf").resolve()
+
+
+def test_verdict_with_zero_images_fails():
+    assert run_sample.image_problems(inserted=0) == ["nenhuma imagem de teste foi inserida (sem candidatas ou todas recusadas)"]
+    assert run_sample.image_problems(inserted=1) == []

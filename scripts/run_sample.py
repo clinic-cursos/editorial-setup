@@ -59,6 +59,12 @@ def report_path(name: str, pdf: Path, samples: Path) -> Path:
     return report
 
 
+def image_problems(inserted: int) -> list[str]:
+    if inserted < 1:
+        return ["nenhuma imagem de teste foi inserida (sem candidatas ou todas recusadas)"]
+    return []
+
+
 def fill_metadata(manuscript: Path) -> dict:
     """Preencha título, curso e autores a partir da capa e do expediente que o extrator pôs no Markdown."""
     text = manuscript.read_text(encoding="utf-8")
@@ -204,6 +210,7 @@ def sample(pdf: Path, work: Path) -> list[str]:
         problems.append("fonte DejaVu no PDF")
     if pages1 != pages2 or not same_layout:
         problems.append("a paginação mudou depois das imagens")
+    problems += image_problems(inserted)
 
     steps += [
         f"Resultado: {'REPROVADO' if problems else 'APROVADO'}",
