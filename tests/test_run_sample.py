@@ -109,6 +109,14 @@ def test_pages_line_lists_only_page_numbers():
     assert run_sample.pages_line([]) == "- Números das páginas candidatas: nenhuma"
 
 
+def test_duplicate_paragraph_hypothesis_covers_layout_artifacts():
+    counts = run_sample.layout_counts("| 3 | erro | duplicate-paragraph | trecho repetido |")
+    [hypothesis] = run_sample.causes([], counts, False)
+    assert "pontilhado do sumário" in hypothesis
+    assert "cabeçalho e rodapé corridos" in hypothesis
+    assert "repetição real" in hypothesis
+
+
 def work(tmp_path):
     (tmp_path / "work").mkdir()
     return tmp_path / "work"
