@@ -22,9 +22,9 @@ Soma dos pontos: <igual à nota>.
 
 | Eliminatório | Avaliado | Achado |
 | --- | --- | --- |
-| Referência que não existe | sim | <nenhum ou número do achado; só vale se todas as consultas deram `not-found` definitivo; com qualquer `unverified`, a referência fica `não verificada`, sem eliminatório> |
-| Conteúdo de slide ausente sem justificativa | sim | |
-| Divergência com o Board não sinalizada | sim | |
+| Referência que não existe | [sim ou não] | <nenhum ou número do achado; só vale se todas as consultas deram `not-found` definitivo; com qualquer `unverified`, a referência fica `não verificada`, sem eliminatório> |
+| Conteúdo de slide ausente sem justificativa | [sim ou não] | |
+| Divergência com o Board não sinalizada | [sim ou não] | |
 
 ## Conferido
 Só fatos verificáveis: metadados, resultado do `verify_refs.py` e trechos consultados. Sustentar ou não a afirmação é juízo e fica na seção abaixo.

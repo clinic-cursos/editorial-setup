@@ -44,7 +44,6 @@ def check_disqualifiers(official_text, copy_text):
     copy, count = copy_disqualifiers(copy_text)
     assert count == len(copy), "eliminatório repetido na cópia"
     assert set(copy) == official_disqualifiers(official_text)
-    assert set(copy.values()) == {"sim"}
 
 
 def test_copy_disqualifiers_match_official():
@@ -53,9 +52,10 @@ def test_copy_disqualifiers_match_official():
 
 def test_disqualifier_check_catches_drift():
     official, copy = OFFICIAL.read_text(encoding="utf-8"), COPY.read_text(encoding="utf-8")
+    row = "| Divergência com o Board não sinalizada | [sim ou não] |"
     for bad in (
-        copy.replace("| Divergência com o Board não sinalizada | sim |", "| Divergência com o Board não sinalizada | não |"),
-        copy.replace("| Divergência com o Board não sinalizada | sim | |", "| Divergência com o Board não sinalizada | sim | |\n| Eliminatório falso | sim | |"),
+        copy.replace(row, "| Divergência com o Board omitida | [sim ou não] |"),
+        copy.replace(row, row + " |\n| Eliminatório falso | [sim ou não] |"),
     ):
         assert bad != copy
         try:
