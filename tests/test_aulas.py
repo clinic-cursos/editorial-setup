@@ -60,7 +60,9 @@ def test_custom_pricing_keeps_the_cost_slide_when_declared(tmp_path):
     spec = {"titulo": "T", "slides": [
         {"tipo": "custos"},
         {"tipo": "precificacao", "procedimentos": [{"nome": "Fios", "estrategia": "Upsell", "produto": 40,
-                                                   "preco": 150, "custo_fixo": 10, "insumos": 5}]},
+                                                   "preco": 150, "custo_fixo": 10, "insumos": 5},
+                                                  {"nome": "Malha", "estrategia": "Cross-sell", "produto": 40,
+                                                   "preco": 200, "custo_fixo": 10, "insumos": 5}]},
         {"tipo": "encerramento"}]}
     out, _ = build(tmp_path, spec)
     slides = list(Presentation(str(out)).slides)
@@ -75,3 +77,11 @@ def test_custom_pricing_keeps_the_cost_slide_when_declared(tmp_path):
     assert "Como compor seu preço" in texts(slides[0])
     assert "Aumente seu lucro com técnicas de venda" in texts(slides[1])
     assert any("R$ 150" in x for x in texts(slides[1]))
+
+    # Rule (SKILL.md): lucro = preco - produto - custo fixo - insumos - 3% - 8% do preco, whole reais.
+    table = next(sh.table for sh in slides[1].shapes if sh.has_table)
+    col = lambda j: [table.cell(i, j).text for i in range(1, 8)]
+    # R$ 200: taxa 6, imposto 16, lucro 200 - 40 - 10 - 5 - 6 - 16 = 123
+    assert col(2) == ["R$ 40", "R$ 10", "R$ 5", "R$ 6", "R$ 16", "R$ 200", "R$ 123"]
+    # R$ 150: imposto 12 (8%); the 3% fee is R$ 4,50, a half-real, so taxa and lucro are left out of the exact check
+    assert [col(1)[i] for i in (0, 1, 2, 4, 5)] == ["R$ 40", "R$ 10", "R$ 5", "R$ 12", "R$ 150"]
