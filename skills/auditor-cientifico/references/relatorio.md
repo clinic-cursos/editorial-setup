@@ -22,7 +22,7 @@ Soma dos pontos: <igual à nota>.
 
 | Eliminatório | Avaliado | Achado |
 | --- | --- | --- |
-| Referência que não existe | [sim ou não] | <nenhum ou número do achado; só vale se nenhum identificador aponta para a obra citada (cada um `not-found` ou `divergent` por título) e a busca pelo título citado no PubMed e no Crossref deu resposta definitiva, sem resultado, nos dois (o OpenAlex entra quando houver acesso); se uma das duas bases obrigatórias não puder ser consultada, a afirmação fica `não verificada`; qualquer `unverified` no caminho deixa a afirmação `não verificada`, sem eliminatório> |
+| Referência que não existe | [sim ou não] | <nenhum ou número do achado; só vale se nenhum identificador aponta para a obra citada (cada um `not-found` ou `divergent` por título) e a busca pelo título citado no PubMed e no Crossref deu resposta definitiva, sem resultado, nos dois (o OpenAlex entra quando houver acesso); se uma das duas bases obrigatórias não puder ser consultada, a afirmação fica `não verificada`; qualquer `unverified` ou consulta inconclusiva no caminho deixa a afirmação `não verificada`, sem eliminatório> |
 | Conteúdo de slide ausente sem justificativa | [sim ou não] | |
 | Divergência com o Board não sinalizada | [sim ou não] | |
 
