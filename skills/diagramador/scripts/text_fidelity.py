@@ -19,8 +19,8 @@ HEADER_FRACTION, FOOTER_FRACTION = 0.07, 0.93
 LEADER = re.compile(r"(?m)(?:\s*\.){4,}\s*\d+\s*$")  # pontilhado e página do sumário
 
 # Estilo de numeração de lista é formatação ("01 — x" no livro, "1. x" no manuscrito): vira "1. ", sem perder o valor.
-# Exige espaço depois; hífen e meia-risca ficam de fora porque marcam intervalo, e "0.5 mL" não casa.
-LIST_MARKER = re.compile(r"(?m)^[ \t]*(?:(\d{1,3})(?:[.)]|[ \t]+—)[ \t]+|•[ \t]+)")
+# Exige espaço depois. Traço só é marcador se o próximo caractere não é dígito ("5 - 10 U" é intervalo); "0.5 mL" não casa.
+LIST_MARKER = re.compile(r"(?m)^[ \t]*(?:(\d{1,3})(?:[.)][ \t]+|[ \t]+[-–—][ \t]+(?!\d))|•[ \t]+)")
 
 
 def _canonical_markers(text: str) -> str:

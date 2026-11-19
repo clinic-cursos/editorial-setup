@@ -149,7 +149,8 @@ def test_compound_with_both_forms_in_original_matches(tmp_path):
 
 
 FONT = Path(__file__).resolve().parent.parent / "skills/diagramador/assets/fonts/SourceSans3-Regular.ttf"
-FILLER = " ".join(f"palavra{i}" for i in range(300))  # mantém a razão acima do limite sem o teste do número
+WORDS = [f"palavra{i}" for i in range(300)]
+FILLER = " ".join(WORDS)  # mantém a razão acima do limite, para só a checagem de número reprovar
 
 
 def _line_pdf(layout_pdf, line):
@@ -161,22 +162,34 @@ def _line_pdf(layout_pdf, line):
     def page(c):
         c.setFont("SS3", 10)
         for n, part in enumerate(line.split("\n")):
-            c.drawString(60, 400 - 15 * n, part)
-        c.drawString(60, 380, FILLER[:90])
+            c.drawString(60, 700 - 15 * n, part)
+        for n in range(38):
+            c.drawString(60, 640 - 11 * n, " ".join(WORDS[n * 8 : n * 8 + 8]))
     return layout_pdf(page)
 
 
 def _compare(tmp_path, layout_pdf, md_line, pdf_line):
     md = tmp_path / "o.md"
-    md.write_text(META + md_line + "\n\n" + FILLER[:90] + "\n", encoding="utf-8")
+    md.write_text(META + md_line + "\n\n" + FILLER + "\n", encoding="utf-8")
     return main([str(md), str(_line_pdf(layout_pdf, pdf_line))])
+
+
+def _ratios_ok(tmp_path, layout_pdf, md_line, pdf_line):
+    md = tmp_path / "r.md"
+    md.write_text(META + md_line + "\n\n" + FILLER + "\n", encoding="utf-8")
+    return min(fidelity(str(md), str(_line_pdf(layout_pdf, pdf_line)))) >= 0.995
 
 
 def test_list_marker_style_is_not_a_number_change(tmp_path, layout_pdf):
     assert _compare(tmp_path, layout_pdf, "1. Composição", "01 — Composição") == 0
 
 
+def test_hyphen_list_marker_is_not_a_number_change(tmp_path, layout_pdf):
+    assert _compare(tmp_path, layout_pdf, "1. Composição", "01 - Composição") == 0
+
+
 def test_number_inside_list_item_still_checked(tmp_path, layout_pdf, capsys):
+    assert _ratios_ok(tmp_path, layout_pdf, "1. Dose de 20 U", "01 — Dose de 10 U")
     assert _compare(tmp_path, layout_pdf, "1. Dose de 20 U", "01 — Dose de 10 U") == 1
     err = capsys.readouterr().err
     assert "10" in err and "20" in err
@@ -188,6 +201,12 @@ def test_decimal_at_line_start_still_checked(tmp_path, layout_pdf):
 
 def test_range_at_line_start_still_checked(tmp_path, layout_pdf):
     assert _compare(tmp_path, layout_pdf, "5 – 20 U por sessão", "5 – 10 U por sessão") == 1
+
+
+def test_range_with_hyphen_at_line_start_still_checked(tmp_path, layout_pdf):
+    line = "10 - 20 dias entre as sessões"
+    assert _ratios_ok(tmp_path, layout_pdf, line, "15 - 20 dias entre as sessões")
+    assert _compare(tmp_path, layout_pdf, line, "15 - 20 dias entre as sessões") == 1
 
 
 def test_renumbered_list_item_is_a_difference(tmp_path, layout_pdf):
