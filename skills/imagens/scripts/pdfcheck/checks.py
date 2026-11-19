@@ -201,6 +201,10 @@ def _printed_number(lines, footer_top: float) -> int | None:
 def check_page_numbers(pdf, rules: Rules) -> list[Finding]:
     out = []
     expected = None
+    if len(pdf.pages) >= 3 and all(
+        _printed_number(_lines(page), _footer_top(page, rules)) is None for page in pdf.pages
+    ):  # a isenção da capa não vale para um livro sem numeração nenhuma
+        return [Finding(1, "page-number", "error", "nenhuma página numerada no rodapé")]
     for page in pdf.pages:
         printed = _printed_number(_lines(page), _footer_top(page, rules))
         if printed is None:

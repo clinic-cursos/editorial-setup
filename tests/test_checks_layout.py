@@ -286,3 +286,11 @@ def test_front_matter_without_folio_is_not_an_error(open_pdf, layout_pdf, test_r
     pdf = open_pdf(layout_pdf(*map(_with_footer, (None, None, 3, 4, None, 6))))
     assert [(f.page, f.kind) for f in checks.check_page_numbers(pdf, test_rules)] == [(5, "page-number")]
 
+
+def test_book_without_any_folio_is_flagged(open_pdf, layout_pdf, test_rules):
+    pdf = open_pdf(layout_pdf(*map(_with_footer, (None, None, None))))
+    findings = checks.check_page_numbers(pdf, test_rules)
+    assert [(f.page, f.kind, f.severity) for f in findings] == [(1, "page-number", "error")]
+    assert "nenhuma página numerada" in findings[0].detail
+    short = open_pdf(layout_pdf(*map(_with_footer, (None, None))))  # só capa e uma página: abaixo do mínimo
+    assert checks.check_page_numbers(short, test_rules) == []
