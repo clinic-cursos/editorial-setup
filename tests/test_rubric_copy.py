@@ -23,8 +23,43 @@ def test_rubric_copy_matches_official():
     assert rows(COPY, "| Critério | Peso | O que conta |") == official
 
 
-def test_copy_lists_official_disqualifiers():
-    text = OFFICIAL.read_text(encoding="utf-8")
-    items = [l[2:].strip().rstrip(".") for l in text.split("## Eliminatórios")[1].split("##")[0].splitlines() if l.startswith("- ")]
-    copy = COPY.read_text(encoding="utf-8").lower()
-    assert items and all(i.lower() in copy for i in items)
+def official_disqualifiers(text):
+    section = text.split("## Eliminatórios")[1].split("\n## ")[0]
+    return {l[2:].strip().rstrip(".") for l in section.splitlines() if l.startswith("- ")}
+
+
+def copy_disqualifiers(text):
+    """Nome -> valor de 'Avaliado' na tabela de eliminatórios da cópia."""
+    lines = text.splitlines()
+    start = next(i for i, l in enumerate(lines) if l.startswith("| Eliminatório | Avaliado"))
+    cells = []
+    for line in lines[start + 2:]:
+        if not line.startswith("|"):
+            break
+        cells.append([c.strip() for c in line.strip("|").split("|")])
+    return {c[0]: c[1] for c in cells}, len(cells)
+
+
+def check_disqualifiers(official_text, copy_text):
+    copy, count = copy_disqualifiers(copy_text)
+    assert count == len(copy), "eliminatório repetido na cópia"
+    assert set(copy) == official_disqualifiers(official_text)
+    assert set(copy.values()) == {"sim"}
+
+
+def test_copy_disqualifiers_match_official():
+    check_disqualifiers(OFFICIAL.read_text(encoding="utf-8"), COPY.read_text(encoding="utf-8"))
+
+
+def test_disqualifier_check_catches_drift():
+    official, copy = OFFICIAL.read_text(encoding="utf-8"), COPY.read_text(encoding="utf-8")
+    for bad in (
+        copy.replace("| Divergência com o Board não sinalizada | sim |", "| Divergência com o Board não sinalizada | não |"),
+        copy.replace("| Divergência com o Board não sinalizada | sim | |", "| Divergência com o Board não sinalizada | sim | |\n| Eliminatório falso | sim | |"),
+    ):
+        assert bad != copy
+        try:
+            check_disqualifiers(official, bad)
+        except AssertionError:
+            continue
+        raise AssertionError("a deriva passou despercebida")
