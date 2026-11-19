@@ -106,3 +106,54 @@ def test_pages_line_lists_only_page_numbers():
     rows = [{"page": 3, "width_mm": 190.0}, {"page": 17, "width_mm": 190.0}]
     assert run_sample.pages_line(rows) == "- Números das páginas candidatas: 3, 17"
     assert run_sample.pages_line([]) == "- Números das páginas candidatas: nenhuma"
+
+
+def work(tmp_path):
+    (tmp_path / "work").mkdir()
+    return tmp_path / "work"
+
+
+def fake_steps(monkeypatch, inserted_stdout):
+    """Respostas fixas de cada script do fluxo; os arquivos que o sample lê são criados aqui."""
+    class Doc:
+        pages = [object()]
+        def __enter__(self): return self
+        def __exit__(self, *exc): return False
+
+    def fake_run(script, *args):
+        args = [str(a) for a in args]
+        out = lambda flag: Path(args[args.index(flag) + 1])
+        done = lambda stdout="", code=0: subprocess.CompletedProcess(args, code, stdout, "")
+        if script.name == "extract_pdf.py":
+            out("--out").write_text("title: x\ncourse: A preencher\nauthors: A preencher\nversion: A preencher\n", encoding="utf-8")
+        elif script.name == "build_book.py":
+            (out("--out")).mkdir(parents=True)
+            (out("--out") / "layout.json").write_text('{"b0001": 1}', encoding="utf-8")
+        elif script.name == "free_space.py":
+            out("--json").write_text('[{"page": 1, "width_mm": 190.0, "height_mm": 100.0, "ratio": 1.9, "fraction": 0.5}]', encoding="utf-8")
+        elif script.name == "insert_images.py":
+            (out("--out")).mkdir(parents=True)
+            (out("--out") / "layout.json").write_text('{"b0001": 1}', encoding="utf-8")
+            return done(inserted_stdout)
+        elif script.name == "text_fidelity.py":
+            return done("1.0000 1.0000\n")
+        elif script.name == "check_layout.py":
+            return done("Nenhum achado.\n")
+        return done()
+
+    monkeypatch.setattr(run_sample, "run", fake_run)
+    monkeypatch.setattr(run_sample.pdfplumber, "open", lambda *a, **k: Doc())
+    monkeypatch.setattr(run_sample, "fonts", lambda path: run_sample.collections.Counter({"Montserrat": 1}))
+
+
+def test_sample_with_zero_inserted_images_writes_reprovado(monkeypatch, tmp_path):
+    fake_steps(monkeypatch, "")
+    body = run_sample.sample(tmp_path / "livro.pdf", work(tmp_path))
+    assert body[0] == "Resultado: REPROVADO"
+    assert any("nenhuma imagem" in line for line in body)
+    assert any("Números das páginas candidatas: 1" in line for line in body)
+
+
+def test_sample_approves_when_everything_passes_with_an_image(monkeypatch, tmp_path):
+    fake_steps(monkeypatch, "imagem inserida na página 1\n")
+    assert run_sample.sample(tmp_path / "livro.pdf", work(tmp_path))[0] == "Resultado: APROVADO"
