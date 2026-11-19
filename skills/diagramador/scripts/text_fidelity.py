@@ -10,12 +10,11 @@ import unicodedata
 import pdfplumber
 
 from build_book import LABELS
+from extract_pdf import HEADER_FRACTION, FOOTER_FRACTION, body_size, toc_pages, visible_pages
 from manuscript import ManuscriptError, cite, parse
 
 THRESHOLD = 0.995
 LIGATURES = str.maketrans({"ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl", "ﬅ": "st", "ﬆ": "st"})
-# Cabeçalho e rodapé do modelo ficam nas margens; o corpo começa a 26 mm e termina a 24 mm do fim.
-HEADER_FRACTION, FOOTER_FRACTION = 0.07, 0.93
 LEADER = re.compile(r"(?m)(?:\s*\.){4,}\s*\d+\s*$")  # pontilhado e página do sumário
 URL = re.compile(r"(\b(?:https?://|www\.|doi\.org/)\S+)", re.IGNORECASE)
 
@@ -51,17 +50,21 @@ def _markdown_text(path: str) -> str:
     return "\n".join(cite(p, manuscript.refs) for p in parts)
 
 
-def _pdf_pages(path: str) -> list[str]:
-    with pdfplumber.open(path) as pdf:
-        return [
-            (page.crop((0, page.height * HEADER_FRACTION, page.width, page.height * FOOTER_FRACTION)).extract_text() or "")
-            for page in pdf.pages
-        ]
+def _pdf_pages(path: str, *, drop_toc: bool) -> list[str]:
+    with pdfplumber.open(path) as pdf, visible_pages(pdf) as source_pages:
+        filtered = toc_pages(source_pages, body_size(source_pages)) if drop_toc else {}
+        pages = []
+        for number, page in enumerate(source_pages, 1):
+            if number in filtered:
+                page, _ = filtered[number]
+            area = (0, page.height * HEADER_FRACTION, page.width, page.height * FOOTER_FRACTION)
+            pages.append(page.crop(area).extract_text() or "")
+        return pages
 
 
 def _pdf_text(path: str, *, template: bool = False) -> str:
-    """Texto do corpo. Com `template`, descarta capa, expediente, sumário e rótulos fixos das caixas."""
-    pages = _pdf_pages(path)
+    """Remove entradas confirmadas do original ou, com `template`, os elementos do modelo."""
+    pages = _pdf_pages(path, drop_toc=not template)
     if template and len(pages) > 2 and "expediente" in pages[1].casefold() and "sumário" in pages[2].casefold():
         start = 3
         while start < len(pages) and LEADER.search(pages[start]):
