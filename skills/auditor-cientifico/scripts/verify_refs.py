@@ -127,9 +127,12 @@ def check(ref: dict, offline: bool) -> dict:
         except urllib.error.HTTPError as error:  # 429, 5xx: a API não respondeu, a referência não foi julgada
             out["reason"] = f"http {error.code}"
             statuses.append(("unverified", f"{name} {value}: {out['reason']}"))
-        except (OSError, http.client.HTTPException, json.JSONDecodeError, KeyError) as error:  # URLError e timeout são OSError; IncompleteRead é HTTPException
+        except (OSError, http.client.HTTPException) as error:  # URLError e timeout são OSError; IncompleteRead é HTTPException
             out["reason"] = type(error).__name__
             statuses.append(("unverified", f"{name} {value}: sem resposta utilizável ({error})"))
+        except (KeyError, IndexError, TypeError, ValueError, AttributeError) as error:  # JSON inválido é ValueError
+            out["reason"] = f"resposta malformada: {type(error).__name__}: {error}"
+            statuses.append(("unverified", f"{name} {value}: {out['reason']}"))
     for wanted in ("not-found", "divergent", "unverified", "ok"):
         hit = [detail for status, detail in statuses if status == wanted]
         if hit:

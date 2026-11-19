@@ -184,3 +184,18 @@ def test_missing_title_unverified(monkeypatch, tmp_path, capsys):
     assert verify_refs.main([str(path)]) == 0
     out = json.loads(capsys.readouterr().out)[0]
     assert out["status"] == "unverified" and "título" in out["detail"]
+
+
+def test_malformed_source_unverified(monkeypatch, tmp_path, capsys):
+    base = "https://api.crossref.org/works/"
+    routes = {
+        base + "10.1/empty": {"message": {**CROSSREF["message"], "issued": {"date-parts": [[]]}}},
+        base + "10.1/author": {"message": {**CROSSREF["message"], "author": "not a list"}},
+        base + "10.1/good": CROSSREF,
+    }
+    refs = [{**REF, "key": k, "doi": f"10.1/{k}"} for k in ("empty", "author", "good")]
+    path, _ = run(monkeypatch, tmp_path, refs, routes)
+    assert verify_refs.main([str(path)]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert [r["status"] for r in out] == ["unverified", "unverified", "ok"]
+    assert out[0]["reason"].startswith("resposta malformada:") and out[1]["reason"].startswith("resposta malformada:")
