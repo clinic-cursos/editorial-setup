@@ -7,11 +7,12 @@ import json
 import os
 from pathlib import Path
 import sys
+import re
 from urllib.parse import quote
 
 from weasyprint import HTML
 
-from manuscript import ManuscriptError, parse, walk
+from manuscript import ManuscriptError, cite, parse, walk
 
 ASSETS = Path(__file__).resolve().parents[1] / "assets"
 LABELS = {
@@ -34,8 +35,8 @@ def _url(target: Path, out_dir: Path) -> str:
     return quote(os.path.relpath(target, out_dir).replace("\\", "/"))
 
 
-def _render(block, base: Path, out_dir: Path) -> str:
-    e = escape
+def _render(block, base: Path, out_dir: Path, refs: dict[str, str]) -> str:
+    e = lambda text: escape(cite(text, refs))  # noqa: E731
     if block.type == "heading":
         return f'<h{block.level} id="{block.id}">{e(block.text)}</h{block.level}>'
     if block.type == "paragraph":
@@ -46,7 +47,10 @@ def _render(block, base: Path, out_dir: Path) -> str:
         return f'<{tag} id="{block.id}">{items}</{tag}>'
     if block.type == "box":
         css = CSS_CLASS.get(block.kind, block.kind)
-        inner = "".join(_render(c, base, out_dir) for c in block.children)
+        if block.kind == "faq":
+            inner = "<dl>" + "".join(f"<dt>{e(q)}</dt><dd>{e(a)}</dd>" for q, a in block.entries) + "</dl>"
+        else:
+            inner = "".join(_render(c, base, out_dir, refs) for c in block.children)
         return f'<div class="{css}" id="{block.id}"><p class="rotulo">{LABELS[block.kind]}</p>{inner}</div>'
     if block.type == "figure":
         image = base / block.src
@@ -54,7 +58,7 @@ def _render(block, base: Path, out_dir: Path) -> str:
             raise ManuscriptError(f"figura {block.fig_id}: arquivo {block.src} não encontrado ao lado do manuscrito")
         return (f'<figure id="{block.id}"><img src="{_url(image, out_dir)}" alt="{e(block.text)}">'
                 f'<p class="legenda">{e(block.text)}</p></figure>')
-    entries = "".join(f'<li class="referencia">[@{e(k)}] {e(d)}</li>' for k, d in block.entries)
+    entries = "".join(f'<li class="referencia">{escape(d)}</li>' for _, d in block.entries)
     return f'<ul id="{block.id}" class="referencias">{entries}</ul>'
 
 
@@ -68,8 +72,8 @@ def _compose(manuscript, base: Path, out_dir: Path) -> str:
             open_chapter = True
         if block.type == "heading" and block.level <= 2:
             css = ' class="nivel-1"' if block.level == 1 else ""
-            toc.append(f'<li{css}><a href="#{block.id}">{escape(block.text)}</a></li>')
-        body.append(_render(block, base, out_dir))
+            toc.append(f'<li{css}><a href="#{block.id}">{escape(cite(block.text, manuscript.refs))}</a></li>')
+        body.append(_render(block, base, out_dir, manuscript.refs))
     body.append("</section>" if open_chapter else "")
     authors = [a.strip() for a in meta["authors"].split(",")]
     fields = {
@@ -84,9 +88,8 @@ def _compose(manuscript, base: Path, out_dir: Path) -> str:
     }
     page = (ASSETS / "livro.html").read_text(encoding="utf-8")
     page = page.replace('href="livro.css"', f'href="{_url(ASSETS / "livro.css", out_dir)}"')
-    for key, value in fields.items():
-        page = page.replace("{{" + key + "}}", value)
-    return page
+    # uma passada só: texto do manuscrito que pareça marcador não é reprocessado
+    return re.sub(r"\{\{(\w+)\}\}", lambda m: fields.get(m[1], m[0]), page)
 
 
 def build(manuscript_path: str, out_dir: str) -> BuildResult:

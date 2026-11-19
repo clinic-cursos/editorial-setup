@@ -76,3 +76,27 @@ def test_cli_reports_manuscript_error(tmp_path, capsys):
     assert main([str(bad), "--out", str(tmp_path / "o")]) == 1
     assert ":::dica" in capsys.readouterr().err
     assert main([str(tmp_path / "nao-existe.md"), "--out", str(tmp_path / "o")]) == 2
+
+
+def test_placeholder_text_in_manuscript_kept(tmp_path):
+    source = tmp_path / "m.md"
+    source.write_text(TEXT.replace("title: Livro de teste", "title: {{AUTORES}} em {{SUMARIO}}")
+                      .replace("Texto final.", "Veja {{CONTEUDO}}.").replace("![Figura de teste](img/f.png){#fig-f}", ""),
+                      encoding="utf-8")
+    html = Path(build(str(source), str(tmp_path / "o")).html).read_text(encoding="utf-8")
+    assert "<title>{{AUTORES}} em {{SUMARIO}}</title>" in html
+    assert "Veja {{CONTEUDO}}." in html
+
+
+def test_citation_is_rendered_not_literal(tmp_path):
+    source = make_manuscript(tmp_path)
+    source.write_text(TEXT.replace("Dados da fonte.", "SILVA, A. Obra. Editora, 2024."), encoding="utf-8")
+    html = Path(build(str(source), str(tmp_path / "o")).html).read_text(encoding="utf-8")
+    assert "(SILVA, 2024)" in html and "[@" not in html
+
+
+def test_faq_renders_definition_list(tmp_path):
+    source = make_manuscript(tmp_path)
+    source.write_text(TEXT.replace("Texto final.", "Texto final.\n\n:::faq\nPosso?\nSim.\n:::"), encoding="utf-8")
+    html = Path(build(str(source), str(tmp_path / "o")).html).read_text(encoding="utf-8")
+    assert "<dt>Posso?</dt><dd>Sim.</dd>" in html
