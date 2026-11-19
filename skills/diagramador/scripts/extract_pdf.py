@@ -102,20 +102,34 @@ def page_items(page, body, images_dir, output, figures, warnings, number):
             items.append((column, line["top"], "line", line))
     if page.find_tables():
         warnings.append(f"página {number}: tabela convertida em parágrafos")
-    # pypdf nomeia a imagem como o XObject mais a extensão; o nome é a identidade do recurso.
-    # Imagem inline não tem XObject nem referência indireta: casa com as inline do pypdf, na ordem da página.
-    reader_images = list(figures["reader"].pages[number - 1].images)
-    named = {Path(i.name).with_suffix("").name: i for i in reader_images if i.indirect_reference}
-    inline = iter([i for i in reader_images if not i.indirect_reference])
+    source = figures["reader"].pages[number - 1]
+    source_images = source.images
+    by_object, inline_paths = {}, []
+    # Os nomes de XObject podem se repetir entre Forms. Indexe pelo objeto sem converter os XObjects.
+    for path in source_images.keys():
+        if isinstance(path, str) and path.startswith("~"):
+            inline_paths.append(path)
+            continue
+        xobject = source
+        for name in [path] if isinstance(path, str) else path:
+            xobject = xobject["/Resources"]["/XObject"][name]
+        reference = xobject.indirect_reference
+        if reference is None:
+            inline_paths.append(path)
+        else:
+            by_object.setdefault(reference.idnum, path)
+    inline = iter(inline_paths)
     for placed in page.images:
-        image = named.get(placed["name"]) or next(inline, None)
-        if image is None:
+        objid = placed["stream"].objid
+        path = by_object.get(objid) if objid is not None else next(inline, None)
+        if path is None:
             warnings.append(f"página {number}: imagem sem dados extraíveis ignorada")
             continue
         figures["count"] += 1
         fig_id = f"fig-{figures['count']}"
-        key = image.indirect_reference.idnum if image.indirect_reference else (number, placed["name"])
-        if key not in figures["saved"]:  # imagem reutilizada é gravada uma vez só
+        key = objid if objid is not None else (number, placed["name"])
+        if key not in figures["saved"]:  # imagem reutilizada é convertida e gravada uma vez só
+            image = source_images[path]
             filename = images_dir / f"{fig_id}{Path(image.name).suffix or '.png'}"
             figures["saved"][key] = filename
             figures["files"].append((filename, image.data))
