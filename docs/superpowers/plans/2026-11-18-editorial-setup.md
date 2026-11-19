@@ -334,7 +334,11 @@ Objetivo: a Paula instala os zips do 6.1 (ou a versão em Projeto) no ChatGPT de
 Critérios de aceite: `docs/medicoes/2026-11-instalacao.md` com plataforma, plano, o que funcionou, o que não funcionou e o tempo gasto; sem trecho de livro.
 
 ## Status
-- Feito: spec (forma A, aprovada pelo Alify em 18/11/2026); pesquisa de plataformas e de diagramação; repositório `clinic-cursos/editorial-setup` criado (privado); issue CLI-514; PR #1 com fontes, pesquisa, spec e plano; revisão final de 18/11 com os achados aplicados.
-- Em andamento: nada.
-- Travado: 1.5 (apresentação à Paula) fica com o Alify, junto com o envio do repositório, sem travar a construção; 2.4 e 6.3 esperam a Paula, sem travar a construção; 3.6 espera o Alify; o manual de diagramação (a Paula manda depois) e o design system dos documentos (Alify, Paula e Julie) ainda não existem: o 3.5 nasce com o lugar do manual e o 3.1 com os valores visuais em `tokens.css`, e cada um vira um cartão novo quando chegar; a onda 3 espera 1.4 e 1.5.
-- Próximo passo: execução nesta sessão, a pedido do Alify em 18/11/2026 ("faça tudo aí pra eu poder mandar o repositório pra Paula"), por ondas, com uma branch por onda (`feat/wave-N`) e um PR por onda; o Alify apresenta a seção 13 da spec à Paula (1.5), e a Paula roda o teste do ChatGPT (2.4) quando puder, depois do 2.3.
+- Feito (18 e 19/11/2026, onda 1 e onda 2, PR da `feat/wave-1`):
+  - 1.1 base do repositório e `package.py --check` e `--sync`; 1.2 referências comuns; 1.3 skill e agente do Editor-Chefe; 1.6 hooks do plugin; 1.7 ajustes vindos do ensaio (cartão novo, achados 3 a 7 de `docs/medicoes/2026-11-ensaio-editor-chefe.md`).
+  - 1.4 ensaio do Editor-Chefe no Claude Code 2.1.325: `Resultado: APROVADO` nos cinco casos; a variante de chat ficou não conclusiva até existirem as skills dos outros papéis.
+  - 2.1 e 2.2 checagens de PDF (`lib/pdfcheck/`), 2.3 skill e roteiro do teste no ChatGPT.
+- Em andamento: revisão final do PR da onda 1.
+- Travado: 1.5 (apresentação à Paula) fica com o Alify, junto com o envio do repositório, sem travar a construção; 2.4 e 6.3 esperam a Paula, sem travar a construção; 3.6 espera o Alify; o manual de diagramação (a Paula manda depois) e o design system dos documentos (Alify, Paula e Julie) ainda não existem: o 3.5 nasce com o lugar do manual e o 3.1 com os valores visuais em `tokens.css`, e cada um vira um cartão novo quando chegar.
+- Pendências para cartões seguintes: achado 1 do ensaio (manifesto do plugin) no 6.1; achado 2 (leitura de `references/` em sessão não interativa precisa de `--add-dir` ou sessão interativa) no guia da equipe, 6.2; o lembrete da ficha no `Stop` não foi exercido no ensaio; repetir a variante de chat depois da onda 4.
+- Próximo passo: merge da onda 1 depois da revisão final; onda 3 (Diagramador e imagens) numa branch `feat/wave-3`, com os cartões 3.1 a 3.8.
