@@ -1,0 +1,14 @@
+{
+  "allowed_fonts": ["Montserrat", "SourceSans3", "SourceSansPro"],
+  "safe_zone_mm": 10,
+  "error_ppi": 150,
+  "warning_ppi": 300,
+  "free_space_fraction": 0.25,
+  "chapter_title_min_pt": 18,
+  "chapter_title_min_width_fraction": 0.5,
+  "distortion_tolerance": 0.02,
+  "page_size_pt": [595.28, 841.89],
+  "allowed_repeats": [
+    "Divulgação autorizada pelo usuário em TCLE. Esta imagem não representa, em hipótese alguma, garantia de resultado. Cada ser humano tem características anatômicas e fisiológicas únicas. Responsável técnico: Dra Paula Caroline Garcia CRBM 32624"
+  ]
+}
