@@ -113,13 +113,23 @@ def layout_counts(report_text: str) -> collections.Counter:
     return collections.Counter((sev, kind) for _, sev, kind in ROW.findall(report_text))
 
 
-def fidelity(original: Path, output: Path) -> tuple[list[float], int]:
-    """Razões por comparação e número de linhas de diferença (o conteúdo do livro não vai ao relatório)."""
+FIDELITY_MIN = 0.995  # spec: saída igual à entrada em pelo menos 0,995 dos caracteres
+
+
+def fidelity(original: Path, output: Path) -> tuple[list[float], int, int]:
+    """Razões, código de saída do comparador (1 = abaixo do limite ou número alterado) e linhas informativas do stderr.
+
+    O stderr só informa (o conteúdo do livro não vai ao relatório); quem reprova é o código e as razões.
+    """
     done = run(DIAG / "text_fidelity.py", original, output)
     if done.returncode == 2:
         fail(f"Fidelidade ilegível: {done.stderr.strip()}")
     ratios = [float(r) for r in done.stdout.split()]
-    return ratios, len([line for line in done.stderr.splitlines() if line.strip()])
+    return ratios, done.returncode, len([line for line in done.stderr.splitlines() if line.strip()])
+
+
+def fidelity_failed(*results: tuple[list[float], int, int]) -> bool:
+    return any(code != 0 or min(ratios) < FIDELITY_MIN for ratios, code, _ in results)
 
 
 def synthetic_images(candidates: list, out: Path) -> None:
@@ -148,9 +158,9 @@ TIMEOUT_CAUSES = {
 }
 
 
-def causes(problems: list, counts: collections.Counter, diffs: int) -> list[str]:
+def causes(problems: list, counts: collections.Counter, fidelity_problem: bool) -> list[str]:
     out = [f"- `{kind}`: {CAUSES[kind]}" for kind in sorted({k for (s, k) in counts if s == "erro"} & CAUSES.keys())]
-    if diffs:
+    if fidelity_problem:
         out.append("- fidelidade: perdas e acréscimos de palavras e números alterados em URLs e referências (`text_fidelity.py` lista os trechos). A causa provável é `extract_pdf.py` (rótulos de bloco como «Ponto-chave» e «Perguntas frequentes», quebra de linha em URL). Correção: conferir a lista no cartão de correção.")
     return out or ["- nenhuma"]
 
@@ -169,7 +179,8 @@ def sample(pdf: Path, work: Path) -> list[str]:
     if done.returncode != 0:
         fail(f"Extração falhou: {done.stderr.strip()}")
     meta = fill_metadata(manuscript)
-    source_ratios, source_diffs = fidelity(pdf, manuscript)
+    source = fidelity(pdf, manuscript)
+    source_ratios, _, source_diffs = source
 
     v1 = work / "versoes/v1"
     done = run(DIAG / "build_book.py", manuscript, "--out", v1)
@@ -186,7 +197,8 @@ def sample(pdf: Path, work: Path) -> list[str]:
         fail(f"Checagem falhou: {check1.stderr.strip()}")
     counts1 = layout_counts(check1.stdout)
     fonts1 = fonts(v1 / "livro.pdf")
-    ratios1, diffs1 = fidelity(manuscript, v1 / "livro.pdf")
+    fid1 = fidelity(manuscript, v1 / "livro.pdf")
+    ratios1, _, diffs1 = fid1
 
     spaces = work / "espaco-livre.json"
     done = run(IMAGENS / "free_space.py", v1 / "livro.pdf", "--json", spaces)
@@ -210,7 +222,8 @@ def sample(pdf: Path, work: Path) -> list[str]:
     if check2.returncode == 2:
         fail(f"Segunda checagem falhou: {check2.stderr.strip()}")
     counts2 = layout_counts(check2.stdout)
-    ratios2, diffs2 = fidelity(manuscript, v2 / "livro.pdf")
+    fid2 = fidelity(manuscript, v2 / "livro.pdf")
+    ratios2, _, diffs2 = fid2
 
     dejavu = sorted(n for n in set(fonts1) if "dejavu" in n.casefold())
     problems = []
@@ -218,8 +231,9 @@ def sample(pdf: Path, work: Path) -> list[str]:
         problems.append("erro de layout na composição")
     if check2.returncode:
         problems.append("erro de layout depois da inserção das imagens")
-    if min(source_ratios + ratios1 + ratios2) < 0.995 or source_diffs or diffs1 or diffs2:
-        problems.append("fidelidade do texto abaixo de 0,995 ou com diferenças listadas")
+    failed_fidelity = fidelity_failed(source, fid1, fid2)
+    if failed_fidelity:
+        problems.append("fidelidade do texto abaixo de 0,995 ou com número alterado")
     if dejavu:
         problems.append("fonte DejaVu no PDF")
     if pages1 != pages2 or not same_layout:
@@ -255,7 +269,7 @@ def sample(pdf: Path, work: Path) -> list[str]:
         f"- Fidelidade (manuscrito contra v2): {' '.join(f'{r:.4f}' for r in ratios2)} ({diffs2} linhas de diferença)",
         "",
         "## Causa provável e correção sugerida (por script)" if problems else "## Causas",
-        *(causes(problems, counts1, source_diffs + diffs1 + diffs2) if problems else ["- nenhuma"]),
+        *(causes(problems, counts1, failed_fidelity) if problems else ["- nenhuma"]),
         "",
     ]
     return steps

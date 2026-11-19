@@ -1,3 +1,4 @@
+import subprocess
 import sys
 from pathlib import Path
 
@@ -83,3 +84,19 @@ def test_verdict_approves_with_an_image_and_no_problems():
 
 def test_verdict_keeps_other_problems():
     assert run_sample.verdict(["x"], inserted=2) == ("REPROVADO", ["x"])
+
+
+def fake_fidelity(monkeypatch, code, stdout, stderr):
+    monkeypatch.setattr(run_sample, "run", lambda *a, **k: subprocess.CompletedProcess(a, code, stdout, stderr))
+    return run_sample.fidelity(Path("a"), Path("b"))
+
+
+def test_stderr_alone_does_not_fail_fidelity(monkeypatch):
+    result = fake_fidelity(monkeypatch, 0, "0.9990 0.9995\n", "trecho perdido: x\ntrecho a mais: y\n")
+    assert result == ([0.999, 0.9995], 0, 2)
+    assert not run_sample.fidelity_failed(result)
+
+
+def test_fidelity_fails_by_exit_code_or_ratio(monkeypatch):
+    assert run_sample.fidelity_failed(fake_fidelity(monkeypatch, 1, "1.0000 1.0000\n", "número alterado: x\n"))
+    assert run_sample.fidelity_failed(([0.9, 1.0], 0, 0))
