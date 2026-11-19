@@ -143,7 +143,10 @@ def synthetic_images(candidates: list, out: Path) -> None:
 CAUSES = {
     "image-low-resolution": "`build_book.py` e `assets/` (CSS): a figura extraída é esticada à largura da coluna e cai abaixo do ppi do original. Correção: limitar a largura da figura ao tamanho do original (pixels pelo ppi herdado).",
     "toc-mismatch": "`extract_pdf.py` mantém o sumário do original como texto do corpo, com entradas partidas em linhas e números de página antigos, e `check_toc` o lê como sumário. Correção: descartar capa, expediente e sumário do original na extração e deixar o `build_book.py` gerar o sumário.",
-    "duplicate-paragraph": "`lib/pdfcheck` (`check_duplicates`): o texto repetido começa na linha do cabeçalho corrido e passa de 100 caracteres. Correção: tirar cabeçalho e rodapé da comparação.",
+    "duplicate-paragraph": (
+        "`lib/pdfcheck` (`check_duplicates`): o achado pode vir do pontilhado do sumário, de cabeçalho e rodapé corridos "
+        "ou de repetição real de um parágrafo. Conferir a origem do trecho no PDF."
+    ),
     "image-distorted": "`build_book.py`: a figura é redimensionada sem manter a proporção. Correção: fixar só uma dimensão.",
     "font-not-allowed": "`assets/` (CSS): fonte de reserva usada no lugar da marca. Correção: conferir as fontes embutidas.",
 }
