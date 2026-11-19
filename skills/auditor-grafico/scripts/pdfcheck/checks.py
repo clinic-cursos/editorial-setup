@@ -14,6 +14,7 @@ from .rules import Rules
 MM = 72 / 25.4
 _SUBSET = re.compile(r"^[A-Z]{6}\+")
 _MIN_PARAGRAPH = 100  # caracteres
+_LEADER = re.compile(r"[.·…]{3,}")  # pontilhado do sumário
 _PAGE_TOLERANCE = 1.0  # pt
 _GAP = 15.0  # pt: pares de letras mais próximos que isso formam a mesma região de sobreposição
 _FOLIO = re.compile(r"[0-9]+")
@@ -86,11 +87,14 @@ def check_safe_zone(pdf, rules: Rules) -> list[Finding]:
 def check_duplicates(pdf, rules: Rules) -> list[Finding]:
     # Janela deslizante de _MIN_PARAGRAPH caracteres do texto normalizado da página: acha o
     # trecho repetido mesmo quando título ou entrelinha diferentes mudam o agrupamento em parágrafos.
-    allowed = [" ".join(a.split()).casefold() for a in rules.allowed_repeats]
+    allowed = [_LEADER.sub(" ", " ".join(a.split()).casefold()) for a in rules.allowed_repeats]
     seen: dict[int, tuple[int, int]] = {}  # hash -> (página, posição) da primeira ocorrência
     out = []
+    pages = _band_lines(pdf, rules)
+    running = _running_lines(pages)  # cabeçalho e rodapé corridos não são parágrafo
     for page in pdf.pages:
-        text = " ".join(" ".join(l["text"] for l in _lines(page)).split()).casefold()
+        kept = (line["text"] for line, _, _ in pages[page.page_number] if id(line) not in running)
+        text = _LEADER.sub(" ", " ".join(" ".join(kept).split()).casefold())
         for a in allowed:
             text = text.replace(a, "\x00")  # texto de repetição proposital sai antes da busca
         sources = set()
@@ -248,8 +252,11 @@ def check_toc(pdf, rules: Rules) -> list[Finding]:
                 (page.page_number, m["title"].rstrip(" .·…"), int(m["number"])) for m in matches
             )
         else:
-            for text in texts:
-                title_pages[text].add(page.page_number)
+            body_texts = [line["text"] for line in body]
+            for start in range(len(body_texts)):
+                for end in range(start + 1, min(start + 3, len(body_texts)) + 1):
+                    title = " ".join(body_texts[start:end]).rstrip(" .·…")
+                    title_pages[_normalized(title)].add(page.page_number)
 
     uses_printed_pages = any(number is not None for number in printed_pages.values())
     out = []
@@ -283,13 +290,13 @@ def _running_lines(pages: dict) -> set:
     total = len(pages)
     offsets = defaultdict(set)  # deslocamento (número impresso - página do PDF) -> páginas
     for number, _, text in band:
-        if text.isdigit():
+        if text.isdecimal():
             offsets[int(text) - number].add(number)
     folio = max(offsets, key=lambda k: len(offsets[k]), default=None)
     folio_is_sequence = folio is not None and len(offsets[folio]) * 2 > total
     running = set()
     for number, line, text in band:
-        if text.isdigit():
+        if text.isdecimal():
             if folio_is_sequence and int(text) - number == folio:
                 running.add(id(line))
         elif total >= 3:
@@ -299,15 +306,21 @@ def _running_lines(pages: dict) -> set:
     return running
 
 
-def free_space(pdf, rules: Rules) -> list[FreeSpace]:
-    margin = rules.safe_zone_mm * MM
-    out = []
+def _band_lines(pdf, rules: Rules) -> dict:
+    """Por página: (linha, texto normalizado, está na faixa de cabeçalho ou rodapé)."""
     pages = {}
     for page in pdf.pages:
         text_top = page.bbox[1] + rules.page_margins_mm["top"] * MM
         bottom = page.bbox[3] - rules.page_margins_mm["bottom"] * MM
         pages[page.page_number] = [(line, _normalized(line["text"]), line["bottom"] <= text_top or line["top"] >= bottom)
                                    for line in _lines(page, return_chars=True)]
+    return pages
+
+
+def free_space(pdf, rules: Rules) -> list[FreeSpace]:
+    margin = rules.safe_zone_mm * MM
+    out = []
+    pages = _band_lines(pdf, rules)
     running = _running_lines(pages)
     for page in pdf.pages:
         x0, y0, x1, y1 = page.bbox
