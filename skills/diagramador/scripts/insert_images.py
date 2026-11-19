@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from urllib.parse import quote
 
 import pdfplumber
+from PIL import Image
 from weasyprint import HTML
 
 from build_book import ASSETS, build
@@ -94,6 +95,12 @@ def insert(manuscript: str, images_dir: str, out_dir: str) -> tuple[list[int], l
         if not m:
             continue
         page = int(m[1])
+        try:
+            with Image.open(image) as picture:
+                picture.load()
+        except (OSError, SyntaxError):  # Pillow levanta OSError (ou SyntaxError em PNG truncado)
+            warnings.append(f"página {page}: {image.name} não abre como imagem; não entrou")
+            continue
         starting = [i for i in top if base.layout[i] == page]
         cap = _cap_pt(free[page], height) if page in free else 0
         if page not in free:

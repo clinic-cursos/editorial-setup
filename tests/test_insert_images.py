@@ -112,3 +112,14 @@ def test_earlier_image_does_not_discard_later_one(tmp_path, monkeypatch, capsys)
     assert "página 5" in captured.err and "página 7" not in captured.err
     layout = json.loads((out / "layout.json").read_text(encoding="utf-8"))
     assert layout["comp-07"] == 7 and "comp-05" not in layout
+
+
+def test_corrupted_image_is_skipped_with_warning(tmp_path, capsys):
+    source, images = setup(tmp_path)
+    (images / "pagina-05.png").write_bytes(b"not a png")
+    out = tmp_path / "out"
+    assert insert_images.main([str(source), str(images), "--out", str(out)]) == 0
+    captured = capsys.readouterr()
+    assert "página 5" in captured.err
+    assert "0 imagens inseridas" in captured.out and "imagem inserida" not in captured.out
+    assert "complementar" not in (out / "livro.html").read_text(encoding="utf-8")
