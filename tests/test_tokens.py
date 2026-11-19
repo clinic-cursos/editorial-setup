@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 
@@ -40,3 +41,11 @@ ALLOWED_MEASURES = {"100%"}
 def test_no_literal_measures_outside_tokens():
     found = {m.group(0) for m in MEASURE.finditer(_css("livro.css"))} - ALLOWED_MEASURES
     assert found == set()
+
+
+def test_margins_match_tokens():
+    tokens = _css("tokens.css")
+    rules = json.loads((ASSETS.parents[2] / "shared" / "rules" / "graphic-rules.json").read_text(encoding="utf-8"))
+    for side in ("top", "bottom"):
+        css = float(re.search(rf"--page-margin-{side}:\s*([\d.]+)mm", tokens).group(1))
+        assert rules["page_margins_mm"][side] == css

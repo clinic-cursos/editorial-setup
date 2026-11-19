@@ -266,16 +266,19 @@ def free_space(pdf, rules: Rules) -> list[FreeSpace]:
     margin = rules.safe_zone_mm * MM
     out = []
     for page in pdf.pages:
-        x0, y0, x1, bottom = page.bbox
-        x0, x1, bottom = x0 + margin, x1 - margin, bottom - margin
-        useful_height = bottom - y0 - margin
+        x0, y0, x1, y1 = page.bbox
+        x0, x1 = x0 + margin, x1 - margin
+        # mancha de texto: cabeçalho e rodapé corridos ficam fora da conta
+        text_top = y0 + rules.page_margins_mm["top"] * MM
+        bottom = y1 - rules.page_margins_mm["bottom"] * MM
+        useful_height = bottom - text_top
         if useful_height <= 0 or x1 <= x0:
             continue
         objects = chain(page.chars, page.images, page.lines, page.rects, page.curves)
-        top = max((obj["bottom"] for obj in objects if obj["top"] < bottom), default=None)
+        top = max((obj["bottom"] for obj in objects if obj["top"] < bottom and obj["bottom"] > text_top), default=None)
         if top is None:
             continue
-        top = max(top, y0 + margin)
+        top = max(top, text_top)
         fraction = (bottom - top) / useful_height
         if fraction > rules.free_space_fraction and not _chapter_opening(page, x1 - x0, rules):
             out.append(FreeSpace(page.page_number, x0, top, x1, bottom, fraction))

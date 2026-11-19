@@ -124,13 +124,35 @@ def test_free_space_listed_with_fraction(open_pdf, layout_pdf, test_rules):
     pdf = open_pdf(layout_pdf(draw))
     page = pdf.pages[0]
     margin = test_rules.safe_zone_mm * 72 / 25.4
+    top_margin = test_rules.page_margins_mm["top"] * 72 / 25.4
+    bottom_margin = test_rules.page_margins_mm["bottom"] * 72 / 25.4
     candidate, = checks.free_space(pdf, test_rules)
     assert candidate.page == 1
     assert candidate.x0 == pytest.approx(margin)
     assert candidate.x1 == pytest.approx(page.width - margin)
     assert candidate.top == pytest.approx(page.height - 400)
-    assert candidate.bottom == pytest.approx(page.height - margin)
-    assert candidate.fraction == pytest.approx((400 - margin) / (page.height - 2 * margin))
+    assert candidate.bottom == pytest.approx(page.height - bottom_margin)
+    assert candidate.fraction == pytest.approx(
+        (400 - bottom_margin) / (page.height - top_margin - bottom_margin)
+    )
+
+
+def test_free_space_ignores_running_footer(open_pdf, layout_pdf, test_rules):
+    def draw(document):
+        document.drawString(60, 740, "Parágrafo curto.")
+        document.drawString(60, 500, "Meio da página.")
+        document.drawRightString(A4[0] - 60, 13 * 72 / 25.4, "7")  # número a 13 mm da borda
+
+    pdf = open_pdf(layout_pdf(draw))
+    page = pdf.pages[0]
+    top_margin = test_rules.page_margins_mm["top"] * 72 / 25.4
+    bottom_margin = test_rules.page_margins_mm["bottom"] * 72 / 25.4
+    candidate, = checks.free_space(pdf, test_rules)
+    assert candidate.top == pytest.approx(page.height - 500 + 3, abs=12)
+    assert candidate.bottom == pytest.approx(page.height - bottom_margin)
+    assert candidate.fraction == pytest.approx(
+        (candidate.bottom - candidate.top) / (page.height - top_margin - bottom_margin)
+    )
 
 
 def test_free_space_begins_below_image(open_pdf, placed_image_pdf, test_rules):
