@@ -22,7 +22,6 @@ DIAG = ROOT / "skills/diagramador/scripts"
 IMAGENS = ROOT / "skills/imagens/scripts"
 PALETTE = ["#87082E", "#EAD4DB", "#955251", "#625E61"]  # skills/imagens/references/paleta.md
 STEP_TIMEOUT = 180  # segundos por script: o cartão tem teto de 10 min para os dois livros
-MAX_IMAGES = 3  # shortcut: insert_images.py recompõe o livro inteiro por imagem; 5 mantém o ensaio dentro do teto de 10 min
 ROW = re.compile(r"^\| (\d+) \| (erro|aviso) \| (\S+) \|", re.M)
 SUBSET = re.compile(r"^[A-Z]{6}\+")
 
@@ -211,7 +210,7 @@ def sample(pdf: Path, work: Path) -> list[str]:
         fail(f"Espaço livre falhou: {done.stderr.strip()}")
     candidates = json.loads(spaces.read_text(encoding="utf-8"))
 
-    synthetic_images(candidates[:MAX_IMAGES], work / "imagens")
+    synthetic_images(candidates, work / "imagens")
     v2 = work / "versoes/v2"
     done = run(DIAG / "insert_images.py", manuscript, work / "imagens", "--out", v2)
     if done.returncode != 0:
@@ -265,7 +264,7 @@ def sample(pdf: Path, work: Path) -> list[str]:
         "## Imagens sintéticas (retângulos na paleta)",
         f"- Páginas candidatas (espaço livre acima do limite): {len(candidates)}",
         pages_line(candidates),
-        f"- Imagens de teste geradas (as primeiras candidatas, no máximo {MAX_IMAGES}): {min(len(candidates), MAX_IMAGES)}",
+        f"- Imagens de teste geradas: {len(candidates)}",
         f"- Imagens inseridas: {inserted}; retiradas por mudar a paginação: {removed}",
         "",
         "## Depois das imagens (v2)",

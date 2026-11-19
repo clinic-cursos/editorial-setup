@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -113,11 +114,11 @@ def work(tmp_path):
     return tmp_path / "work"
 
 
-def fake_steps(monkeypatch, inserted_stdout, ratios="1.0000 1.0000\n", fidelity_stderr="", v2_layout='{"b0001": 1}', v2_pages=1):
+def fake_steps(monkeypatch, inserted_stdout, ratios="1.0000 1.0000\n", fidelity_stderr="", v2_layout='{"b0001": 1}', v2_pages=1, candidate_count=1):
     """Respostas fixas de cada script do fluxo; os arquivos que o sample lê são criados aqui."""
     class Doc:
         def __init__(self, path):
-            self.pages = [object()] * (v2_pages if "v2" in str(path) else 1)
+            self.pages = [object()] * (v2_pages if "v2" in str(path) else candidate_count)
         def __enter__(self): return self
         def __exit__(self, *exc): return False
 
@@ -131,7 +132,11 @@ def fake_steps(monkeypatch, inserted_stdout, ratios="1.0000 1.0000\n", fidelity_
             (out("--out")).mkdir(parents=True)
             (out("--out") / "layout.json").write_text('{"b0001": 1}', encoding="utf-8")
         elif script.name == "free_space.py":
-            out("--json").write_text('[{"page": 1, "width_mm": 190.0, "height_mm": 100.0, "ratio": 1.9, "fraction": 0.5}]', encoding="utf-8")
+            candidates = [
+                {"page": page, "width_mm": 190.0, "height_mm": 100.0, "ratio": 1.9, "fraction": 0.5}
+                for page in range(1, candidate_count + 1)
+            ]
+            out("--json").write_text(json.dumps(candidates), encoding="utf-8")
         elif script.name == "insert_images.py":
             (out("--out")).mkdir(parents=True)
             (out("--out") / "layout.json").write_text(v2_layout, encoding="utf-8")
@@ -158,6 +163,16 @@ def test_sample_with_zero_inserted_images_writes_reprovado(monkeypatch, tmp_path
 def test_sample_approves_when_everything_passes_with_an_image(monkeypatch, tmp_path):
     fake_steps(monkeypatch, "imagem inserida na página 1\n")
     assert run_sample.sample(tmp_path / "livro.pdf", work(tmp_path))[0] == "Resultado: APROVADO"
+
+
+def test_sample_generates_images_for_all_ten_candidates(monkeypatch, tmp_path):
+    fake_steps(monkeypatch, "imagem inserida na página 1\n", candidate_count=10, v2_pages=10)
+    sample_work = work(tmp_path)
+    run_sample.sample(tmp_path / "livro.pdf", sample_work)
+
+    assert {image.name for image in (sample_work / "imagens").glob("*.png")} == {
+        f"pagina-{page:02d}.png" for page in range(1, 11)
+    }
 
 
 def test_sample_does_not_fail_on_informative_fidelity_stderr(monkeypatch, tmp_path):
