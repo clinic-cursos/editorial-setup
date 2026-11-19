@@ -1,0 +1,52 @@
+/* Valores visuais do modelo. O design system dos documentos troca só este arquivo. */
+:root {
+  /* cores tiradas do PDF de Preenchedores (capa, titulos, texto, fundo de quadro) */
+  --color-brand: #87082e;
+  --color-heading: #910032;
+  --color-text: #232323;
+  --color-muted: #6b6b6b;
+  --color-header: #727272;
+  --color-tint: #f6f1f3;
+  --color-rule: #d9c7ce;
+  --color-surface: #ffffff;
+  --color-on-brand: #ffffff;
+
+  --font-title: "Montserrat", sans-serif;
+  --font-body: "SourceSans3", sans-serif;
+
+  --weight-regular: 400;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --size-body: 9.5pt;
+  --leading-body: 14pt;
+  --size-caption: 9pt;
+  --leading-caption: 11.5pt;
+  --size-running: 6.5pt;
+  --size-label: 7.5pt;
+  --size-h1: 20pt;
+  --size-h2: 8pt;
+  --size-h3: 10pt;
+  --size-cover-title: 34pt;
+  --size-cover-sub: 12pt;
+  --size-cover-meta: 8pt;
+  --size-toc: 10pt;
+  --size-toc-chapter: 11pt;
+  --tracking-caps: 0.06em;
+
+  --page-margin-top: 26mm;
+  --page-margin-bottom: 24mm;
+  --page-margin-inner: 22mm;
+  --page-margin-outer: 22mm;
+  --running-offset: 12mm;
+
+  --space-1: 2mm;
+  --space-2: 4mm;
+  --space-3: 6mm;
+  --space-4: 10mm;
+  --space-5: 24mm;
+  --rule-width: 0.5pt;
+  --accent-width: 2pt;
+  --box-radius: 0;
+  --image-reserve-height: 70mm;
+}

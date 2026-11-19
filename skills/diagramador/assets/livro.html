@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>{{TITULO}}</title>
+<link rel="stylesheet" href="livro.css">
+</head>
+<body>
+<section class="capa">
+  <div class="capa-selo">Clinic Editora</div>
+  <div>
+    <div class="capa-colecao">{{COLECAO}}</div>
+    <h1>{{TITULO}}</h1>
+    <div class="capa-subtitulo">{{SUBTITULO}}</div>
+  </div>
+  <div class="capa-autores">{{AUTORES}}</div>
+</section>
+
+<section class="expediente">
+  <h1>Expediente</h1>
+  {{EXPEDIENTE}}
+</section>
+
+<section class="sumario">
+  <h1>Sumário</h1>
+  {{SUMARIO}}
+</section>
+
+<main class="corpo">
+{{CONTEUDO}}
+</main>
+</body>
+</html>
