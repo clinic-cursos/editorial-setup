@@ -59,10 +59,11 @@ def report_path(name: str, pdf: Path, samples: Path) -> Path:
     return report
 
 
-def image_problems(inserted: int) -> list[str]:
+def verdict(problems: list[str], inserted: int) -> tuple[str, list[str]]:
+    """Veredito e motivos: sem nenhuma imagem inserida o ensaio não provou o fluxo e reprova."""
     if inserted < 1:
-        return ["nenhuma imagem de teste foi inserida (sem candidatas ou todas recusadas)"]
-    return []
+        problems = problems + ["nenhuma imagem de teste foi inserida (sem candidatas ou todas recusadas)"]
+    return ("REPROVADO" if problems else "APROVADO"), problems
 
 
 def write_report(report: Path, text: str) -> None:
@@ -223,10 +224,10 @@ def sample(pdf: Path, work: Path) -> list[str]:
         problems.append("fonte DejaVu no PDF")
     if pages1 != pages2 or not same_layout:
         problems.append("a paginação mudou depois das imagens")
-    problems += image_problems(inserted)
+    result, problems = verdict(problems, inserted)
 
     steps += [
-        f"Resultado: {'REPROVADO' if problems else 'APROVADO'}",
+        f"Resultado: {result}",
         "",
         f"- Motivos: {'; '.join(problems) if problems else 'nenhum'}",
         f"- Metadados preenchidos a partir da capa e do expediente: {', '.join(sorted(meta))}",

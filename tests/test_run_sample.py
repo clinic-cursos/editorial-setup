@@ -22,45 +22,44 @@ def exit_code(call):
     return stop.value.code
 
 
-def test_report_equal_to_input_is_refused(samples):
-    assert exit_code(lambda: run_sample.report_path(str(samples / "livro.pdf"), samples / "livro.pdf", samples)) == 2
+@pytest.fixture
+def entry(samples, monkeypatch):
+    """main() com a primeira etapa pesada trocada por um erro: a recusa precisa vir antes dela."""
+    def heavy(*args, **kwargs):
+        raise AssertionError("a etapa pesada rodou")
+    monkeypatch.setattr(run_sample, "sample", heavy)
+    monkeypatch.setattr(run_sample, "run", heavy)
+    monkeypatch.setenv("EDITORIAL_SAMPLES_DIR", str(samples))
+    return run_sample.main
 
 
-def test_report_inside_samples_dir_is_refused(samples):
-    assert exit_code(lambda: run_sample.report_path(str(samples / "relatorio.md"), samples / "livro.pdf", samples)) == 2
+def test_main_refuses_report_equal_to_input(entry, samples):
+    assert exit_code(lambda: entry(["livro.pdf", str(samples / "livro.pdf")])) == 2
 
 
-def test_report_through_symlink_to_original_is_refused(samples, tmp_path):
+def test_main_refuses_report_inside_samples_dir(entry, samples):
+    assert exit_code(lambda: entry(["livro.pdf", str(samples / "relatorio.md")])) == 2
+
+
+def test_main_refuses_report_through_symlink_to_original(entry, samples, tmp_path):
     link = tmp_path / "relatorio.md"
     link.symlink_to(samples / "livro.pdf")
-    assert exit_code(lambda: run_sample.report_path(str(link), samples / "livro.pdf", samples)) == 2
+    assert exit_code(lambda: entry(["livro.pdf", str(link)])) == 2
 
 
-def test_report_must_end_in_md(samples, tmp_path):
-    assert exit_code(lambda: run_sample.report_path(str(tmp_path / "relatorio.txt"), samples / "livro.pdf", samples)) == 2
+def test_main_refuses_report_without_md(entry, tmp_path):
+    assert exit_code(lambda: entry(["livro.pdf", str(tmp_path / "relatorio.txt")])) == 2
 
 
-def test_report_outside_samples_is_accepted(samples, tmp_path):
-    assert run_sample.report_path(str(tmp_path / "out/relatorio.md"), samples / "livro.pdf", samples) == tmp_path / "out/relatorio.md"
-
-
-def test_input_with_dotdot_is_refused(samples, tmp_path):
+def test_main_refuses_input_outside_samples(entry, tmp_path):
     (tmp_path / "fora.pdf").write_bytes(b"%PDF-1.4")
-    assert exit_code(lambda: run_sample.input_path("../fora.pdf", samples)) == 2
+    assert exit_code(lambda: entry(["../fora.pdf", str(tmp_path / "r.md")])) == 2
 
 
-def test_absolute_input_is_refused(samples, tmp_path):
-    (tmp_path / "fora.pdf").write_bytes(b"%PDF-1.4")
-    assert exit_code(lambda: run_sample.input_path(str(tmp_path / "fora.pdf"), samples)) == 2
-
-
-def test_input_inside_samples_is_accepted(samples):
-    assert run_sample.input_path("livro.pdf", samples) == (samples / "livro.pdf").resolve()
-
-
-def test_verdict_with_zero_images_fails():
-    assert run_sample.image_problems(inserted=0) == ["nenhuma imagem de teste foi inserida (sem candidatas ou todas recusadas)"]
-    assert run_sample.image_problems(inserted=1) == []
+def test_main_accepts_input_resolving_inside_samples(entry, tmp_path):
+    # passa pelas validações e só então chega à etapa pesada, que o fixture faz levantar
+    with pytest.raises(AssertionError, match="etapa pesada"):
+        entry(["../amostras/livro.pdf", str(tmp_path / "r.md")])
 
 
 def test_write_report_never_writes_through_a_hard_link(samples, tmp_path):
@@ -71,3 +70,16 @@ def test_write_report_never_writes_through_a_hard_link(samples, tmp_path):
     assert original.read_bytes() == b"%PDF-1.4"
     assert link.read_text(encoding="utf-8") == "# relatório\n"
     assert not list(tmp_path.glob(".relatorio-*"))
+
+
+def test_verdict_with_zero_images_fails():
+    result, problems = run_sample.verdict([], inserted=0)
+    assert result == "REPROVADO" and "nenhuma imagem" in problems[0]
+
+
+def test_verdict_approves_with_an_image_and_no_problems():
+    assert run_sample.verdict([], inserted=1) == ("APROVADO", [])
+
+
+def test_verdict_keeps_other_problems():
+    assert run_sample.verdict(["x"], inserted=2) == ("REPROVADO", ["x"])
