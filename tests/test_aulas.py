@@ -54,3 +54,24 @@ def test_partnerships_can_be_disabled(tmp_path):
             "slides": [{"tipo": "capa", "titulo": "T", "curso": "C"}, {"tipo": "encerramento"}]}
     out, tipos = build(tmp_path, spec)
     assert len(Presentation(str(out)).slides) == len(tipos)
+
+
+def test_custom_pricing_keeps_the_cost_slide_when_declared(tmp_path):
+    spec = {"titulo": "T", "slides": [
+        {"tipo": "custos"},
+        {"tipo": "precificacao", "procedimentos": [{"nome": "Fios", "estrategia": "Upsell", "produto": 40,
+                                                   "preco": 150, "custo_fixo": 10, "insumos": 5}]},
+        {"tipo": "encerramento"}]}
+    out, _ = build(tmp_path, spec)
+    slides = list(Presentation(str(out)).slides)
+
+    def texts(s):
+        found = [sh.text_frame.text for sh in s.shapes if sh.has_text_frame]
+        for sh in s.shapes:
+            if sh.has_table:
+                found += [c.text for r in sh.table.rows for c in r.cells]
+        return found
+
+    assert "Como compor seu preço" in texts(slides[0])
+    assert "Aumente seu lucro com técnicas de venda" in texts(slides[1])
+    assert any("R$ 150" in x for x in texts(slides[1]))
