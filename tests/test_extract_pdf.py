@@ -15,6 +15,7 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "skills/diagramador/scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from build_book import build  # noqa: E402
+from manuscript import parse  # noqa: E402
 from text_fidelity import fidelity  # noqa: E402
 
 SCRIPT = SCRIPTS / "extract_pdf.py"
@@ -180,3 +181,21 @@ def test_list_numbering_preserved_across_pages(tmp_path):
     md = extract(path, tmp_path)[0].read_text(encoding="utf-8")
     assert "3. Terceiro item" in md and "4. Quarto item" in md and "5. Quinto item" in md
     assert "- Item solto com marcador\n- Outro item solto" in md
+
+
+def test_references_section_extracted_in_reader_format(tmp_path):
+    path = tmp_path / "refs.pdf"
+    c = canvas.Canvas(str(path), pagesize=A4)
+    for n, line in enumerate(BODY):
+        text(c, 760 - 14 * n, line)
+    text(c, 700, "Referências", 14, WINE)
+    text(c, 660, "SILVA, A. B. Toxina botulinica em dermatologia. Sao Paulo: Editora, 2020.")
+    text(c, 646, "Segunda linha da mesma referencia.")
+    text(c, 610, "Costa C. Acido hialuronico na pratica clinica. Rev Derm. 2019;12:1-9.")
+    c.save()
+    out, _, _ = extract(path, tmp_path)
+    md = out.read_text(encoding="utf-8")
+    assert "## Referências\n\n- [@silva2020] SILVA, A. B. Toxina botulinica em dermatologia. Sao Paulo: Editora, 2020. Segunda linha" in md
+    assert "- [@costa2019] Costa C. Acido hialuronico" in md
+    manuscript = parse(md)
+    assert manuscript.refs.keys() == {"silva2020", "costa2019"}

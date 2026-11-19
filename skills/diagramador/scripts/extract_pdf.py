@@ -6,6 +6,7 @@ from os.path import relpath
 from pathlib import Path
 import re
 import sys
+import unicodedata
 
 import pdfplumber
 from pypdf import PdfReader
@@ -15,6 +16,8 @@ HEADER_FRACTION, FOOTER_FRACTION = 0.07, 0.93
 PARAGRAPH_GAP = 2.0  # salto entre linhas, em corpos de fonte, que abre outro parágrafo
 LIST_ITEM = re.compile(r"(?:(\d+)\s*(?:—|–|-|\.|\))|[•▪●])\s+(?=\S)")
 PLACEHOLDER = "A preencher"
+REFERENCES_TITLE = re.compile(r"refer[eê]ncias( bibliogr[aá]ficas)?", re.IGNORECASE)
+REFERENCE_GAP = 1.7  # salto entre linhas, em corpos de fonte, que abre outra referência
 
 
 def is_wine(color):
@@ -81,7 +84,7 @@ def page_items(page, body, images_dir, output, figures, warnings, number):
 
 
 def render(source, output, images_dir):
-    warnings, blocks, list_items = [], [], []
+    warnings, blocks, list_items, references = [], [], [], None
     figures = {"count": 0, "files": [], "saved": {}, "reader": PdfReader(str(source))}
     with pdfplumber.open(source) as pdf:
         body = body_size(pdf.pages)
@@ -92,6 +95,7 @@ def render(source, output, images_dir):
             previous = None  # (tipo, top, tamanho) da linha anterior
             for top, kind, payload in page_items(page, body, images_dir, output, figures, warnings, number):
                 if kind == "figure":
+                    references = None
                     flush(blocks, list_items)
                     blocks.append(payload)
                     previous = None
@@ -99,6 +103,21 @@ def render(source, output, images_dir):
                 tag = classify(payload, body)
                 text = payload["text"].strip()
                 size = payload["chars"][0]["size"]
+                if references is not None and tag in ("p", "li"):  # bibliografia: uma entrada por referência
+                    marker = LIST_ITEM.match(text) if tag == "li" else None
+                    if previous and top - previous[1] <= REFERENCE_GAP * size and not marker and references:
+                        references[-1] += " " + text
+                    else:
+                        references.append(text[marker.end():] if marker else text)
+                    previous = (tag, top, size)
+                    continue
+                if tag in ("#", "##") and REFERENCES_TITLE.fullmatch(text):
+                    flush(blocks, list_items)
+                    references = references or []
+                    previous = None
+                    continue
+                if tag in ("#", "##"):
+                    references = None
                 close = previous and top - previous[1] <= PARAGRAPH_GAP * size
                 joins = close and previous[0] == tag
                 if tag == "li":
@@ -118,6 +137,10 @@ def render(source, output, images_dir):
                         blocks.append(text if tag == "p" else f"{tag} {text}")
                 previous = (tag, top, size)
         flush(blocks, list_items)
+    if references:  # o leitor exige as referências no fim do manuscrito
+        taken = set()
+        blocks.append("## Referências")
+        blocks.append("\n".join(f"- [@{reference_key(r, taken)}] {r}" for r in references))
     meta = {
         "title": (info.get("Title") or source.stem).strip(),
         "course": (info.get("Subject") or "").strip() or PLACEHOLDER,
@@ -128,6 +151,20 @@ def render(source, output, images_dir):
         warnings.append(f"metadados ausentes no PDF: preencha os campos «{PLACEHOLDER}» do manuscrito")
     header = "\n".join(f"{key}: {' '.join(value.split())}" for key, value in meta.items())
     return "\n\n".join([header, *blocks]) + "\n", figures["files"], warnings
+
+
+def reference_key(entry, taken):
+    """Chave a partir do sobrenome (primeira palavra) e do primeiro ano da entrada."""
+    word = re.match(r"[^\W\d_]+", entry)
+    name = unicodedata.normalize("NFKD", word[0]).encode("ascii", "ignore").decode().lower() if word else ""
+    year = re.search(r"\b(?:19|20)\d\d\b", entry)
+    key = (name or "ref") + (year[0] if year else "")
+    unique, suffix = key, 1
+    while unique in taken:
+        suffix += 1
+        unique = f"{key}-{suffix}"
+    taken.add(unique)
+    return unique
 
 
 def flush(blocks, list_items):
