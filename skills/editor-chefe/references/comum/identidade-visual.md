@@ -4,6 +4,12 @@
 - Use Montserrat nos títulos e Source Sans 3 no corpo. Distribua as fontes com a licença OFL.
 - Preserve as imagens originais, suas proporções, seus direitos de uso e as reservas para originais pendentes. Centralize na nota editorial a informação sobre imagens geradas por IA e distinga fotografias clínicas e materiais de terceiros.
 
+## Paleta do logo e cor dos livros
+
+A paleta do logo da Clinic Cursos vem do design system da Julie e vale para as imagens complementares conceituais. Ela reúne vinho (o marsala pedido pela Paula) `#9C4C48`, vinho escuro `#6E2F2C`, rosé `#B68B85`, rosé claro `#F4ECEA` e cinza `#6E6F73`.
+
+A cor dos livros aguarda a escolha do Alify após a comparação das páginas de amostra nas duas paletas (spec, seção 9.2). Até lá, use o bordô `#87082E` dos livros aprovados pela Paula.
+
 ## Componentes editoriais
 
 | Componente | Uso |

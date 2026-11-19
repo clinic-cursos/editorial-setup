@@ -8,6 +8,7 @@ dependencies = [
     "pypdf",
     "weasyprint",
     "python-docx",
+    "python-pptx",
 ]
 
 [dependency-groups]
