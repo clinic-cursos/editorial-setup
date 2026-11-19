@@ -195,7 +195,7 @@ def cite(text: str, refs: dict[str, str]) -> str:
 
     def one(m):
         data = refs[m[1]]
-        year = re.search(r"\b(?:1[5-9]|20)\d\d\b", data)
-        return f"({re.split(r'[,.;]', data)[0].strip()}, {year[0] if year else 's.d.'})"
+        years = re.findall(r"\b(?:1[5-9]|20)\d\d\b", data)
+        return f"({re.split(r'[,.;]', data)[0].strip()}, {years[-1] if years else 's.d.'})"
 
     return _CITATION.sub(one, text)

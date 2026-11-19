@@ -94,3 +94,8 @@ def test_faq_question_ends_with_question_mark():
     assert faq.entries == [("Quando aplicar?", "Depois da avaliação. Com cuidado."), ("Pode repetir?", "Sim.")]
     with pytest.raises(ManuscriptError, match="pergunta"):
         body(":::faq\nResposta sem pergunta.\n:::\n")
+
+
+def test_citation_year_is_last_year_in_reference():
+    ms = body("Fato [@a1].\n\n## Referências\n\n- [@a1] SILVA, A. Estudo sobre dados de 2010. Editora, 2024.\n")
+    assert cite(ms.blocks[0].text, ms.refs) == "Fato (SILVA, 2024)."
