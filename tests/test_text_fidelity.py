@@ -116,3 +116,20 @@ def test_duplicated_paragraph_equal_to_heading_fails(tmp_path, layout_pdf):
     md = tmp_path / "o.md"
     md.write_text("title: Texto aprovado.\ncourse: C\nauthors: A\nversion: 1\n\nTexto aprovado.\n", encoding="utf-8")
     assert main([str(md), str(layout_pdf(page))]) == 1
+
+
+def test_number_change_fails_regardless_of_ratio(tmp_path, capsys):
+    long = [" ".join(f"palavra{i}" for i in range(300)), "O intervalo mínimo entre as sessões é de 10 dias."]
+    a = write(tmp_path, "a.md", long)
+    b = write(tmp_path, "b.md", [long[0], long[1].replace("10", "20")])
+    assert min(fidelity(str(a), str(b))) >= 0.995  # a razão sozinha absorve a troca
+    assert main([str(a), str(b)]) == 1
+
+
+def test_number_difference_is_listed_with_context(tmp_path, capsys):
+    a = write(tmp_path, "a.md", ["Aplicar 5 ml por sessão no protocolo."])
+    b = write(tmp_path, "b.md", ["Aplicar 6 ml por sessão no protocolo."])
+    main([str(a), str(b)])
+    err = capsys.readouterr().err
+    assert "5" in err and "6" in err and "ml por" in err
+

@@ -79,8 +79,7 @@ def _tokens(text: str, vocabulary: set[str]) -> list[str]:
     return re.sub(r"(\w+)-\s+(\w+)", join, _normalized(text)).split()  # "5-10" fica
 
 
-def fidelity(original: str, output: str) -> tuple[float, float]:
-    """(fração do original presente na saída, fração da saída que vem do original), na mesma ordem."""
+def _analyze(original: str, output: str) -> tuple[tuple[float, float], list[str]]:
     is_pdf = lambda p: p.lower().endswith(".pdf")  # noqa: E731
     text_a = _pdf_text(original) if is_pdf(original) else _markdown_text(original)
     if is_pdf(output):  # o modelo só acrescenta texto de desenho a um original em Markdown
@@ -94,7 +93,17 @@ def fidelity(original: str, output: str) -> tuple[float, float]:
         raise ValueError(f"{original}: sem texto para comparar")
     matcher = SequenceMatcher(None, a, b, autojunk=False)
     matched = sum(len(w) for m in matcher.get_matching_blocks() for w in a[m.a : m.a + m.size])
-    return matched / total_a, (matched / total_b if total_b else 1.0)
+    changes = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag != "equal" and any(c.isdigit() for w in a[i1:i2] + b[j1:j2] for c in w):
+            around = lambda t, x, y: " ".join(t[max(x - 3, 0) : y + 3])  # noqa: E731
+            changes.append(f"número alterado: original «{around(a, i1, i2)}» / saída «{around(b, j1, j2)}»")
+    return (matched / total_a, matched / total_b if total_b else 1.0), changes
+
+
+def fidelity(original: str, output: str) -> tuple[float, float]:
+    """(fração do original presente na saída, fração da saída que vem do original), na mesma ordem."""
+    return _analyze(original, output)[0]
 
 
 def main(argv=None) -> int:
@@ -103,7 +112,7 @@ def main(argv=None) -> int:
     parser.add_argument("output")
     args = parser.parse_args(argv)
     try:
-        ratios = fidelity(args.original, args.output)
+        ratios, changes = _analyze(args.original, args.output)
     except (OSError, ValueError, ManuscriptError) as error:
         print(f"Não foi possível comparar: {error}", file=sys.stderr)
         return 2
@@ -111,7 +120,9 @@ def main(argv=None) -> int:
         print(f"Arquivo ilegível: {error}", file=sys.stderr)
         return 2
     print(" ".join(f"{r:.4f}" for r in ratios))
-    return 0 if min(ratios) >= THRESHOLD else 1
+    for change in changes:  # dose, intervalo, concentração ou ano trocados reprovam sozinhos
+        print(change, file=sys.stderr)
+    return 0 if min(ratios) >= THRESHOLD and not changes else 1
 
 
 if __name__ == "__main__":
