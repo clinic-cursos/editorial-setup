@@ -4,7 +4,6 @@ import argparse
 import json
 from pathlib import Path
 import sys
-from types import SimpleNamespace
 
 import pdfplumber
 
@@ -14,13 +13,9 @@ from pdfcheck.rules import load_rules
 MM = 72 / 25.4
 
 
-def candidates(pdf_path: str, margin_bottom_mm: float = 0) -> list[dict]:
-    rules = load_rules()
+def candidates(pdf_path: str) -> list[dict]:
     with pdfplumber.open(pdf_path) as pdf:
-        pages = pdf.pages
-        if margin_bottom_mm:  # o número de página mora na margem de composição, não no conteúdo
-            pages = [p.filter(lambda o, p=p: o["top"] < p.height - margin_bottom_mm * MM) for p in pages]
-        found = free_space(SimpleNamespace(pages=pages), rules)
+        found = free_space(pdf, load_rules())
     rows = []
     for f in found:
         width, height = (f.x1 - f.x0) / MM, (f.bottom - f.top) / MM
@@ -35,11 +30,9 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("pdf")
     parser.add_argument("--json", metavar="OUT", help="grava a lista em JSON")
-    parser.add_argument("--margin-bottom-mm", type=float, default=0,
-                        help="ignora o que está nesta faixa inferior (número de página do livro composto: 24)")
     args = parser.parse_args(argv)
     try:
-        rows = candidates(args.pdf, args.margin_bottom_mm)
+        rows = candidates(args.pdf)
         if args.json:
             Path(args.json).write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as error:  # PDF ilegível ou pasta de saída inválida

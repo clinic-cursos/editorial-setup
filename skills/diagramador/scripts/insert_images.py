@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 import re
 import sys
-from types import SimpleNamespace
 from urllib.parse import quote
 
 import pdfplumber
@@ -33,22 +32,18 @@ def _token_pt(name: str) -> float:
     return float(re.search(rf"--{name}:\s*([\d.]+)mm", TOKENS)[1]) * MM
 
 
-# O rodapé corrente (número de página) mora na margem de composição, não no conteúdo.
-MARGIN_BOTTOM_PT = _token_pt("page-margin-bottom")
 # A medição pára no fim da última letra; a margem e a entrelinha do bloco vêm depois dela.
 BLOCK_GAP_PT = _token_pt("space-3")
 
 
-def _cap_pt(free, page_height: float) -> float:
-    """Altura máxima da imagem: o espaço livre, até onde o texto deste livro pode chegar."""
-    return min(free.bottom, page_height - MARGIN_BOTTOM_PT) - free.top - BLOCK_GAP_PT
+def _cap_pt(free) -> float:
+    """Altura máxima da imagem: o espaço livre menos a margem do último bloco."""
+    return free.bottom - free.top - BLOCK_GAP_PT
 
 
-def _measure(pdf_path: str) -> tuple[list, float]:
+def _measure(pdf_path: str) -> list:
     with pdfplumber.open(pdf_path) as pdf:
-        height = pdf.pages[0].height
-        pages = [p.filter(lambda o, p=p: o["top"] < p.height - MARGIN_BOTTOM_PT) for p in pdf.pages]
-        return free_space(SimpleNamespace(pages=pages), load_rules()), height
+        return free_space(pdf, load_rules())
 
 
 def _figure(page: int, image: Path, out: Path, cap: float) -> str:
@@ -87,8 +82,7 @@ def insert(manuscript: str, images_dir: str, out_dir: str) -> tuple[list[int], l
     base = build(manuscript, out_dir)
     base_html = Path(base.html).read_text(encoding="utf-8")
     top = [b.id for b in parse(Path(manuscript).read_text(encoding="utf-8")).blocks]
-    free, height = _measure(base.pdf)
-    free = {f.page: f for f in free}
+    free = {f.page: f for f in _measure(base.pdf)}
     plan: dict[int, tuple[str, str]] = {}  # página -> (bloco de topo, figura em HTML)
     for image in sorted(Path(images_dir).iterdir()):
         m = IMAGE_NAME.fullmatch(image.name)
@@ -102,7 +96,7 @@ def insert(manuscript: str, images_dir: str, out_dir: str) -> tuple[list[int], l
             warnings.append(f"página {page}: {image.name} não abre como imagem; não entrou")
             continue
         starting = [i for i in top if base.layout[i] == page]
-        cap = _cap_pt(free[page], height) if page in free else 0
+        cap = _cap_pt(free[page]) if page in free else 0
         if page not in free:
             warnings.append(f"página {page}: sem espaço livre acima do limite; {image.name} não entrou")
         elif cap <= 0 or not starting:

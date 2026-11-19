@@ -37,6 +37,7 @@ class Rules:
     chapter_title_min_width_fraction: float = field(
         default_factory=lambda: _default_rule("chapter_title_min_width_fraction")
     )
+    page_margins_mm: dict = field(default_factory=lambda: _default_rule("page_margins_mm"))  # top/bottom, iguais ao tokens.css
 
 
 def load_rules(path: str | None = None) -> Rules:

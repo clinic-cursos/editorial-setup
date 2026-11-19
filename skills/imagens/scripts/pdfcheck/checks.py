@@ -262,20 +262,54 @@ def _chapter_opening(page, useful_width: float, rules: Rules) -> bool:
     )
 
 
+def _running_lines(pages: dict) -> set:
+    """Ids das linhas de faixa que são texto corrido: fólio em sequência ou linha repetida na mesma altura."""
+    band = [(number, line, text) for number, lines in pages.items() for line, text, in_band in lines if in_band]
+    total = len(pages)
+    offsets = defaultdict(set)  # deslocamento (número impresso - página do PDF) -> páginas
+    for number, _, text in band:
+        if text.isdigit():
+            offsets[int(text) - number].add(number)
+    folio = max(offsets, key=lambda k: len(offsets[k]), default=None)
+    folio_is_sequence = folio is not None and len(offsets[folio]) * 2 > total
+    running = set()
+    for number, line, text in band:
+        if text.isdigit():
+            if folio_is_sequence and int(text) - number == folio:
+                running.add(id(line))
+        elif total >= 3:
+            same = {n for n, other, t in band if t == text and abs(other["top"] - line["top"]) <= 2}
+            if len(same) * 2 >= total:
+                running.add(id(line))
+    return running
+
+
 def free_space(pdf, rules: Rules) -> list[FreeSpace]:
     margin = rules.safe_zone_mm * MM
     out = []
+    pages = {}
     for page in pdf.pages:
-        x0, y0, x1, bottom = page.bbox
-        x0, x1, bottom = x0 + margin, x1 - margin, bottom - margin
-        useful_height = bottom - y0 - margin
+        text_top = page.bbox[1] + rules.page_margins_mm["top"] * MM
+        bottom = page.bbox[3] - rules.page_margins_mm["bottom"] * MM
+        pages[page.page_number] = [(line, _normalized(line["text"]), line["bottom"] <= text_top or line["top"] >= bottom)
+                                   for line in _lines(page, return_chars=True)]
+    running = _running_lines(pages)
+    for page in pdf.pages:
+        x0, y0, x1, y1 = page.bbox
+        x0, x1 = x0 + margin, x1 - margin
+        text_top = y0 + rules.page_margins_mm["top"] * MM
+        bottom = y1 - rules.page_margins_mm["bottom"] * MM
+        useful_height = bottom - text_top
         if useful_height <= 0 or x1 <= x0:
             continue
-        objects = chain(page.chars, page.images, page.lines, page.rects, page.curves)
-        top = max((obj["bottom"] for obj in objects if obj["top"] < bottom), default=None)
+        # sai da conta só o texto corrido das faixas (fólio em sequência e linha repetida na mesma altura);
+        # imagem, linha, retângulo e texto de conteúdo contam onde estiverem
+        text = (c for line, _, _ in pages[page.page_number] if id(line) not in running for c in line["chars"])
+        objects = chain(text, page.images, page.lines, page.rects, page.curves)
+        top = max((obj["bottom"] for obj in objects), default=None)
         if top is None:
             continue
-        top = max(top, y0 + margin)
+        top = max(top, text_top)
         fraction = (bottom - top) / useful_height
         if fraction > rules.free_space_fraction and not _chapter_opening(page, x1 - x0, rules):
             out.append(FreeSpace(page.page_number, x0, top, x1, bottom, fraction))

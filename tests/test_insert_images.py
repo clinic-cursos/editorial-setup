@@ -53,7 +53,7 @@ def test_insert_keeps_pagination(tmp_path, capsys):
 def test_insert_reverts_when_page_breaks(tmp_path, monkeypatch, capsys):
     source, images = setup(tmp_path, size=(300, 900))  # alta: com o limite errado, não cabe
     base = build(str(source), str(tmp_path / "base"))
-    monkeypatch.setattr(insert_images, "_cap_pt", lambda free, page_height: 700.0)  # mede errado de propósito
+    monkeypatch.setattr(insert_images, "_cap_pt", lambda free: 700.0)  # mede errado de propósito
     out = tmp_path / "out"
     assert insert_images.main([str(source), str(images), "--out", str(out)]) == 0
     assert "página 5" in capsys.readouterr().err
@@ -105,7 +105,7 @@ def test_earlier_image_does_not_discard_later_one(tmp_path, monkeypatch, capsys)
     Image.new("RGB", (300, 900), "#C88FA0").save(images / "pagina-05.png")  # alta: estoura a página 5
     Image.new("RGB", (900, 300), "#C88FA0").save(images / "pagina-07.png")
     real = insert_images._cap_pt
-    monkeypatch.setattr(insert_images, "_cap_pt", lambda free, h: 700.0 if free.page == 5 else real(free, h))
+    monkeypatch.setattr(insert_images, "_cap_pt", lambda free: 700.0 if free.page == 5 else real(free))
     out = tmp_path / "out"
     assert insert_images.main([str(source), str(images), "--out", str(out)]) == 0
     captured = capsys.readouterr()
