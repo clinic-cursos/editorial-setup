@@ -111,6 +111,8 @@ Os scripts leem `assets/` pelo caminho relativo à própria pasta, então nada p
 ## Execução
 
 ```
+# no repositório: uv run --locked python skills/aulas/scripts/clinic_deck.py roteiro.json "Nome da Aula.pptx"
+# fora dele: exige python-pptx (pip install python-pptx; Pillow vem junto)
 python3 scripts/clinic_deck.py roteiro.json "Nome da Aula.pptx"
 ```
 

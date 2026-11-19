@@ -18,7 +18,7 @@ Transformar o material recebido numa aula em .pptx editável, seguindo a skill `
 
 ## Processo
 1. Siga o `## Como transformar o material em aula` da skill `aulas`, passo a passo.
-2. Rode `python3 scripts/clinic_deck.py roteiro.json "<nome da aula>.pptx"` a partir da pasta da skill.
+2. No repositório, rode `uv run --locked python skills/aulas/scripts/clinic_deck.py <roteiro.json> "<nome da aula>.pptx"`. Fora dele (ChatGPT, Codex, Claude), use `python3 scripts/clinic_deck.py ...` na pasta da skill, depois de confirmar que `python-pptx` está instalado.
 3. Se `soffice` existir, renderize a prévia (`soffice --headless --convert-to pdf` e `pdftoppm`) e corrija texto estourado ou sobreposto; sem `soffice`, diga isso no retorno.
 4. Entregue o .pptx e o roteiro; se o gerador gravou `<nome> - prompts de imagem.md` nesta execução, entregue-o; senão, diga no retorno que nenhum prompt foi gerado (`prompt_imagem` ausente ou vazio não gera arquivo).
 
