@@ -147,7 +147,7 @@ Critérios de aceite:
 - Distorção: proporção exibida difere da proporção em pixels em mais de `distortion_tolerance`; imagem girada usa a matriz de transformação; recorte por máscara não conta.
 - `check_page_numbers`: número impresso no rodapé em sequência; falta ou salto vira `page-number`.
 - `check_toc`: cada entrada do sumário (linha com título e número no fim) aponta para a página onde o título aparece; diferença vira `toc-mismatch`.
-- `free_space`: retângulo entre o fim do último objeto (texto, imagem ou desenho) e a zona de segurança inferior, na largura útil; entra quando a altura passa de `free_space_fraction` da altura útil. Página sem objeto e abertura de capítulo (maior título no terço de cima, ocupando a largura) ficam fora.
+- `free_space`: retângulo entre o fim do último objeto (texto, imagem ou desenho) e a margem inferior da mancha de texto (`page_margins_mm`, cartão 3.12), na largura útil, sem contar o fólio e o cabeçalho corrido; entra quando a altura passa de `free_space_fraction` da altura útil. Página sem objeto e abertura de capítulo (maior título no terço de cima, ocupando a largura) ficam fora.
 - Testes: `test_low_ppi_new_image_is_error`, `test_low_ppi_inherited_image_is_warning`, `test_distorted_image_detected`, `test_rotated_image_not_distorted`, `test_page_number_gap_detected`, `test_toc_mismatch_detected`, `test_free_space_listed_with_fraction`, `test_blank_page_not_candidate`, `test_chapter_opening_not_candidate`.
 Verificação: uv run --locked pytest tests/test_checks_layout.py -q && uv run --locked python scripts/package.py --check
 

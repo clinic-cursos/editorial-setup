@@ -134,7 +134,7 @@ Motor: só o WeasyPrint na V1, sem segundo motor. Se o teste de plataforma (crit
 ### 8.2 Checagem técnica (scripts)
 - `skills/auditor-grafico/scripts/audit_pdf.py`: lê o PDF com pdfplumber e pypdf e lista, por página, sobreposição de caixas de texto, texto fora da área útil, parágrafo duplicado, fonte fora da lista do manual, imagem com DPI efetivo abaixo do mínimo (pixels ÷ (largura exibida em pt ÷ 72)), imagem com proporção alterada, margens, número de página e entradas do sumário. Saída em JSON e Markdown.
 - `skills/diagramador/scripts/check_layout.py`: a mesma checagem em modo rápido, que o Diagramador roda antes de entregar (exigência da instrução da Paula, fase 2).
-- `skills/imagens/scripts/free_space.py`: mede o espaço livre de cada página (do fim do último objeto de texto, imagem ou desenho até a zona de segurança inferior, na largura útil) e lista as páginas com espaço acima do limite, com largura, altura e proporção do retângulo livre.
+- `skills/imagens/scripts/free_space.py`: mede o espaço livre de cada página (do fim do último objeto de texto, imagem ou desenho até a margem inferior da mancha de texto, na largura útil; o fólio e o cabeçalho corrido não contam como objeto) e lista as páginas com espaço acima do limite, com largura, altura e proporção do retângulo livre.
 
 Os três compartilham uma biblioteca pequena (`lib/pdfcheck/`), copiada para dentro de cada skill pelo script de empacotamento, porque uma skill não lê arquivo de outra.
 
