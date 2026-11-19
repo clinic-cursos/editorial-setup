@@ -10,9 +10,16 @@ import sys
 import re
 from urllib.parse import quote
 
+from PIL import Image, UnidentifiedImageError
 from weasyprint import HTML
 
 from manuscript import ManuscriptError, cite, parse, walk
+
+try:  # dentro da skill a cópia fica ao lado do script; no repositório, em lib/
+    from pdfcheck.rules import load_rules
+except ImportError:  # shortcut: a raiz do checkout só serve no repositório de desenvolvimento
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from lib.pdfcheck.rules import load_rules
 
 ASSETS = Path(__file__).resolve().parents[1] / "assets"
 LABELS = {
@@ -33,6 +40,21 @@ class BuildResult:
 
 def _url(target: Path, out_dir: Path) -> str:
     return quote(os.path.relpath(target, out_dir).replace("\\", "/"))
+
+
+def _figure_width_pt(image: Path) -> float | None:
+    try:
+        with Image.open(image) as picture:
+            pixels = picture.width
+    except UnidentifiedImageError:
+        return None  # o WeasyPrint também aceita figuras vetoriais, sem PPI
+
+    origin = image.with_name("origem.json")
+    metadata = json.loads(origin.read_text(encoding="utf-8")) if origin.is_file() else {}
+    ppi = metadata.get(image.name, {}).get("ppi")
+    if ppi is None:
+        ppi = load_rules().error_ppi
+    return pixels / ppi * 72
 
 
 def _render(block, base: Path, out_dir: Path, refs: dict[str, str]) -> str:
@@ -57,7 +79,9 @@ def _render(block, base: Path, out_dir: Path, refs: dict[str, str]) -> str:
         image = base / block.src
         if not image.is_file():
             raise ManuscriptError(f"figura {block.fig_id}: arquivo {block.src} não encontrado ao lado do manuscrito")
-        return (f'<figure id="{block.id}"><img src="{_url(image, out_dir)}" alt="{e(block.text)}">'
+        width = _figure_width_pt(image)
+        style = f' style="width:{width:.8f}pt"' if width is not None else ""
+        return (f'<figure id="{block.id}"><img src="{_url(image, out_dir)}" alt="{e(block.text)}"{style}>'
                 f'<p class="legenda">{e(block.text)}</p></figure>')
     entries = "".join(f'<li class="referencia">{escape(d)}</li>' for _, d in block.entries)
     return f'<ul id="{block.id}" class="referencias">{entries}</ul>'
