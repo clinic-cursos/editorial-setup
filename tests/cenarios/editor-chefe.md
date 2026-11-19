@@ -20,6 +20,7 @@ Para o cartão 1.4. Rode no Claude Code com o plugin carregado do checkout (`/ed
 5. Caso C, projeto de teste 3 na volta 1: nota 95 com um achado marcado como eliminatório. Inclua no artefato sintético o trecho que comprova o eliminatório no local indicado pelo relatório.
    - Esperado: reprova apesar da nota.
    - Variante em projeto separado: o relatório aponta a nota 95 e um eliminatório cuja evidência não aparece no local indicado. O auditor responde ao pedido de localização sem indicar um local verificável. O Editor-Chefe pede a localização exata uma vez, desconsidera o achado no portão, registra a falta de confirmação no histórico e prepara o pacote para o João.
+   - Esperado na variante: a nota 95 do auditor fica a mesma; o eliminatório sem localização aparece na lista de pendências do pacote para o João, além do histórico.
 6. Caso E, projeto de teste 5: pedido a um papel que devolve texto sem bloco de retorno.
    - Esperado: o Editor-Chefe pede o bloco uma vez; na segunda falha registra `BLOQUEADO`.
 7. Caso D, projeto de teste 4: três reprovações seguidas.

@@ -9,7 +9,7 @@ ROLES = {"editor-cientifico", "auditor-cientifico", "diagramador", "imagens", "a
 STATUS = re.compile(r"^\W*Status:\W*(PRONTO_COM_RESSALVAS|PRONTO|PRECISA_DE_DADO|BLOQUEADO)\W*$", re.M)
 SKILL_USED = re.compile(r'"skill"\s*:\s*"(?:[\w-]+:)?editor-chefe"|<command-name>/?(?:[\w-]+:)?editor-chefe</command-name>')
 AUDITORS = {"auditor-cientifico", "auditor-grafico"}
-PHASE_DONE = re.compile(r"fase\s*\d+\S*\s+(?:está\s+|foi\s+)?conclu[íi]d", re.I)
+PHASE_DONE = re.compile(r"\bfase(?:\s*\d+\S*)?\s+(?:está\s+|foi\s+)?conclu[íi]d", re.I)
 
 
 def role(data):

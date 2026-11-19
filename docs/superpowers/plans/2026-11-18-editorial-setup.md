@@ -147,7 +147,7 @@ Critérios de aceite:
 - Distorção: proporção exibida difere da proporção em pixels em mais de `distortion_tolerance`; imagem girada usa a matriz de transformação; recorte por máscara não conta.
 - `check_page_numbers`: número impresso no rodapé em sequência; falta ou salto vira `page-number`.
 - `check_toc`: cada entrada do sumário (linha com título e número no fim) aponta para a página onde o título aparece; diferença vira `toc-mismatch`.
-- `free_space`: retângulo entre o fim do último objeto (texto, imagem ou desenho) e a zona de segurança inferior, na largura útil; entra quando a altura passa de `free_space_fraction` da altura útil. Página sem objeto e abertura de capítulo (maior título no terço de cima, ocupando a largura) ficam fora.
+- `free_space`: retângulo entre o fim do último objeto (texto, imagem ou desenho) e a margem inferior da mancha de texto (`page_margins_mm`, cartão 3.12), na largura útil, sem contar o fólio e o cabeçalho corrido; entra quando a altura passa de `free_space_fraction` da altura útil. Página sem objeto e abertura de capítulo (maior título no terço de cima, ocupando a largura) ficam fora.
 - Testes: `test_low_ppi_new_image_is_error`, `test_low_ppi_inherited_image_is_warning`, `test_distorted_image_detected`, `test_rotated_image_not_distorted`, `test_page_number_gap_detected`, `test_toc_mismatch_detected`, `test_free_space_listed_with_fraction`, `test_blank_page_not_candidate`, `test_chapter_opening_not_candidate`.
 Verificação: uv run --locked pytest tests/test_checks_layout.py -q && uv run --locked python scripts/package.py --check
 
@@ -332,6 +332,53 @@ Verificação: grep -q "Fase concluída" docs/guia-paula.md && grep -q "Como mel
 #### Cartão 6.3 (manual, Paula): Instalação e uso real no ChatGPT
 Objetivo: a Paula instala os zips do 6.1 (ou a versão em Projeto) no ChatGPT dela e passa a trabalhar com o setup, começando pelo pedido de exemplo num livro real (critério 7 da spec).
 Critérios de aceite: `docs/medicoes/2026-11-instalacao.md` com plataforma, plano, o que funcionou, o que não funcionou e o tempo gasto; sem trecho de livro.
+
+### Onda 7: aulas e estilo da casa da Julie (spec 9.2)
+Pode correr em paralelo às ondas 4 a 6. Fonte: `docs/fontes/2026-11-19-julie-design-system/`; os arquivos extraídos do HTML (SKILL.md original, `clinic_deck.py`, `bold_deck.py`, `assets_b64.json`, `exemplo_roteiro.json`) são reconstruídos a partir dele.
+
+#### Cartão 7.1: Skill e agente de aulas
+Função: ai
+Requer: internet
+Objetivo: trazer a skill de aulas da Julie para o repositório como papel `aulas`, com o gerador e os assets como arquivos, testada.
+Arquivos permitidos: skills/aulas/**, agents/editorial/aulas.md, pyproject.toml, uv.lock, tests/test_aulas.py
+Critérios de aceite:
+- `skills/aulas/SKILL.md` com o conteúdo da skill da Julie, adaptado só onde o ambiente muda: os caminhos apontam para `scripts/` e `assets/` da própria skill, sem ler do Project; `name: aulas`; description até 1.024 caracteres. O visual e as regras dela não mudam.
+- `skills/aulas/scripts/clinic_deck.py` e `bold_deck.py` como a Julie entregou, mudando só o caminho dos assets; `skills/aulas/assets/` com os 16 arquivos de `assets_b64.json` decodificados; `skills/aulas/references/exemplo_roteiro.json`.
+- `python-pptx` no `pyproject.toml` (Pillow já vem pelo WeasyPrint); `uv.lock` atualizado.
+- `agents/editorial/aulas.md`: `model: sonnet`, `effort: medium`, `maxTurns: 40`, `skills: [aulas]`.
+- Testes: `test_example_script_builds_pptx` (o roteiro de exemplo gera um .pptx que abre no python-pptx, com os slides do roteiro mais os inseridos automaticamente), `test_prompts_markdown_written`, `test_partnership_slides_inserted_by_default`, `test_partnerships_can_be_disabled`.
+- `package.py --sync` rodado.
+Verificação: uv run --locked pytest tests/test_aulas.py -q && uv run --locked python scripts/package.py --check
+
+#### Cartão 7.2: Estilo da casa nas imagens
+Função: ai
+Objetivo: a skill `imagens` adota a paleta do logo e o texto de estilo da casa da Julie.
+Arquivos permitidos: skills/imagens/SKILL.md, skills/imagens/references/**, shared/references/identidade-visual.md, skills/*/references/comum/**
+Critérios de aceite:
+- `paleta.md` com a paleta do logo da spec 9.2, cada valor com a origem (design system da Julie); o marsala do pedido da Paula é o vinho `#9C4C48`; sai a marca "a confirmar com a Paula".
+- O briefing termina todo prompt com o texto de estilo da casa da Julie, versão ilustração ou versão foto, copiado literalmente do design system.
+- A regra dos livros continua: imagem complementar só conceitual, sem anatomia, pele, procedimento, produto de marca ou resultado.
+- `identidade-visual.md` registra a paleta do logo e diz que a cor dos livros espera a escolha do Alify (spec 9.2).
+- `package.py --sync` rodado.
+Verificação: grep -q "9C4C48" skills/imagens/references/paleta.md && ! grep -q "a confirmar com a Paula" skills/imagens/references/paleta.md && uv run --locked python scripts/package.py --check
+
+#### Cartão 7.3: Páginas de amostra nas duas paletas
+Função: frontend
+Objetivo: renderizar as três páginas de amostra do livro com a paleta do logo, ao lado das atuais, para o Alify escolher a cor dos livros.
+Arquivos permitidos: docs/medicoes/paleta/**, scripts/render_palette_samples.py
+Critérios de aceite:
+- `scripts/render_palette_samples.py` renderiza `tests/samples/amostra.html` duas vezes, com o `tokens.css` atual e com uma cópia temporária em que as cores vêm da paleta do logo, sem alterar o `tokens.css` do repositório.
+- `docs/medicoes/paleta/` com as três páginas em PNG de cada paleta e um `comparacao.md` com as duas lado a lado e a lista de cores trocadas.
+Verificação: test -s docs/medicoes/paleta/comparacao.md && ls docs/medicoes/paleta/*.png | wc -l | grep -q 6
+
+#### Cartão 7.4: Editor-Chefe aciona as aulas
+Função: ai
+Objetivo: a tabela de gatilhos do Editor-Chefe passa a acionar `aulas`.
+Arquivos permitidos: skills/editor-chefe/SKILL.md, skills/editor-chefe/references/fluxo.md
+Critérios de aceite:
+- Gatilho novo: pedido de produzir ou refazer uma aula aciona `aulas`; a aula gerada volta ao Editor-Chefe pelo bloco de retorno e vai para a pessoa conferir (não há portão de nota para aulas na V1).
+- O fluxo diz que o roteiro em JSON da aula pode ser entregue ao `editor-cientifico` como fonte estruturada dos slides.
+Verificação: grep -q "aulas" skills/editor-chefe/SKILL.md && uv run --locked python scripts/package.py --check
 
 ## Status
 - Feito (18 e 19/11/2026, onda 1 e onda 2, PR da `feat/wave-1`):
