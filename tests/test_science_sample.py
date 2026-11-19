@@ -50,6 +50,10 @@ def test_every_slide_mapped():
     table = (SAMPLE / "slide-a-capitulo.md").read_text(encoding="utf-8")
     mapped = {int(m) for m in re.findall(r"^\|[^|]*\|\s*(\d+)\s*\|", table, re.M)}
     assert slides - mapped == set(), "orphan slides"
+    for line in table.splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) == 5 and cells[1].isdigit():
+            assert cells[3] or cells[4], f"slide {cells[1]} has no destination or justification"
     manuscript = (SAMPLE / "manuscrito.md").read_text(encoding="utf-8")
     marked = {int(m) for m in re.findall(r"<!-- slide: (\d+) -->", manuscript)}
     cover_like = {int(m) for m in re.findall(r"^\|[^|]*\|\s*(\d+)\s*\|[^|]*\|\s*Sem texto próprio", table, re.M)}
