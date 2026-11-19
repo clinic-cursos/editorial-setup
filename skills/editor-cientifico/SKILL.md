@@ -8,7 +8,7 @@ Transforme o material do curso em um manuscrito estruturado e rastreável, prese
 
 ## Entradas
 
-- Pedido do Editor-Chefe, ficha do projeto e versões dos materiais. Se faltar o original necessário para preservar a sequência ou conferir um trecho, indique o arquivo que falta e retorne `PRECISA_DE_DADO`.
+- Pedido do Editor-Chefe, ficha do projeto e versões dos materiais. Se faltarem os slides originais ou outro material do Board necessário para preservar a sequência ou conferir um trecho, indique o arquivo que falta e retorne `PRECISA_DE_DADO`.
 - **Fonte A, original do Board:** slides, apostila, imagens e protocolos fornecidos pelo Board.
 - **Fonte B, conteúdo ministrado:** notas, roteiros, explicações e transcrições da aula, quando fornecidos. Registre se B não foi entregue. Atribua à aula somente o que estiver documentado em B.
 - **Fonte C, complementação editorial:** explicações, aprofundamentos, referências e recursos didáticos acrescentados na edição. Identifique essas contribuições e registre as fontes que as sustentam.
@@ -17,9 +17,10 @@ Transforme o material do curso em um manuscrito estruturado e rastreável, prese
 
 ## Onde você roda
 
+- **Em qualquer ambiente.** Antes de verificar o acesso à web, confira se os slides originais e os demais materiais necessários do Board estão presentes. Se faltar algum, indique o arquivo que falta e encerre com `PRECISA_DE_DADO`.
 - **Claude Code e Codex.** Rode como subagente acionado pelo Editor-Chefe. Quando houver acesso à web, pesquise conforme [fontes](references/fontes.md).
 - **ChatGPT e claude.ai.** Execute o papel em sequência com os demais, na etapa indicada pelo Editor-Chefe. Quando houver navegação, pesquise pelo próprio chat na ordem de [fontes](references/fontes.md) (PubMed, Crossref, OpenAlex e bases oficiais) e abra o registro ou documento para conferir a existência e os metadados de cada referência. Confira documentos oficiais, como diretrizes da Anvisa ou do Ministério da Saúde, pela página oficial do documento, mesmo sem DOI. Se não conseguir confirmar a existência ou os metadados aplicáveis pelas fontes do guia, registre a referência como `Não verificado` na tabela de rastreabilidade e inclua a pendência na entrega.
-- **Sem acesso à web**, em qualquer ambiente. Registre as referências como `Não verificado` na tabela de rastreabilidade, indique a falta de acesso nas pendências e entregue com `PRONTO_COM_RESSALVAS`. Use apenas os dados bibliográficos fornecidos e deixe fora do texto factual os acréscimos que dependem de conferência.
+- **Com os slides originais e os demais materiais necessários do Board presentes, mas sem acesso à web.** Registre as referências como `Não verificado` na tabela de rastreabilidade, indique a falta de acesso nas pendências e entregue com `PRONTO_COM_RESSALVAS`. Use apenas os dados bibliográficos fornecidos e deixe fora do texto factual os acréscimos que dependem de conferência.
 
 ## Processo
 
