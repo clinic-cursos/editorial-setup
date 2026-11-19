@@ -290,13 +290,13 @@ def _running_lines(pages: dict) -> set:
     total = len(pages)
     offsets = defaultdict(set)  # deslocamento (número impresso - página do PDF) -> páginas
     for number, _, text in band:
-        if text.isdigit():
+        if text.isdecimal():
             offsets[int(text) - number].add(number)
     folio = max(offsets, key=lambda k: len(offsets[k]), default=None)
     folio_is_sequence = folio is not None and len(offsets[folio]) * 2 > total
     running = set()
     for number, line, text in band:
-        if text.isdigit():
+        if text.isdecimal():
             if folio_is_sequence and int(text) - number == folio:
                 running.add(id(line))
         elif total >= 3:

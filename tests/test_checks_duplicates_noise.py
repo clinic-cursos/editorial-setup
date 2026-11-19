@@ -80,3 +80,8 @@ def test_allowed_repeat_with_ellipsis_is_not_flagged(tmp_path, open_pdf, test_ru
     rules = dataclasses.replace(test_rules, allowed_repeats=[notice])
     assert checks.check_duplicates(open_pdf(path), rules) == []
 
+
+
+def test_non_ascii_digit_in_band_does_not_crash():
+    pages = {1: [({"top": 40.0, "bottom": 46.0}, "፩", True)]}
+    assert checks._running_lines(pages) == set()
