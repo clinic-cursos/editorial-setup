@@ -65,6 +65,19 @@ def image_problems(inserted: int) -> list[str]:
     return []
 
 
+def write_report(report: Path, text: str) -> None:
+    """Grave num arquivo novo e troque: nunca escreve no inode de um link físico para um original."""
+    report.parent.mkdir(parents=True, exist_ok=True)
+    handle, temp = tempfile.mkstemp(dir=report.parent, prefix=".relatorio-", suffix=".tmp")
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as out:
+            out.write(text)
+        os.replace(temp, report)
+    except BaseException:
+        os.unlink(temp)
+        raise
+
+
 def fill_metadata(manuscript: Path) -> dict:
     """Preencha título, curso e autores a partir da capa e do expediente que o extrator pôs no Markdown."""
     text = manuscript.read_text(encoding="utf-8")
@@ -268,8 +281,7 @@ def main(argv: list[str]) -> int:
                 *TIMEOUT_CAUSES.get(str(step), ["- sem hipótese registrada para este script"]),
             ]
     try:
-        report.parent.mkdir(parents=True, exist_ok=True)
-        report.write_text(f"# Ensaio de diagramação: {Path(argv[0]).stem}\n\n" + "\n".join(body) + "\n", encoding="utf-8")
+        write_report(report, f"# Ensaio de diagramação: {Path(argv[0]).stem}\n\n" + "\n".join(body) + "\n")
     except OSError as error:
         fail(f"Não foi possível gravar {report}: {error}")
     return 0

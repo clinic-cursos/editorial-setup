@@ -61,3 +61,13 @@ def test_input_inside_samples_is_accepted(samples):
 def test_verdict_with_zero_images_fails():
     assert run_sample.image_problems(inserted=0) == ["nenhuma imagem de teste foi inserida (sem candidatas ou todas recusadas)"]
     assert run_sample.image_problems(inserted=1) == []
+
+
+def test_write_report_never_writes_through_a_hard_link(samples, tmp_path):
+    original = samples / "livro.pdf"
+    link = tmp_path / "relatorio.md"
+    link.hardlink_to(original)
+    run_sample.write_report(link, "# relatório\n")
+    assert original.read_bytes() == b"%PDF-1.4"
+    assert link.read_text(encoding="utf-8") == "# relatório\n"
+    assert not list(tmp_path.glob(".relatorio-*"))
