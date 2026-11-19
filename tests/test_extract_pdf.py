@@ -149,3 +149,14 @@ def test_inline_image_extracted(tmp_path):
     assert len(refs) == 2 and "imagem" not in stderr
     assert sorted(p.name for p in images.iterdir()) == ["fig-1.png", "fig-2.png"]
     assert Image.open(images / "fig-1.png").getpixel((0, 0))[2] > 200  # azul primeiro
+
+
+def test_images_dir_with_space_fails(book_pdf, tmp_path):
+    out = tmp_path / "texto" / "manuscrito.md"
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), str(book_pdf), "--out", str(out), "--images", str(out.parent / "minhas imagens")],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 2
+    assert "use um nome de pasta sem espaços" in result.stderr
+    assert not out.exists()
