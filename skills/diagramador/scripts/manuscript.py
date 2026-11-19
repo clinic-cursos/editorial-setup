@@ -27,6 +27,7 @@ class Block:
     text: str = ""  # título, parágrafo ou legenda
     level: int = 0
     ordered: bool = False
+    start: int = 1  # número do primeiro item da lista numerada
     items: list[str] = field(default_factory=list)  # itens da lista
     kind: str = ""  # tipo da caixa editorial
     children: list["Block"] = field(default_factory=list)  # conteúdo da caixa
@@ -146,11 +147,12 @@ def _parse_blocks(lines, first_number, counter, *, inside_box=False) -> list[Blo
         elif _BULLET.fullmatch(line) or _NUMBERED.fullmatch(line):
             ordered = bool(_NUMBERED.fullmatch(line))
             pattern = _NUMBERED if ordered else _BULLET
+            first = line
             items = [pattern.fullmatch(line)[1]]
             while i < len(lines) and (m := pattern.fullmatch(lines[i].rstrip())):
                 items.append(m[1])
                 i += 1
-            new(type="list", ordered=ordered, items=items)
+            new(type="list", ordered=ordered, items=items, start=int(re.match(r"\d+", first)[0]) if ordered else 1)
         else:
             parts = [line.strip()]
             while i < len(lines) and lines[i].strip() and not _starts_block(lines[i].rstrip()):

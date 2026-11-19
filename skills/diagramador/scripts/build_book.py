@@ -44,7 +44,8 @@ def _render(block, base: Path, out_dir: Path, refs: dict[str, str]) -> str:
     if block.type == "list":
         tag = "ol" if block.ordered else "ul"
         items = "".join(f"<li>{e(i)}</li>" for i in block.items)
-        return f'<{tag} id="{block.id}">{items}</{tag}>'
+        start = f' start="{block.start}"' if block.ordered and block.start != 1 else ""
+        return f'<{tag} id="{block.id}"{start}>{items}</{tag}>'
     if block.type == "box":
         css = CSS_CLASS.get(block.kind, block.kind)
         inner = "".join(_render(c, base, out_dir, refs) for c in block.children)
