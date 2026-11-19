@@ -168,3 +168,19 @@ def test_incomplete_read_unverified(monkeypatch, tmp_path, capsys):
     assert verify_refs.main([str(path)]) == 0
     out = json.loads(capsys.readouterr().out)[0]
     assert out["status"] == "unverified" and out["reason"] == "IncompleteRead"
+
+
+def test_missing_author_unverified(monkeypatch, tmp_path, capsys):
+    crossref = {"message": {k: v for k, v in CROSSREF["message"].items() if k != "author"}}
+    path, _ = run(monkeypatch, tmp_path, [REF], {"https://api.crossref.org/works/": crossref})
+    assert verify_refs.main([str(path)]) == 0
+    out = json.loads(capsys.readouterr().out)[0]
+    assert out["status"] == "unverified" and "autor" in out["detail"]
+
+
+def test_missing_title_unverified(monkeypatch, tmp_path, capsys):
+    crossref = {"message": {k: v for k, v in CROSSREF["message"].items() if k != "title"}}
+    path, _ = run(monkeypatch, tmp_path, [REF], {"https://api.crossref.org/works/": crossref})
+    assert verify_refs.main([str(path)]) == 0
+    out = json.loads(capsys.readouterr().out)[0]
+    assert out["status"] == "unverified" and "título" in out["detail"]

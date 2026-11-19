@@ -89,7 +89,9 @@ def _surname_tokens(name: str, pubmed: bool = False) -> list[str]:
 def _compare(ref: dict, remote: dict) -> tuple[list[str], list[str]]:
     """Devolve (divergências, o que a fonte não trouxe)."""
     problems, missing = [], []
-    if SequenceMatcher(None, _norm(ref.get("title", "")), _norm(remote["title"])).ratio() < TITLE_RATIO:
+    if not remote["title"]:
+        missing.append("a fonte não trouxe o título")
+    elif SequenceMatcher(None, _norm(ref.get("title", "")), _norm(remote["title"])).ratio() < TITLE_RATIO:
         problems.append(f"title: '{ref.get('title')}' x '{remote['title']}'")
     if remote["year"] is None:
         missing.append("a fonte não trouxe o ano")
@@ -97,11 +99,13 @@ def _compare(ref: dict, remote: dict) -> tuple[list[str], list[str]]:
         problems.append(f"year: {ref.get('year')} x {remote['year']}")
     author = _first_author(ref.get("authors"))
     remote_tokens = _surname_tokens(remote["first_author"], remote.get("pubmed", False))
-    if "," in author:
+    if not remote_tokens:
+        missing.append("a fonte não trouxe o autor")
+    elif "," in author:
         same = _surname_tokens(author.split(",")[0]) == remote_tokens
     else:
-        same = bool(remote_tokens) and _surname_tokens(author)[-len(remote_tokens):] == remote_tokens
-    if not same:
+        same = _surname_tokens(author)[-len(remote_tokens):] == remote_tokens
+    if remote_tokens and not same:
         problems.append(f"first author: '{author}' x '{remote['first_author']}'")
     return problems, missing
 
