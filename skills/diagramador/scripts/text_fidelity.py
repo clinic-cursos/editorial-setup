@@ -82,11 +82,15 @@ def _vocabulary(text: str) -> set[str]:
 
 def _tokens(text: str, vocabulary: set[str]) -> list[str]:
     def join(m):  # hífen de quebra de linha; composto só mantém o hífen se o original o tem
-        dashed, plain = f"{m[1]}-{m[2]}", m[1] + m[2]
-        return dashed if dashed in vocabulary and plain not in vocabulary else plain
+        left, right = m[1], m[2]
+        if not (left[-1].isalpha() and right[0].isalpha()):
+            return m[0]
+        dashed, plain = f"{left}-{right}", left + right
+        return f"{left}-" if dashed in vocabulary and plain not in vocabulary else left
 
     both = {w for w in vocabulary if "-" in w and w.replace("-", "") in vocabulary}  # as duas grafias no original
-    text = re.sub(r"(\w+)-\s+(\w+)", join, _normalized(text))  # "5-10" fica
+    # O lookahead deixa a palavra à direita disponível para a próxima quebra.
+    text = re.sub(r"(\w+)-\s+(?=(\w+))", join, _normalized(text))
     return re.sub(r"\w+(?:-\w+)+", lambda m: m[0].replace("-", "") if m[0] in both else m[0], text).split()
 
 

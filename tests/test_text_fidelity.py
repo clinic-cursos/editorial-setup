@@ -89,6 +89,26 @@ def test_content_hyphen_preserved(tmp_path):
     assert main([str(a), str(b)]) == 1
 
 
+@pytest.mark.parametrize(
+    ("original", "output"),
+    [("5- 10 U", "510 U"), ("5- 10 U", "5-10 U"), ("5- U", "5U"), ("U- 5", "U5")],
+)
+def test_hyphen_with_adjacent_digit_is_preserved(tmp_path, capsys, original, output):
+    a = write(tmp_path, "a.md", [original])
+    b = write(tmp_path, "b.md", [output])
+    assert main([str(a), str(b)]) == 1
+    error = capsys.readouterr().err
+    assert "número alterado" in error
+    assert f"original «{original.lower()}» / saída «{output.lower()}»" in error
+
+
+@pytest.mark.parametrize("prefix", ["", "5- "])
+def test_hyphenation_between_letters_still_matches(tmp_path, prefix):
+    a = write(tmp_path, "a.md", [f"{prefix}preenchedor"])
+    b = write(tmp_path, "b.md", [f"{prefix}pre- enchedor"])
+    assert fidelity(str(a), str(b)) == (1.0, 1.0)
+
+
 def test_built_book_keeps_fidelity(tmp_path):
     source = tmp_path / "livro.md"
     source.write_text(
