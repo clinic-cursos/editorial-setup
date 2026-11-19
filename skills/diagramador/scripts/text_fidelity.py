@@ -76,7 +76,9 @@ def _tokens(text: str, vocabulary: set[str]) -> list[str]:
         dashed, plain = f"{m[1]}-{m[2]}", m[1] + m[2]
         return dashed if dashed in vocabulary and plain not in vocabulary else plain
 
-    return re.sub(r"(\w+)-\s+(\w+)", join, _normalized(text)).split()  # "5-10" fica
+    both = {w for w in vocabulary if "-" in w and w.replace("-", "") in vocabulary}  # as duas grafias no original
+    text = re.sub(r"(\w+)-\s+(\w+)", join, _normalized(text))  # "5-10" fica
+    return re.sub(r"\w+(?:-\w+)+", lambda m: m[0].replace("-", "") if m[0] in both else m[0], text).split()
 
 
 def _analyze(original: str, output: str) -> tuple[tuple[float, float], list[str]]:

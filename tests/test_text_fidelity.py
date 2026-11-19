@@ -140,3 +140,9 @@ def test_cli_prints_four_decimals(tmp_path, capsys):
     b = write(tmp_path, "b.md", PARAGRAPHS[:2])
     main([str(a), str(b)])
     assert all(len(x.split(".")[1]) == 4 for x in capsys.readouterr().out.split())
+
+
+def test_compound_with_both_forms_in_original_matches(tmp_path):
+    a = write(tmp_path, "a.md", ["O efeito anti-inflamatório e o termo antiinflamatório aparecem aqui."])
+    b = write(tmp_path, "b.md", ["O efeito anti-\ninflamatório e o termo antiinflamatório aparecem aqui."])
+    assert fidelity(str(a), str(b)) == (1.0, 1.0)
