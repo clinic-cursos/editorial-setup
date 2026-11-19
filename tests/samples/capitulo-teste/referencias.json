@@ -1,0 +1,5 @@
+[
+  {"key": "lecun2015", "title": "Deep learning", "authors": ["LeCun, Yann"], "year": 2015, "doi": "10.1038/nature14539"},
+  {"key": "pubmed2015", "title": "Deep learning", "authors": ["LeCun, Yann"], "year": 2015, "pmid": "26017442"},
+  {"key": "inventado2099", "title": "Estudo inexistente plantado para o teste", "authors": ["Inventado, Autor"], "year": 2024, "doi": "10.9999/planted.2024.0001"}
+]
