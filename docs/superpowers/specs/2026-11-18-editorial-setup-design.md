@@ -189,6 +189,14 @@ O objetivo é a Paula já trabalhar com o setup no ChatGPT, que ela usa todo dia
 - A mudança entra no repositório, passa pelos testes e pelo `package.py`, sobe a versão do plugin e ganha uma linha em `CHANGELOG.md`; a Paula reinstala o pacote novo.
 - Mudança feita direto na skill instalada no ChatGPT se perde no próximo pacote; o guia dela diz para mandar de volta.
 
+## 9.2 Material da Julie: aulas e estilo da casa (19/11/2026)
+A Julie enviou o design system das aulas da Clinic Cursos (`docs/fontes/2026-11-19-julie-design-system/`). Ele traz uma skill pronta, `clinic-cursos-aulas`, que gera a aula em PowerPoint editável a partir de material solto (roteiro em JSON, gerador `clinic_deck.py` em python-pptx, 19 tipos de slide, precificação, parcerias e encerramento automáticos, prompts de imagem). Traz também a paleta do logo e o estilo da casa das imagens. O Alify pediu para seguir essas referências na produção dos slides e dos livros.
+
+- **Papel `aulas`:** a skill da Julie entra no repositório como sétimo papel, sem mudar o visual dela, que já é o padrão aprovado das aulas. Os assets (logos, foto de fundo, QR codes, ícones) entram como arquivos da skill. O Editor-Chefe aciona `aulas` quando o pedido é produzir ou refazer uma aula. O roteiro em JSON é estruturado e pode alimentar a tabela slide a capítulo do Editor Científico.
+- **Estilo da casa nas imagens:** a skill `imagens` passa a usar a paleta do logo (vinho `#9C4C48`, vinho escuro `#6E2F2C`, rosé `#B68B85`, rosé claro `#F4ECEA`, cinza `#6E6F73`) e o texto fixo de estilo da Julie no fim de todo prompt. O "marsala" do pedido da Paula é o vinho `#9C4C48`. A regra dos livros continua: imagem complementar só conceitual.
+- **Cor dos livros:** os livros aprovados pela Paula usam o bordô `#87082E`; a Julie dá o vinho `#9C4C48` como cor do logo. A troca é mudança visível e espera a escolha do Alify sobre as páginas de amostra renderizadas nas duas paletas. Até lá, o `tokens.css` fica no bordô.
+- **Cuidados:** o gerador traz o contato comercial da Galderma (nome e telefone), que aparece no slide de parceria; os QR codes de Residência e Pós-graduação estão em baixa resolução, segundo a própria Julie, e precisam ser trocados pelos originais.
+
 ## 10. Critérios de aceite
 Em ordem de construção, seguindo a ordem oficial da Paula (Editor-Chefe, Diagramador, Editor Científico, Auditor Científico, Auditor Gráfico) e pondo o agente de imagens logo depois do Diagramador, porque o pedido de exemplo usa os dois juntos.
 
