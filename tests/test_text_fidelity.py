@@ -187,6 +187,21 @@ def test_letter_compound_matches_spaced_form(tmp_path, original, output):
     assert fidelity(str(a), str(b)) == (1.0, 1.0)
 
 
+@pytest.mark.parametrize("prefix", ["http://example.org/", "https://example.org/", "www.example.org/", "doi.org/"])
+@pytest.mark.parametrize(("original", "output"), [
+    ("guia-clinico", "guia clinico"),
+    ("guia- clinico", "guiaclinico"),
+    ("guia\u00adclinico", "guiaclinico"),
+])
+def test_url_hyphen_changes_are_reported(tmp_path, capsys, prefix, original, output):
+    a = write(tmp_path, "a.md", [prefix + original])
+    b = write(tmp_path, "b.md", [prefix + output])
+    assert main([str(a), str(b)]) == 1
+    error = capsys.readouterr().err
+    assert "trecho perdido" in error
+    assert prefix + original in error
+
+
 FONT = Path(__file__).resolve().parent.parent / "skills/diagramador/assets/fonts/SourceSans3-Regular.ttf"
 WORDS = [f"palavra{i}" for i in range(300)]
 FILLER = " ".join(WORDS)  # mantém a razão acima do limite, para só a checagem de número reprovar

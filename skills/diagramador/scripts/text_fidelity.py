@@ -17,6 +17,7 @@ LIGATURES = str.maketrans({"ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", 
 # Cabeçalho e rodapé do modelo ficam nas margens; o corpo começa a 26 mm e termina a 24 mm do fim.
 HEADER_FRACTION, FOOTER_FRACTION = 0.07, 0.93
 LEADER = re.compile(r"(?m)(?:\s*\.){4,}\s*\d+\s*$")  # pontilhado e página do sumário
+URL = re.compile(r"(\b(?:https?://|www\.|doi\.org/)\S+)", re.IGNORECASE)
 
 # Estilo de numeração de lista é formatação ("01 — x" no livro, "1. x" no manuscrito): vira "1. ", sem perder o valor.
 # Exige espaço depois. Traço só é marcador se o próximo caractere não é dígito ("5 - 10 U" é intervalo); "0.5 mL" não casa.
@@ -71,8 +72,10 @@ def _pdf_text(path: str, *, template: bool = False) -> str:
     return "\n".join(pages)
 
 
-def _normalized(text: str) -> str:
-    text = unicodedata.normalize("NFC", text).translate(LIGATURES).replace("\u00ad", "")
+def _normalized(text: str, *, preserve_soft_hyphens: bool = False) -> str:
+    text = unicodedata.normalize("NFC", text).translate(LIGATURES)
+    if not preserve_soft_hyphens:
+        text = text.replace("\u00ad", "")
     return text.casefold()  # o CSS põe títulos em caixa alta
 
 
@@ -97,9 +100,15 @@ def _tokens(text: str, vocabulary: set[str]) -> list[str]:
             return plain
         return compound.replace("-", " ")
 
-    # O lookahead deixa a palavra à direita disponível para a próxima quebra.
-    text = re.sub(r"(\w+)-\s+(?=(\w+))", join, _normalized(text))
-    return re.sub(r"\w+(?:-\w+)+", normalize_compound, text).split()
+    tokens = []
+    for index, part in enumerate(URL.split(text)):
+        if index % 2:  # O grupo capturado pelo split contém a URL inteira.
+            tokens.append(_normalized(part, preserve_soft_hyphens=True))
+            continue
+        # O lookahead deixa a palavra à direita disponível para a próxima quebra.
+        prose = re.sub(r"(\w+)-\s+(?=(\w+))", join, _normalized(part))
+        tokens.extend(re.sub(r"\w+(?:-\w+)+", normalize_compound, prose).split())
+    return tokens
 
 
 def _analyze(original: str, output: str) -> tuple[tuple[float, float], list[str], list[str]]:
