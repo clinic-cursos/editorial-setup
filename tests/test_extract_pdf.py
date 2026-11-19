@@ -135,3 +135,17 @@ def test_reused_image_referenced_twice(tmp_path):
     assert files[1] == files[2] != files[0]  # a mesma imagem aponta para um só arquivo
     assert len(list(images.iterdir())) == 2
     assert Image.open(out.parent / files[0]).getpixel((0, 0))[2] > 200  # azul primeiro
+
+
+def test_inline_image_extracted(tmp_path):
+    path = tmp_path / "inline.pdf"
+    c = canvas.Canvas(str(path), pagesize=A4)
+    c.drawInlineImage(Image.new("RGB", (20, 20), "blue"), 60, 700, width=40, height=40)
+    c.drawInlineImage(Image.new("RGB", (20, 20), "red"), 60, 600, width=40, height=40)
+    text(c, 300, BODY[0])
+    c.save()
+    out, images, stderr = extract(path, tmp_path)
+    refs = [line for line in out.read_text(encoding="utf-8").splitlines() if line.startswith("![")]
+    assert len(refs) == 2 and "imagem" not in stderr
+    assert sorted(p.name for p in images.iterdir()) == ["fig-1.png", "fig-2.png"]
+    assert Image.open(images / "fig-1.png").getpixel((0, 0))[2] > 200  # azul primeiro

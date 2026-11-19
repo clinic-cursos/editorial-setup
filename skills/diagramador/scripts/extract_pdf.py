@@ -58,10 +58,13 @@ def page_items(page, body, images_dir, output, figures, warnings, number):
         items.append((line["top"], "line", line))
     if page.find_tables():
         warnings.append(f"página {number}: tabela convertida em parágrafos")
-    # pypdf nomeia a imagem como o XObject mais a extensão; o nome é a identidade do recurso
-    reader_images = {Path(i.name).with_suffix("").name: i for i in figures["reader"].pages[number - 1].images}
+    # pypdf nomeia a imagem como o XObject mais a extensão; o nome é a identidade do recurso.
+    # Imagem inline não tem XObject nem referência indireta: casa com as inline do pypdf, na ordem da página.
+    reader_images = list(figures["reader"].pages[number - 1].images)
+    named = {Path(i.name).with_suffix("").name: i for i in reader_images if i.indirect_reference}
+    inline = iter([i for i in reader_images if not i.indirect_reference])
     for placed in page.images:
-        image = reader_images.get(placed["name"])
+        image = named.get(placed["name"]) or next(inline, None)
         if image is None:
             warnings.append(f"página {number}: imagem sem dados extraíveis ignorada")
             continue
