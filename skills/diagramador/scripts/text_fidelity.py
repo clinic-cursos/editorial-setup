@@ -10,12 +10,11 @@ import unicodedata
 import pdfplumber
 
 from build_book import LABELS
+from extract_pdf import HEADER_FRACTION, FOOTER_FRACTION, is_toc_page
 from manuscript import ManuscriptError, cite, parse
 
 THRESHOLD = 0.995
 LIGATURES = str.maketrans({"ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl", "ﬅ": "st", "ﬆ": "st"})
-# Cabeçalho e rodapé do modelo ficam nas margens; o corpo começa a 26 mm e termina a 24 mm do fim.
-HEADER_FRACTION, FOOTER_FRACTION = 0.07, 0.93
 LEADER = re.compile(r"(?m)(?:\s*\.){4,}\s*\d+\s*$")  # pontilhado e página do sumário
 
 # Estilo de numeração de lista é formatação ("01 — x" no livro, "1. x" no manuscrito): vira "1. ", sem perder o valor.
@@ -50,17 +49,18 @@ def _markdown_text(path: str) -> str:
     return "\n".join(cite(p, manuscript.refs) for p in parts)
 
 
-def _pdf_pages(path: str) -> list[str]:
+def _pdf_pages(path: str, *, drop_toc: bool) -> list[str]:
     with pdfplumber.open(path) as pdf:
         return [
             (page.crop((0, page.height * HEADER_FRACTION, page.width, page.height * FOOTER_FRACTION)).extract_text() or "")
             for page in pdf.pages
+            if not drop_toc or not is_toc_page(page)
         ]
 
 
 def _pdf_text(path: str, *, template: bool = False) -> str:
-    """Texto do corpo. Com `template`, descarta capa, expediente, sumário e rótulos fixos das caixas."""
-    pages = _pdf_pages(path)
+    """Descarta o sumário original ou, com `template`, os elementos do modelo."""
+    pages = _pdf_pages(path, drop_toc=not template)
     if template and len(pages) > 2 and "expediente" in pages[1].casefold() and "sumário" in pages[2].casefold():
         start = 3
         while start < len(pages) and LEADER.search(pages[start]):

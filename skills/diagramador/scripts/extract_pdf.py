@@ -12,7 +12,6 @@ import unicodedata
 import pdfplumber
 from pypdf import PdfReader
 
-# Mesma faixa de cabeçalho e rodapé do text_fidelity.py.
 HEADER_FRACTION, FOOTER_FRACTION = 0.07, 0.93
 PARAGRAPH_GAP = 2.0  # salto entre linhas, em corpos de fonte, que abre outro parágrafo
 # até 3 dígitos: com mais, um ano ("2024. ") seria lido como marcador de lista
@@ -22,6 +21,18 @@ REFERENCES_TITLE = re.compile(r"refer[eê]ncias( bibliogr[aá]ficas)?", re.IGNOR
 MIN_GUTTER = 0.04  # largura mínima do vão entre colunas, em fração da página
 MIN_COLUMN_WORDS = 12
 REFERENCE_GAP = 1.7  # salto entre linhas, em corpos de fonte, que abre outra referência
+TOC_TITLE = re.compile(r"sum[áa]rio(?:\s*\(continua(?:ção)?\))?")  # mesmo padrão de check_toc
+
+
+def is_toc_page(page) -> bool:
+    """Identifica o sumário pelo primeiro texto fora do cabeçalho e do rodapé."""
+    top, bottom = page.height * HEADER_FRACTION, page.height * FOOTER_FRACTION
+    for line in page.extract_text_lines(return_chars=False):
+        if top <= line["top"] and line["bottom"] <= bottom and line["text"].strip():
+            title = " ".join(unicodedata.normalize("NFKC", line["text"]).casefold().split())
+            # shortcut: páginas de continuação do sumário sem título são mantidas.
+            return TOC_TITLE.fullmatch(title) is not None
+    return False
 
 
 def is_wine(color):
@@ -153,6 +164,9 @@ def render(source, output, images_dir):
             raise ValueError("o PDF não tem texto extraível (talvez seja escaneado)")
         info = pdf.metadata or {}
         for number, page in enumerate(pdf.pages, 1):
+            if is_toc_page(page):
+                warnings.append(f"página {number}: sumário do original descartado")
+                continue
             previous = None  # (tipo, top, tamanho) da linha anterior
             for top, kind, payload in page_items(page, body, images_dir, output, figures, warnings, number):
                 if previous and top < previous[1]:  # voltou ao topo: outra coluna
