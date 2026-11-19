@@ -16,6 +16,7 @@ from manuscript import ManuscriptError, cite, parse
 THRESHOLD = 0.995
 LIGATURES = str.maketrans({"ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl", "ﬅ": "st", "ﬆ": "st"})
 LEADER = re.compile(r"(?m)(?:\s*\.){4,}\s*\d+\s*$")  # pontilhado e página do sumário
+URL = re.compile(r"(\b(?:https?://|www\.|doi\.org/)\S+)", re.IGNORECASE)
 
 # Estilo de numeração de lista é formatação ("01 — x" no livro, "1. x" no manuscrito): vira "1. ", sem perder o valor.
 # Exige espaço depois. Traço só é marcador se o próximo caractere não é dígito ("5 - 10 U" é intervalo); "0.5 mL" não casa.
@@ -74,8 +75,10 @@ def _pdf_text(path: str, *, template: bool = False) -> str:
     return "\n".join(pages)
 
 
-def _normalized(text: str) -> str:
-    text = unicodedata.normalize("NFC", text).translate(LIGATURES).replace("\u00ad", "")
+def _normalized(text: str, *, preserve_soft_hyphens: bool = False) -> str:
+    text = unicodedata.normalize("NFC", text).translate(LIGATURES)
+    if not preserve_soft_hyphens:
+        text = text.replace("\u00ad", "")
     return text.casefold()  # o CSS põe títulos em caixa alta
 
 
@@ -85,12 +88,30 @@ def _vocabulary(text: str) -> set[str]:
 
 def _tokens(text: str, vocabulary: set[str]) -> list[str]:
     def join(m):  # hífen de quebra de linha; composto só mantém o hífen se o original o tem
-        dashed, plain = f"{m[1]}-{m[2]}", m[1] + m[2]
-        return dashed if dashed in vocabulary and plain not in vocabulary else plain
+        left, right = m[1], m[2]
+        if not (left[-1].isalpha() and right[0].isalpha()):
+            return m[0]
+        dashed, plain = f"{left}-{right}", left + right
+        return f"{left}-" if dashed in vocabulary and plain not in vocabulary else left
 
-    both = {w for w in vocabulary if "-" in w and w.replace("-", "") in vocabulary}  # as duas grafias no original
-    text = re.sub(r"(\w+)-\s+(\w+)", join, _normalized(text))  # "5-10" fica
-    return re.sub(r"\w+(?:-\w+)+", lambda m: m[0].replace("-", "") if m[0] in both else m[0], text).split()
+    def normalize_compound(m):
+        compound = m[0]
+        plain = compound.replace("-", "")
+        if not plain.isalpha():
+            return compound
+        if compound in vocabulary and plain in vocabulary:
+            return plain
+        return compound.replace("-", " ")
+
+    tokens = []
+    for index, part in enumerate(URL.split(text)):
+        if index % 2:  # O grupo capturado pelo split contém a URL inteira.
+            tokens.append(_normalized(part, preserve_soft_hyphens=True))
+            continue
+        # O lookahead deixa a palavra à direita disponível para a próxima quebra.
+        prose = re.sub(r"(\w+)-\s+(?=(\w+))", join, _normalized(part))
+        tokens.extend(re.sub(r"\w+(?:-\w+)+", normalize_compound, prose).split())
+    return tokens
 
 
 def _analyze(original: str, output: str) -> tuple[tuple[float, float], list[str], list[str]]:

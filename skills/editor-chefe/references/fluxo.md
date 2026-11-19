@@ -15,6 +15,11 @@
 - Pedido típico da Paula: "Fase concluída: validação de conteúdo. Próxima fase: 1. Diagramação. 2. Criação de imagens complementares." Entra na fase 3, com a fase 2 marcada como concluída por ela. Registre na ficha que a aprovação do João veio por declaração da Paula, com data.
 - Fases 5 e 6 são de pessoas. O Editor-Chefe só prepara o pacote e registra a decisão.
 
+## Produção de aulas
+- O Editor-Chefe aciona `aulas` quando a pessoa pede para produzir ou refazer uma aula. A entrada usa os materiais do pedido e dispensa fase concluída do livro.
+- `aulas` entrega o PowerPoint e o roteiro em JSON ao Editor-Chefe pelo [bloco de retorno](comum/retorno.md). O Editor-Chefe encaminha a entrega e as pendências à pessoa para conferência, sem portão de nota na V1.
+- Quando a aula servir de base para a ampliação científica de um livro, o Editor-Chefe pode entregar o roteiro em JSON ao `editor-cientifico` como fonte estruturada dos slides para a tabela slide a capítulo.
+
 ## Independência
 - Claude Code, Cowork e Codex: cada papel roda como subagente, com só os arquivos do pedido.
 - Chat do ChatGPT e do claude.ai: papéis em sequência na mesma conversa, exceto a auditoria científica, que roda em conversa nova com o pacote de auditoria.

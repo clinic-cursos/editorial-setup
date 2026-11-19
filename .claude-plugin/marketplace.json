@@ -1,0 +1,15 @@
+{
+  "name": "clinic-editora",
+  "owner": {
+    "name": "Clinic Editora"
+  },
+  "metadata": {
+    "description": "Plugins editoriais da Clinic Editora."
+  },
+  "plugins": [
+    {
+      "name": "clinic-editorial",
+      "source": "./"
+    }
+  ]
+}

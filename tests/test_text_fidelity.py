@@ -89,6 +89,26 @@ def test_content_hyphen_preserved(tmp_path):
     assert main([str(a), str(b)]) == 1
 
 
+@pytest.mark.parametrize(
+    ("original", "output"),
+    [("5- 10 U", "510 U"), ("5- 10 U", "5-10 U"), ("5- U", "5U"), ("U- 5", "U5")],
+)
+def test_hyphen_with_adjacent_digit_is_preserved(tmp_path, capsys, original, output):
+    a = write(tmp_path, "a.md", [original])
+    b = write(tmp_path, "b.md", [output])
+    assert main([str(a), str(b)]) == 1
+    error = capsys.readouterr().err
+    assert "número alterado" in error
+    assert f"original «{original.lower()}» / saída «{output.lower()}»" in error
+
+
+@pytest.mark.parametrize("prefix", ["", "5- "])
+def test_hyphenation_between_letters_still_matches(tmp_path, prefix):
+    a = write(tmp_path, "a.md", [f"{prefix}preenchedor"])
+    b = write(tmp_path, "b.md", [f"{prefix}pre- enchedor"])
+    assert fidelity(str(a), str(b)) == (1.0, 1.0)
+
+
 def test_built_book_keeps_fidelity(tmp_path):
     source = tmp_path / "livro.md"
     source.write_text(
@@ -146,6 +166,40 @@ def test_compound_with_both_forms_in_original_matches(tmp_path):
     a = write(tmp_path, "a.md", ["O efeito anti-inflamatório e o termo antiinflamatório aparecem aqui."])
     b = write(tmp_path, "b.md", ["O efeito anti-\ninflamatório e o termo antiinflamatório aparecem aqui."])
     assert fidelity(str(a), str(b)) == (1.0, 1.0)
+
+
+@pytest.mark.parametrize(("original", "output"), [("5-10 U", "510 U"), ("510 U", "5-10 U")])
+@pytest.mark.parametrize("context", [[], ["Valores de referência: 5-10 U e 510 U."]])
+def test_compact_range_change_is_reported(tmp_path, capsys, original, output, context):
+    a = write(tmp_path, "a.md", [original, *context])
+    b = write(tmp_path, "b.md", [output, *context])
+    assert main([str(a), str(b)]) == 1
+    assert "número alterado" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(("original", "output"), [
+    ("ácido-hialurônico", "ácido hialurônico"),
+    ("ácido hialurônico", "ácido-hialurônico"),
+])
+def test_letter_compound_matches_spaced_form(tmp_path, original, output):
+    a = write(tmp_path, "a.md", [original])
+    b = write(tmp_path, "b.md", [output])
+    assert fidelity(str(a), str(b)) == (1.0, 1.0)
+
+
+@pytest.mark.parametrize("prefix", ["http://example.org/", "https://example.org/", "www.example.org/", "doi.org/"])
+@pytest.mark.parametrize(("original", "output"), [
+    ("guia-clinico", "guia clinico"),
+    ("guia- clinico", "guiaclinico"),
+    ("guia\u00adclinico", "guiaclinico"),
+])
+def test_url_hyphen_changes_are_reported(tmp_path, capsys, prefix, original, output):
+    a = write(tmp_path, "a.md", [prefix + original])
+    b = write(tmp_path, "b.md", [prefix + output])
+    assert main([str(a), str(b)]) == 1
+    error = capsys.readouterr().err
+    assert "trecho perdido" in error
+    assert prefix + original in error
 
 
 FONT = Path(__file__).resolve().parent.parent / "skills/diagramador/assets/fonts/SourceSans3-Regular.ttf"
