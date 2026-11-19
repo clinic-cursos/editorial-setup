@@ -1,0 +1,59 @@
+# Guia da Paula
+
+## Prepare o ChatGPT
+
+Peça ao Alify os pacotes da versão atual. Escolha o caminho conforme o [teste do ChatGPT da Clinic](medicoes/teste-plataforma/roteiro.md), que também verifica se o ambiente consegue diagramar o livro e acessar as imagens geradas.
+
+1. **Se houver upload de skills na conta da Clinic**, peça à administração do workspace para habilitar o recurso, se necessário. Na área de Skills, envie um ZIP por vez da pasta `dist/chatgpt/` e ative as skills. Na conversa do livro, selecione `editor-chefe` quando for pedir a próxima fase.
+2. **Se o upload de skills estiver indisponível**, use o pacote `dist/chatgpt-projeto/`. Nos ajustes do Projeto de cada livro, cole o conteúdo de `instrucoes.md` nas instruções do Projeto. Adicione os arquivos de papéis e referências às fontes, com os nomes do pacote. Se o Projeto atingir o limite de arquivos, guarde ali a ficha e as referências do Editor-Chefe e anexe as instruções e referências específicas do papel na conversa de cada fase. Na primeira conversa, peça ao Editor-Chefe que leia as fontes e siga as regras do papel correspondente a cada etapa.
+
+[Projetos no ChatGPT](https://learn.chatgpt.com/docs/projects) · [Controles de skills](https://learn.chatgpt.com/docs/enterprise/skills)
+
+## Abra um Projeto por livro
+
+1. Crie um Projeto em **Projetos** e dê a ele o título do livro.
+2. Adicione os slides, a apostila e o manual de diagramação, se disponíveis. Identifique a versão dos arquivos. Se o João já revisou o conteúdo, anexe a versão aprovada e informe a data da aprovação.
+3. Abra a primeira conversa dentro do Projeto. Informe título, curso, autores, a última fase concluída e a próxima fase desejada. Se o livro estiver começando, diga que nenhuma fase foi concluída e peça a abertura da ficha.
+4. Baixe a ficha `ficha-<projeto>.md` que o Editor-Chefe devolver. Guarde-a nos **arquivos do Projeto**. Ao fim de cada fase, baixe a ficha atualizada e substitua ali a anterior. Na retomada, peça que o Editor-Chefe leia a ficha antes de continuar. Preserve também os arquivos das versões aprovadas. Uma correção gera uma versão nova.
+
+## Peça a fase que precisa
+
+Use o formato **Fase concluída** e **Próxima fase**, com os arquivos da versão correspondente.
+
+| Fase desejada | Pedido e arquivos |
+| --- | --- |
+| 0. Abertura | “Nenhuma fase concluída. Abra a ficha deste livro.” Informe título, curso e autores e envie os materiais recebidos. |
+| 1. Ampliação científica | “Fase concluída: abertura. Próxima fase: ampliação científica.” Envie os materiais originais do Board. Depois da ampliação, abra a auditoria em uma conversa nova. |
+| 2. Revisão técnica | “Fase concluída: ampliação científica auditada. Prepare o pacote para o João revisar.” Envie a versão auditada e o relatório. Após a aprovação, informe ao Editor-Chefe quem aprovou, qual arquivo e versão, e a data e hora. |
+| 3. Diagramação | “Fase concluída: validação de conteúdo pelo João. Próxima fase: diagramação.” Envie o manuscrito aprovado e o manual, se disponível. |
+| 4. Imagens complementares | “Fase concluída: diagramação auditada. Próxima fase: imagens complementares.” Envie a versão diagramada e seu relatório. O Diagramador reinsere as imagens e o Auditor Gráfico confere o novo PDF. |
+| 5. Aprovação editorial e gráfica | Peça o pacote para sua conferência após a fase 4, ou após a fase 3 quando nenhuma página precisar de imagem. Confira o PDF, os relatórios e as pendências. Informe explicitamente se aprova aquela versão e quando. |
+| 6. Produção gráfica | A liberação de impressão é sua e ocorre fora deste setup. Registre a decisão na ficha com a versão liberada. |
+
+### Pedido da Paula, depois da revisão do João
+
+> Fase concluída: validação de conteúdo. Próxima fase: 1. Diagramação: coloque esse conteúdo em diagramação (conforme manual enviado). 2. Criação de imagens complementares: após diagramado, veja espaços muito vazios nas páginas e crie imagens complementares, conceituais e clean, nas cores bordô, rosa claro, marsala e cinza, em sintonia com o conteúdo da página.
+
+Esse pedido entra na fase 3 e segue para a fase 4 se houver espaço suficiente e a diagramação passar na auditoria. Enquanto o manual estiver pendente, confira as regras inferidas no relatório e a marca “provisória: manual ausente” na nota.
+
+## Abra a auditoria científica em uma conversa nova
+
+1. Na conversa do livro, peça ao Editor-Chefe o pacote de auditoria da fase 1. Ele inclui o manuscrito, a tabela de rastreabilidade, a tabela slide a capítulo, os materiais originais e a rubrica da fase.
+2. Abra uma conversa nova no ChatGPT, fora do Projeto do livro, para começar só com o material da auditoria. Passe o pacote e as regras de auditoria. Selecione `auditor-cientifico` ou, se estiver usando o pacote de Projeto, anexe `auditor-cientifico-SKILL.md` e as referências desse papel. Peça uma auditoria independente com achados, nota e critérios eliminatórios.
+3. Volte à conversa do Editor-Chefe e cole o retorno do auditor, com o relatório e a versão auditada. Ele registra o resultado na ficha e encaminha o manuscrito ao João quando passar.
+
+## Quando o Editor-Chefe parar
+
+As fases 1, 3 e 4 passam com **90 pontos ou mais e nenhum critério eliminatório**. Na terceira reprovação, o Editor-Chefe entrega a melhor versão, as três notas e as pendências. Na fase 1, passe o pacote ao João. Nas fases 3 e 4, confira você mesma os achados e decida quais correções encaminhar. Leve divergências com o Board para avaliação humana e registre a decisão na ficha antes de retomar. A aprovação do João e a sua aprovação continuam sendo decisões expressas sobre uma versão identificada.
+
+## Quando a diagramação precisar rodar fora do ChatGPT
+
+Se o teste mostrar que o ChatGPT não consegue executar o WeasyPrint, ou se a conversa não tiver acesso aos scripts de diagramação e auditoria, peça à equipe para rodar o **Diagramador e o Auditor Gráfico no Claude Code ou no Codex**. Passe a ficha, o manuscrito aprovado, o manual disponível e as imagens já aprovadas para uso, se houver. Peça de volta a fonte editável, o PDF, os relatórios e a ficha da fase, e leve o retorno à conversa do Editor-Chefe.
+
+Quando o Python da conversa não enxergar uma imagem gerada pelo ChatGPT, baixe-a com o nome indicado, como `pagina-12.png`, e anexe o arquivo à conversa para a reinserção. Se a diagramação estiver com a equipe, envie os PNGs junto com o briefing e a página de destino. Imagens complementares são conceituais. Se uma página precisar de ilustração técnica, encaminhe o pedido para validação científica com o João antes de qualquer inclusão.
+
+## Como melhorar o setup
+
+Dite a sugestão ao Editor-Chefe e peça uma linha com data, papel, o que mudar, por quê e exemplo. Envie a linha ao Alify ou use diretamente o [modelo de melhorias](melhorias.md). Use exemplos sem trechos de livro, fotos clínicas ou dados de alunos.
+
+A equipe registra a mudança no repositório, roda os testes, gera o pacote e publica a nova versão no [histórico](../CHANGELOG.md). Quando receber a versão, reinstale as skills ou atualize as instruções e fontes do Projeto. Edições feitas diretamente na skill instalada se perdem na próxima atualização.
