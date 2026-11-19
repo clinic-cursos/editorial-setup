@@ -45,6 +45,13 @@ def test_guard_blocks_approved_version(tmp_path):
     assert denied(run("editorial_guard.py", write("capitulo-1-v1.docx", p, tool="MultiEdit")))
 
 
+def test_guard_finds_ficha_in_parent_folder(tmp_path):
+    path = "versoes/fase-1/manuscrito-v1.docx"
+    p = project(tmp_path, ficha=f"aprovado: {path}\n")
+    (p / path).parent.mkdir(parents=True)
+    assert denied(run("editorial_guard.py", write(path, p)))
+
+
 def test_guard_allows_new_version(tmp_path):
     p = project(tmp_path)
     assert decision(run("editorial_guard.py", write(p / "capitulo-1-v2.docx", p))) == {}
