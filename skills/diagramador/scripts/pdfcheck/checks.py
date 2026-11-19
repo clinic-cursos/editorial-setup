@@ -155,13 +155,13 @@ def _placed_images(container):
 
 
 def check_images(
-    pdf, rules: Rules, inherited: set[str] | None = None, origins: dict[tuple[int, int], float] | None = None
+    pdf, rules: Rules, origins: dict[tuple[int, int], float] | None = None
 ) -> list[Finding]:
     """origins: tamanho em pixels de cada imagem herdada -> ppi dela no original.
 
-    Imagem herdada com menos de 95% do ppi original foi ampliada e segue a regra de imagem nova.
+    Só com a resolução de origem a imagem herdada é aviso, e só se não foi ampliada (95% do ppi original
+    ou mais). Sem origem, ou ampliada, segue a regra de imagem nova.
     """
-    inherited = inherited or set()
     origins = origins or {}
     out = []
     for page in pdf.pages:
@@ -175,7 +175,7 @@ def check_images(
             ppi = min(pixels_x / width, pixels_y / height) * 72
             if ppi < rules.warning_ppi:
                 original = origins.get((pixels_x, pixels_y))
-                kept = image.name in inherited or (original is not None and ppi >= 0.95 * original)
+                kept = original is not None and ppi >= 0.95 * original
                 severity = "error" if not kept and ppi < rules.error_ppi else "warning"
                 detail = f"imagem {image.name} com {ppi:.1f} ppi efetivos"
                 out.append(Finding(page.page_number, "image-low-resolution", severity, detail, bbox))

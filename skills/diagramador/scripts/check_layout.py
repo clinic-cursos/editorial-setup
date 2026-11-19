@@ -20,12 +20,11 @@ CHECKS = (
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("pdf")
-    parser.add_argument("--inherited", default="", help="origem.json do extract_pdf.py, ou nomes de imagens herdadas separados por vírgula")
+    parser.add_argument("--inherited", default="", metavar="ORIGEM_JSON", help="origem.json do extract_pdf.py, com a resolução das imagens herdadas")
     args = parser.parse_args(argv)
-    inherited, origins = {n.strip() for n in args.inherited.split(",") if n.strip()}, {}
+    origins = {}
     try:
-        if args.inherited.endswith(".json"):
-            inherited = set()
+        if args.inherited:
             for entry in json.loads(Path(args.inherited).read_text(encoding="utf-8")).values():
                 size = tuple(entry["pixels"])
                 origins[size] = max(entry["ppi"], origins.get(size, 0))  # mesmo tamanho em pixels: vale o mais exigente
@@ -34,7 +33,7 @@ def main(argv=None) -> int:
             report = Report(args.pdf, len(pdf.pages))
             for check in CHECKS:
                 report.findings += check(pdf, rules)
-            report.findings += checks.check_images(pdf, rules, inherited, origins)
+            report.findings += checks.check_images(pdf, rules, origins)
     except Exception as error:  # arquivo inexistente ou PDF ilegível
         print(f"Não foi possível checar {args.pdf}: {error}", file=sys.stderr)
         return 2

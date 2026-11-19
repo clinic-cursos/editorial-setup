@@ -28,9 +28,15 @@ def test_rotated_90_low_ppi_is_error(open_pdf, placed_image_pdf, test_rules):
 
 def test_low_ppi_inherited_image_is_warning(open_pdf, placed_image_pdf, test_rules):
     pdf = open_pdf(placed_image_pdf(144, 72, pixels=(100, 50)))
-    name = pdf.pages[0].images[0]["name"]
-    findings = checks.check_images(pdf, test_rules, inherited={name})
+    findings = checks.check_images(pdf, test_rules, origins={(100, 50): 50.0})  # no tamanho do original
     assert [(f.kind, f.severity) for f in findings] == [("image-low-resolution", "warning")]
+
+
+def test_inherited_without_origin_follows_new_image_rule(open_pdf, placed_image_pdf, test_rules):
+    pdf = open_pdf(placed_image_pdf(144, 72, pixels=(100, 50)))  # 50 ppi
+    assert [f.severity for f in checks.check_images(pdf, test_rules)] == ["error"]
+    findings = checks.check_images(pdf, test_rules, origins={(100, 50): 100.0})  # ampliada
+    assert [f.severity for f in findings] == ["error"]
 
 
 @pytest.mark.parametrize("pixels, severity", [((300, 150), "warning"), ((600, 300), None)])
@@ -279,3 +285,4 @@ def test_front_matter_without_folio_is_not_an_error(open_pdf, layout_pdf, test_r
     # A capa e as páginas iniciais não têm fólio no modelo; só falta ou salto depois do primeiro fólio conta.
     pdf = open_pdf(layout_pdf(*map(_with_footer, (None, None, 3, 4, None, 6))))
     assert [(f.page, f.kind) for f in checks.check_page_numbers(pdf, test_rules)] == [(5, "page-number")]
+

@@ -48,16 +48,11 @@ def test_check_layout_reports_toc_and_images(layout_pdf, test_rules, monkeypatch
     assert "toc-mismatch" in out and "image-low-resolution" in out
 
 
-def test_check_layout_inherited_image_is_warning(layout_pdf, test_rules, monkeypatch, capsys):
-    import pdfplumber
-
+def test_inherited_without_origin_follows_new_image_rule(layout_pdf, tmp_path, test_rules, monkeypatch, capsys):
     pdf = layout_pdf(page(1, (700, "Texto."), image=(100, 50)))
-    assert run(monkeypatch, test_rules, pdf) == 1
-    capsys.readouterr()
-    with pdfplumber.open(pdf) as opened:
-        name = opened.pages[0].images[0]["name"]
-    assert run(monkeypatch, test_rules, pdf, "--inherited", name) == 0
-    assert "aviso | image-low-resolution" in capsys.readouterr().out
+    assert run(monkeypatch, test_rules, pdf) == 1  # sem origem.json: imagem nova, erro
+    assert run(monkeypatch, test_rules, pdf, "--inherited", "FormXob.x") == 2  # lista de nomes não existe mais
+    assert run(monkeypatch, test_rules, pdf, "--inherited", str(tmp_path / "missing.json")) == 2
 
 
 def test_enlarged_inherited_image_follows_new_image_rule(layout_pdf, tmp_path, test_rules, monkeypatch, capsys):
