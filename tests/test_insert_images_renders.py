@@ -70,3 +70,32 @@ def test_breaking_image_is_dropped_and_rest_keeps_pagination(tmp_path, monkeypat
     assert all(layout[f"comp-{p:02d}"] == p for p in inserted) and f"comp-{bad:02d}" not in layout
     with pdfplumber.open(out / "livro.pdf") as pdf:
         assert len(pdf.pages) == base.pages
+
+
+def test_misplaced_anchor_does_not_drop_valid_earlier_image(tmp_path, monkeypatch):
+    # O subtítulo fecha a página (o capítulo seguinte quebra a página). A figura alta depois dele
+    # leva o subtítulo junto (break-after: avoid) e desloca a âncora dele, não a de uma página anterior.
+    paragraph = "Texto de apoio para ocupar espaço na página do livro de teste. " * 8
+    source = tmp_path / "manuscrito.md"
+    source.write_text(
+        "title: T\ncourse: C\nauthors: A\nversion: 1.0\n\n"
+        f"# Cap 1\n\n{SHORT}\n\n# Cap 2\n\n" + "\n\n".join(paragraph for _ in range(3))
+        + f"\n\n## Subtítulo\n\n# Cap 3\n\n{SHORT}\n",
+        encoding="utf-8",
+    )
+    base = build(str(source), str(tmp_path / "base"))
+    early, late = base.layout["b0001"], base.layout["b0007"]  # Cap 1; subtítulo do Cap 2
+    assert early < late
+    images = tmp_path / "imagens"
+    images.mkdir()
+    Image.new("RGB", (600, 100), "#C88FA0").save(images / f"pagina-{early:02d}.png")
+    Image.new("RGB", (300, 900), "#C88FA0").save(images / f"pagina-{late:02d}.png")
+    real = insert_images._cap_pt
+    monkeypatch.setattr(insert_images, "_cap_pt", lambda free: 700.0 if free.page == late else real(free))
+    out = tmp_path / "out"
+    inserted, warnings = insert_images.insert(str(source), str(images), str(out))
+
+    assert inserted == [early], warnings
+    assert any(f"página {late}" in w for w in warnings) and not any(f"página {early}" in w for w in warnings)
+    layout = json.loads((out / "layout.json").read_text(encoding="utf-8"))
+    assert {k: layout[k] for k in base.layout} == base.layout

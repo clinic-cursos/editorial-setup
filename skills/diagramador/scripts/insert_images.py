@@ -103,19 +103,21 @@ def insert(manuscript: str, images_dir: str, out_dir: str) -> tuple[list[int], l
             warnings.append(f"página {page}: sem bloco que comece nela ou sem altura útil; {image.name} não entrou")
         else:
             plan[page] = (starting[-1], _figure(page, image, out, cap))
-    accepted = dict(plan)
-    while True:  # compõe com todas; se algo mudou, tira a imagem da primeira página afetada e recompõe
+    layout, pages = _render(_place(base_html, plan), out)  # caso comum: tudo cabe, uma composição
+    if pages == base.pages and all(layout.get(i) == n for i, n in base.layout.items()) \
+            and all(layout.get(f"comp-{p:02d}") == p for p in plan):
+        accepted = plan
+    else:  # algo quebrou: não adivinha a culpada; uma imagem por vez, sobre as aceitas, é exato
+        accepted = {}
+        for page in sorted(plan):
+            trial = {**accepted, page: plan[page]}
+            layout, pages = _render(_place(base_html, trial), out)
+            if layout.get(f"comp-{page:02d}") == page and pages == base.pages \
+                    and all(layout.get(i) == n for i, n in base.layout.items()):
+                accepted = trial
+            else:
+                warnings.append(f"página {page}: a imagem mudaria a paginação; foi retirada")
         layout, pages = _render(_place(base_html, accepted), out)
-        # âncora que saiu da página n: culpa imagem antes de n; figura fora da página dela: culpa dela;
-        # página a mais ou a menos: culpa a última imagem
-        broken = [n - 1 for i, n in base.layout.items() if layout.get(i) != n]
-        broken += [p for p in accepted if layout.get(f"comp-{p:02d}") != p]
-        broken += [base.pages] if pages != base.pages else []
-        if not broken or not accepted:
-            break
-        culprit = max((p for p in accepted if p <= min(broken)), default=min(accepted))
-        del accepted[culprit]
-        warnings.append(f"página {culprit}: a imagem mudaria a paginação; foi retirada")
     plan = accepted
     (out / "layout.json").write_text(json.dumps(layout, indent=2), encoding="utf-8")
     return sorted(plan), warnings
