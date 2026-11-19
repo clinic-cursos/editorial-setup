@@ -1,6 +1,7 @@
 """Leia o manuscrito na convenção de shared/references/manuscrito.md (e só nela)."""
 
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 import re
 
 BOXES = ("ponto-chave", "atencao", "evidencia", "estudo-pratica", "aprofundamento", "aplicacao-clinica", "faq")
@@ -31,7 +32,7 @@ class Block:
     children: list["Block"] = field(default_factory=list)  # conteúdo da caixa
     src: str = ""
     fig_id: str = ""
-    entries: list[tuple[str, str]] = field(default_factory=list)  # (chave, dados)
+    entries: list[tuple[str, str]] = field(default_factory=list)  # (chave, dados) ou, no faq, (pergunta, resposta)
     slide: int | None = None  # slide de origem
 
 
@@ -39,6 +40,7 @@ class Block:
 class Manuscript:
     meta: dict[str, str]
     blocks: list[Block]
+    refs: dict[str, str] = field(default_factory=dict)  # chave -> dados bibliográficos
 
 
 def _error(number: int, message: str):
@@ -59,6 +61,22 @@ def _meta(lines: list[str]) -> tuple[dict[str, str], int]:
     if missing:
         raise ManuscriptError("faltam metadados no início do manuscrito: " + ", ".join(missing))
     return meta, number
+
+
+def _faq(lines, first_number) -> list[tuple[str, str]]:
+    """Linha que termina em '?' é pergunta; as linhas seguintes, até a próxima pergunta, são a resposta."""
+    pairs: list[list[str]] = []
+    for offset, raw in enumerate(lines):
+        line = raw.strip()
+        if not line:
+            continue
+        if line.endswith("?"):
+            pairs.append([line, ""])
+        elif pairs:
+            pairs[-1][1] = f"{pairs[-1][1]} {line}".strip()
+        else:
+            raise _error(first_number + offset, "o :::faq começa por uma pergunta (linha terminada em '?')")
+    return [(q, a) for q, a in pairs]
 
 
 def _starts_block(line: str) -> bool:
@@ -105,7 +123,10 @@ def _parse_blocks(lines, first_number, counter, *, inside_box=False) -> list[Blo
             if end is None:
                 raise _error(number, f"bloco {line!r} sem ':::' de fechamento")
             box = new(type="box", kind=name)
-            box.children = _parse_blocks(lines[i:end], first_number + i, counter, inside_box=True)
+            if name == "faq":
+                box.entries = _faq(lines[i:end], first_number + i)
+            else:
+                box.children = _parse_blocks(lines[i:end], first_number + i, counter, inside_box=True)
             i = end + 1
         elif m := _HEADING.fullmatch(line):
             new(type="heading", level=len(m[1]), text=m[2].strip())
@@ -118,6 +139,9 @@ def _parse_blocks(lines, first_number, counter, *, inside_box=False) -> list[Blo
             m = _FIGURE.fullmatch(line)
             if not m:
                 raise _error(number, "figura inválida; use ![legenda](arquivo){#fig-id}")
+            src = PurePosixPath(m[2])
+            if src.is_absolute() or ".." in src.parts or re.match(r"[A-Za-z][A-Za-z0-9+.-]*:", m[2]):
+                raise _error(number, f"caminho de figura {m[2]!r} deve ser relativo e ficar dentro da pasta do manuscrito")
             new(type="figure", text=m[1], src=m[2], fig_id=m[3])
         elif _BULLET.fullmatch(line) or _NUMBERED.fullmatch(line):
             ordered = bool(_NUMBERED.fullmatch(line))
@@ -140,6 +164,8 @@ def _texts(block: Block):
     yield block.text
     yield from block.items
     yield from (data for _, data in block.entries)
+    if block.kind == "faq":
+        yield from (question for question, _ in block.entries)
 
 
 def walk(blocks):
@@ -160,4 +186,16 @@ def parse(text: str) -> Manuscript:
         for cited in (c for t in _texts(block) for c in _CITATION.findall(t)):
             if cited not in keys:
                 raise ManuscriptError(f"citação [@{cited}] sem entrada em '## Referências'")
-    return Manuscript(meta, blocks)
+    refs = {k: d for b in blocks if b.type == "references" for k, d in b.entries}
+    return Manuscript(meta, blocks, refs)
+
+
+def cite(text: str, refs: dict[str, str]) -> str:
+    """Troque cada [@chave] pela citação autor-data da ABNT, ex.: (SILVA, 2024)."""
+
+    def one(m):
+        data = refs[m[1]]
+        year = re.search(r"\b(?:1[5-9]|20)\d\d\b", data)
+        return f"({re.split(r'[,.;]', data)[0].strip()}, {year[0] if year else 's.d.'})"
+
+    return _CITATION.sub(one, text)

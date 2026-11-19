@@ -5,7 +5,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills/diagramador/scripts"))
 
-from manuscript import ManuscriptError, parse  # noqa: E402
+from manuscript import ManuscriptError, cite, parse  # noqa: E402
 
 META = "title: Exemplo\ncourse: Curso\nauthors: Ana Silva, Rui Costa\nversion: 1.0\n\n"
 
@@ -68,3 +68,29 @@ def test_unknown_block_is_error():
         body(":::dica\nTexto.\n:::\n")
     with pytest.raises(ManuscriptError, match="metadados"):
         parse("title: só um\n\nTexto.\n")
+
+
+def test_absolute_figure_path_fails():
+    for src in ("/etc/passwd", "../fora/a.png", "a/../../b.png", "C:/x.png", "http://x/a.png"):
+        with pytest.raises(ManuscriptError, match="linha 6"):
+            body(f"![a]({src}){{#fig-a}}\n")
+
+
+def test_citation_rendered_author_date():
+    ms = body("Fato [@a1] e outro [@b2].\n\n## Referências\n\n"
+              "- [@a1] SILVA, A. B. Título da obra. Revista, 2024.\n- [@b2] ONU. Relatório sem ano.\n")
+    assert cite(ms.blocks[0].text, ms.refs) == "Fato (SILVA, 2024) e outro (ONU, s.d.)."
+
+
+def test_unknown_citation_key_fails():
+    with pytest.raises(ManuscriptError, match="@zz"):
+        body("Fato [@zz].\n\n## Referências\n\n- [@a1] SILVA, A. Obra, 2024.\n")
+    with pytest.raises(ManuscriptError, match="@zz"):
+        body("Fato [@zz].\n")
+
+
+def test_faq_question_ends_with_question_mark():
+    faq = body(":::faq\nQuando aplicar?\nDepois da avaliação.\nCom cuidado.\n\nPode repetir?\nSim.\n:::\n").blocks[0]
+    assert faq.entries == [("Quando aplicar?", "Depois da avaliação. Com cuidado."), ("Pode repetir?", "Sim.")]
+    with pytest.raises(ManuscriptError, match="pergunta"):
+        body(":::faq\nResposta sem pergunta.\n:::\n")
