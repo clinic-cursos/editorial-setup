@@ -66,7 +66,7 @@ Todo slide aceita `notas` (vai para as notas do apresentador). Em qualquer texto
    - comparação de 2 ou mais opções em vários critérios → `tabela`;
    - sequência de ações → `passo_a_passo` (até 5 passos na horizontal; mais que isso ou com foto, vertical);
    - estrutura anatômica ou zonas de risco → `anatomia`;
-   - estudo citado → `artigo`, com a conclusão em 1 ou 2 frases e "na prática clínica";
+   - estudo citado → `artigo`, com a conclusão em 1 ou 2 frases e "na prática clínica". Slide de evidência só usa referência que veio do Editor Científico e passou pelo Auditor Científico; sem ela, `[confirmar]`;
    - complicação → `alerta`, sempre com sinais e conduta;
    - conceito → `texto_imagem`.
    Evite mais de 2 slides seguidos do mesmo tipo.
@@ -88,7 +88,7 @@ Você atua como diretor de arte. Para cada espaço de imagem, decida o que ilust
   - desenha o quadro tracejado no lugar da imagem, com o prompt completo;
   - acrescenta o **estilo da casa** (`ESTILO_CASA` ou `ESTILO_FOTO`) e o **formato certo** para o tamanho do espaço (16:9, 3:2, 1:1, 2:3, 9:16);
   - copia o prompt nas notas do apresentador;
-  - salva `<nome> - prompts de imagem.md` com todos os prompts numerados. Entregue esse arquivo junto com o .pptx.
+  - salva `<nome> - prompts de imagem.md` com todos os prompts numerados. O gerador só grava o arquivo quando o roteiro tem `prompt_imagem`; havendo, entregue-o junto com o .pptx.
 - **Como escrever o prompt:** em português, descrevendo a cena concreta: assunto, enquadramento, corte ou ângulo, o que está à esquerda e à direita e qual estrutura fica em vinho. Uma ideia por imagem.
 - **Sem texto na imagem:** rótulos e setas com nome ficam no slide, editáveis.
 - **Quando não usar imagem:** slides de número grande, frase, tabela e gráfico ficam limpos.

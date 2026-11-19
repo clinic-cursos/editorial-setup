@@ -21,9 +21,13 @@ def build(tmp_path, spec, name="aula"):
 def test_example_script_builds_pptx(tmp_path):
     spec = json.loads(EXAMPLE.read_text(encoding="utf-8"))
     out, tipos = build(tmp_path, spec)
-    n = len(Presentation(str(out)).slides)
-    # the generator adds 3 partnership slides, plus the pricing slides, when the script omits them
-    assert n > len(tipos) + 3
+    slides = Presentation(str(out)).slides
+    assert len(tipos) == 15 and len(slides) == 20  # 15 from the roteiro + 2 pricing + 3 partnership
+    first_text = [next(sh.text_frame.text for sh in s.shapes if sh.has_text_frame and sh.text_frame.text) for s in slides]
+    # automatic slides sit right before the closing one, in this order
+    assert [x.split("\n")[0] for x in first_text[14:]] == [
+        "PRECIFICAÇÃO", "PRECIFICAÇÃO", "CLINIC CURSOS   ×   GALDERMA",
+        "CLINIC CURSOS   ×   ILIKIA", "CONTINUE SUA", "Obrigado!"]
 
 
 def test_prompts_markdown_written(tmp_path):
