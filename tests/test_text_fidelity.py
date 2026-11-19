@@ -231,3 +231,15 @@ def test_list_starting_at_four_matches_built_pdf(tmp_path):
     source.write_text(META + "# Cap\n\n4. quarto item da lista\n5. quinto item da lista\n", encoding="utf-8")
     built = build(str(source), str(tmp_path / "out"))
     assert fidelity(str(source), built.pdf) == (1.0, 1.0)
+
+
+def test_lost_and_added_fragments_are_listed(tmp_path, capsys):
+    a = write(tmp_path, "a.md", ["Um dois três quatro cinco seis sete oito nove dez onze doze treze catorze quinze."])
+    b = write(tmp_path, "b.md", ["Um dois três quatro cinco seis nove dez onze doze treze catorze quinze surpresa final."])
+    main([str(a), str(b)])
+    err = capsys.readouterr().err
+    assert "trecho perdido: original «quatro cinco seis sete oito nove dez onze» / saída «quatro cinco seis nove dez onze»" in err
+    assert "trecho a mais: original «doze treze catorze quinze.» / saída «doze treze catorze quinze surpresa final.»" in err
+    clean = write(tmp_path, "c.md", ["Um dois três."])
+    main([str(clean), str(clean)])
+    assert capsys.readouterr().err == ""  # razão 1.0: nada a listar

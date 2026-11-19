@@ -90,7 +90,7 @@ def _tokens(text: str, vocabulary: set[str]) -> list[str]:
     return re.sub(r"\w+(?:-\w+)+", lambda m: m[0].replace("-", "") if m[0] in both else m[0], text).split()
 
 
-def _analyze(original: str, output: str) -> tuple[tuple[float, float], list[str]]:
+def _analyze(original: str, output: str) -> tuple[tuple[float, float], list[str], list[str]]:
     is_pdf = lambda p: p.lower().endswith(".pdf")  # noqa: E731
     text_a = _pdf_text(original) if is_pdf(original) else _markdown_text(original)
     if is_pdf(output):  # o modelo só acrescenta texto de desenho a um original em Markdown
@@ -105,12 +105,20 @@ def _analyze(original: str, output: str) -> tuple[tuple[float, float], list[str]
         raise ValueError(f"{original}: sem texto para comparar")
     matcher = SequenceMatcher(None, a, b, autojunk=False)
     matched = sum(len(w) for m in matcher.get_matching_blocks() for w in a[m.a : m.a + m.size])
-    changes = []
+    changes, fragments = [], []
+    around = lambda t, x, y: " ".join(t[max(x - 3, 0) : y + 3])  # noqa: E731
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-        if tag != "equal" and any(c.isdigit() for w in a[i1:i2] + b[j1:j2] for c in w):
-            around = lambda t, x, y: " ".join(t[max(x - 3, 0) : y + 3])  # noqa: E731
-            changes.append(f"número alterado: original «{around(a, i1, i2)}» / saída «{around(b, j1, j2)}»")
-    return (matched / total_a, matched / total_b if total_b else 1.0), changes
+        if tag == "equal":
+            continue
+        where = f"original «{around(a, i1, i2)}» / saída «{around(b, j1, j2)}»"
+        if any(c.isdigit() for w in a[i1:i2] + b[j1:j2] for c in w):
+            changes.append(f"número alterado: {where}")
+        else:
+            if i2 > i1:
+                fragments.append(f"trecho perdido: {where}")
+            if j2 > j1:
+                fragments.append(f"trecho a mais: {where}")
+    return (matched / total_a, matched / total_b if total_b else 1.0), changes, fragments
 
 
 def fidelity(original: str, output: str) -> tuple[float, float]:
@@ -124,7 +132,7 @@ def main(argv=None) -> int:
     parser.add_argument("output")
     args = parser.parse_args(argv)
     try:
-        ratios, changes = _analyze(args.original, args.output)
+        ratios, changes, fragments = _analyze(args.original, args.output)
     except (OSError, ValueError, ManuscriptError) as error:
         print(f"Não foi possível comparar: {error}", file=sys.stderr)
         return 2
@@ -134,6 +142,9 @@ def main(argv=None) -> int:
     print(" ".join(f"{r:.4f}" for r in ratios))
     for change in changes:  # dose, intervalo, concentração ou ano trocados reprovam sozinhos
         print(change, file=sys.stderr)
+    if min(ratios) < 1.0:  # a pessoa confere o que mudou, não só as razões
+        for fragment in fragments:
+            print(fragment, file=sys.stderr)
     return 0 if min(ratios) >= THRESHOLD and not changes else 1
 
 
