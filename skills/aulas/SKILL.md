@@ -88,7 +88,7 @@ Você atua como diretor de arte. Para cada espaço de imagem, decida o que ilust
   - desenha o quadro tracejado no lugar da imagem, com o prompt completo;
   - acrescenta o **estilo da casa** (`ESTILO_CASA` ou `ESTILO_FOTO`) e o **formato certo** para o tamanho do espaço (16:9, 3:2, 1:1, 2:3, 9:16);
   - copia o prompt nas notas do apresentador;
-  - salva `<nome> - prompts de imagem.md` com todos os prompts numerados. O gerador só grava o arquivo quando o roteiro tem `prompt_imagem`; havendo, entregue-o junto com o .pptx.
+  - salva `<nome> - prompts de imagem.md` com todos os prompts numerados. Se o gerador gravou o arquivo nesta execução, entregue-o junto com o .pptx; senão, diga que nenhum prompt foi gerado (`prompt_imagem` ausente ou vazio não gera arquivo).
 - **Como escrever o prompt:** em português, descrevendo a cena concreta: assunto, enquadramento, corte ou ângulo, o que está à esquerda e à direita e qual estrutura fica em vinho. Uma ideia por imagem.
 - **Sem texto na imagem:** rótulos e setas com nome ficam no slide, editáveis.
 - **Quando não usar imagem:** slides de número grande, frase, tabela e gráfico ficam limpos.

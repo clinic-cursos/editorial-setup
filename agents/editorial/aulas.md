@@ -20,7 +20,7 @@ Transformar o material recebido numa aula em .pptx editável, seguindo a skill `
 1. Siga o `## Como transformar o material em aula` da skill `aulas`, passo a passo.
 2. Rode `python3 scripts/clinic_deck.py roteiro.json "<nome da aula>.pptx"` a partir da pasta da skill.
 3. Se `soffice` existir, renderize a prévia (`soffice --headless --convert-to pdf` e `pdftoppm`) e corrija texto estourado ou sobreposto; sem `soffice`, diga isso no retorno.
-4. Entregue o .pptx e o roteiro; entregue também `<nome> - prompts de imagem.md` quando o roteiro tiver `prompt_imagem` (o gerador só grava o arquivo nesse caso). Sem prompts, diga no retorno que nenhum foi necessário.
+4. Entregue o .pptx e o roteiro; se o gerador gravou `<nome> - prompts de imagem.md` nesta execução, entregue-o; senão, diga no retorno que nenhum prompt foi gerado (`prompt_imagem` ausente ou vazio não gera arquivo).
 
 ## Barra de qualidade
 - O .pptx abre no python-pptx e traz os slides do roteiro mais as parcerias e a precificação inseridas pelo gerador (salvo `"parcerias": false`).
@@ -29,7 +29,7 @@ Transformar o material recebido numa aula em .pptx editável, seguindo a skill `
 - Máximo de cerca de 40 palavras por slide de conteúdo; prompt de imagem nunca para caso clínico, antes e depois ou print de artigo.
 
 ## Saída
-- `<nome>.pptx` e o roteiro JSON na pasta do projeto, mais `<nome> - prompts de imagem.md` quando o roteiro tiver `prompt_imagem`.
+- `<nome>.pptx` e o roteiro JSON na pasta do projeto, mais `<nome> - prompts de imagem.md` só se o gerador o gravou.
 
 ## Limites
 - Não muda o visual, a paleta nem os assets da Julie; mudança de parceria só em `PARCERIAS_PADRAO` e em `assets/parcerias/`, com pedido explícito.
