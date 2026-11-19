@@ -1,5 +1,29 @@
 [
-  {"key": "lecun2015", "title": "Deep learning", "authors": ["LeCun, Yann"], "year": 2015, "doi": "10.1038/nature14539"},
-  {"key": "pubmed2015", "title": "Deep learning", "authors": ["LeCun, Yann"], "year": 2015, "pmid": "26017442"},
-  {"key": "inventado2099", "title": "Estudo inexistente plantado para o teste", "authors": ["Inventado, Autor"], "year": 2024, "doi": "10.9999/planted.2024.0001"}
+ {
+  "key": "raja2020",
+  "title": "The revised International Association for the Study of Pain definition of pain: concepts, challenges, and compromises",
+  "authors": [
+   "Raja, Srinivasa N"
+  ],
+  "year": 2020,
+  "doi": "10.1097/j.pain.0000000000001939"
+ },
+ {
+  "key": "chou2016",
+  "title": "Management of Postoperative Pain: A Clinical Practice Guideline From the American Pain Society, the American Society of Regional Anesthesia and Pain Medicine, and the American Society of Anesthesiologists' Committee on Regional Anesthesia, Executive Committee, and Administrative Council",
+  "authors": [
+   "Chou, Roger"
+  ],
+  "year": 2016,
+  "pmid": "26827847"
+ },
+ {
+  "key": "inventado2099",
+  "title": "Estudo inexistente plantado para o teste",
+  "authors": [
+   "Inventado, Autor"
+  ],
+  "year": 2024,
+  "doi": "10.9999/planted.2024.0001"
+ }
 ]

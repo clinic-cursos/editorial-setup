@@ -14,12 +14,20 @@ spec.loader.exec_module(verify_refs)
 PLANTED_DOI = "10.9999/planted.2024.0001"  # invented on purpose; never swap for a real one
 CROSSREF = {
     "message": {
-        "title": ["Deep learning"],
-        "author": [{"family": "LeCun", "given": "Yann"}],
-        "issued": {"date-parts": [[2015, 5, 28]]},
+        "title": ['The revised International Association for the Study of Pain definition of pain: concepts, challenges, and compromises'],
+        "author": [{"family": "Raja", "given": "Srinivasa N"}],
+        "issued": {"date-parts": [[2020, 9, 1]]},
     }
 }
-PUBMED = {"result": {"26017442": {"title": "Deep learning.", "authors": [{"name": "LeCun Y"}], "pubdate": "2015 May 28"}}}
+PUBMED = {
+    "result": {
+        "26827847": {
+            "title": "Management of Postoperative Pain: A Clinical Practice Guideline From the American Pain Society, the American Society of Regional Anesthesia and Pain Medicine, and the American Society of Anesthesiologists' Committee on Regional Anesthesia, Executive Committee, and Administrative Council",
+            "authors": [{"name": "Chou R"}],
+            "pubdate": "2016 Feb",
+        }
+    }
+}
 
 
 class FakeResponse(io.BytesIO):
@@ -34,9 +42,9 @@ def fake_urlopen(request, timeout=None):
     url = request.full_url
     if url.startswith(verify_refs.CROSSREF.format(doi="") + PLANTED_DOI):
         raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
-    if url.startswith("https://api.crossref.org/works/10.1038/nature14539"):
+    if url.startswith("https://api.crossref.org/works/10.1097/j.pain.0000000000001939"):
         return FakeResponse(json.dumps(CROSSREF).encode())
-    if url.startswith("https://eutils.ncbi.nlm.nih.gov/") and "id=26017442" in url:
+    if url.startswith("https://eutils.ncbi.nlm.nih.gov/") and "id=26827847" in url:
         return FakeResponse(json.dumps(PUBMED).encode())
     raise AssertionError(f"unexpected url {url}")
 
@@ -64,7 +72,7 @@ def test_planted_reference_flagged(monkeypatch, capsys):
     monkeypatch.setattr(verify_refs.urllib.request, "urlopen", fake_urlopen)
     assert verify_refs.main([str(SAMPLE / "referencias.json")]) == 1
     status = {r["key"]: r["status"] for r in json.loads(capsys.readouterr().out)}
-    assert status == {"lecun2015": "ok", "pubmed2015": "ok", "inventado2099": "not-found"}
+    assert status == {"raja2020": "ok", "chou2016": "ok", "inventado2099": "not-found"}
 
 
 def test_manuscript_citations_match_references():
