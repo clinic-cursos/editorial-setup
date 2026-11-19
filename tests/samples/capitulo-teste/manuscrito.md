@@ -8,7 +8,7 @@ version: 1.0
 ## Definição e fisiopatologia
 
 <!-- slide: 2 -->
-A dor aguda é uma resposta de curta duração a uma lesão tecidual; a definição de dor adotada segue a revisão da IASP [@raja2020].
+Segundo a definição revisada da IASP, dor é uma experiência sensorial e emocional desagradável associada, ou semelhante à associada, a dano tecidual real ou potencial [@raja2020]. O capítulo trata da dor aguda, de curta duração (Fonte A: slide 2).
 
 <!-- slide: 3 -->
 O texto sintético descreve a via de sinalização de forma resumida (Fonte A: slide 3, sem referência acrescentada).
@@ -24,10 +24,10 @@ Use a mesma escala em todas as consultas (Fonte A: slide 5).
 ## Conduta
 
 <!-- slide: 6 -->
-Medidas não farmacológicas vêm primeiro [@chou2016].
+A diretriz recomenda combinar intervenções farmacológicas e não farmacológicas no manejo da dor [@chou2016]. A ordem de apresentação, com as medidas não farmacológicas primeiro, é a do Board (Fonte A: slide 6).
 
 <!-- slide: 7 -->
-O escalonamento farmacológico segue a intensidade, conforme as diretrizes [@chou2016] e o estudo descrito em [@inventado2099].
+O escalonamento farmacológico segue a intensidade (Fonte A: slide 7). A diretriz recomenda uma abordagem multimodal [@chou2016], e um estudo descrito em [@inventado2099] seria citado aqui.
 
 :::ponto-chave
 Reavalie sempre depois de cada mudança de conduta (Fonte A: slide 7).
