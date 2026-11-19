@@ -157,6 +157,32 @@ def test_free_space_ignores_running_footer(open_pdf, layout_pdf, test_rules):
     )
 
 
+def test_content_text_in_footer_band_counts_as_object(open_pdf, layout_pdf, test_rules):
+    def page(caption):
+        def draw(document):
+            document.drawString(60, 740, "Parágrafo curto.")
+            document.drawString(60, 15, caption)
+
+        return draw
+
+    pdf = open_pdf(layout_pdf(page("Legenda um."), page("Legenda dois."), page("Legenda três.")))
+    assert checks.free_space(pdf, test_rules) == []
+    assert checks.free_space(open_pdf(layout_pdf(page("Legenda um."))), test_rules) == []
+
+
+def test_repeated_header_and_number_ignored(open_pdf, layout_pdf, test_rules):
+    def page(number):
+        def draw(document):
+            document.drawString(60, 740, "Parágrafo curto.")
+            document.drawString(60, 815, "CLINIC EDITORA")
+            document.drawRightString(A4[0] - 60, 13 * 72 / 25.4, str(number))
+
+        return draw
+
+    candidates = checks.free_space(open_pdf(layout_pdf(page(1), page(2))), test_rules)
+    assert [c.page for c in candidates] == [1, 2]
+
+
 def test_image_in_footer_band_counts_as_object(open_pdf, layout_pdf, test_rules):
     def draw(document):
         document.drawString(60, 740, "Parágrafo curto.")

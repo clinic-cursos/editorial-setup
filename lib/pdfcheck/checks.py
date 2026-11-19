@@ -262,20 +262,36 @@ def _chapter_opening(page, useful_width: float, rules: Rules) -> bool:
     )
 
 
+def _is_running(text: str, repeats, pages: int) -> bool:
+    # uma página sozinha não mostra repetição: só o número de página sai
+    return text.isdigit() or (pages > 1 and repeats[text] * 2 >= pages)
+
+
 def free_space(pdf, rules: Rules) -> list[FreeSpace]:
     margin = rules.safe_zone_mm * MM
     out = []
+    pages = {}
+    repeats = defaultdict(int)  # texto da faixa -> páginas em que aparece
+    for page in pdf.pages:
+        text_top = page.bbox[1] + rules.page_margins_mm["top"] * MM
+        bottom = page.bbox[3] - rules.page_margins_mm["bottom"] * MM
+        lines = [(line, _normalized(line["text"]), line["bottom"] <= text_top or line["top"] >= bottom)
+                 for line in _lines(page, return_chars=True)]
+        pages[page.page_number] = lines
+        for text in {text for _, text, in_band in lines if in_band}:
+            repeats[text] += 1
     for page in pdf.pages:
         x0, y0, x1, y1 = page.bbox
         x0, x1 = x0 + margin, x1 - margin
-        # mancha de texto: cabeçalho e rodapé corridos ficam fora da conta
         text_top = y0 + rules.page_margins_mm["top"] * MM
         bottom = y1 - rules.page_margins_mm["bottom"] * MM
         useful_height = bottom - text_top
         if useful_height <= 0 or x1 <= x0:
             continue
-        # só o texto das faixas sai da conta; imagem, linha e retângulo contam onde estiverem
-        text = (c for c in page.chars if c["top"] < bottom and c["bottom"] > text_top)
+        # sai da conta só o texto corrido das faixas (número de página e linha repetida em metade das páginas);
+        # imagem, linha, retângulo e texto de conteúdo contam onde estiverem
+        text = (c for line, norm, in_band in pages[page.page_number]
+                if not (in_band and _is_running(norm, repeats, len(pdf.pages))) for c in line["chars"])
         objects = chain(text, page.images, page.lines, page.rects, page.curves)
         top = max((obj["bottom"] for obj in objects), default=None)
         if top is None:
