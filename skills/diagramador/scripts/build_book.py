@@ -91,17 +91,6 @@ def _compose(manuscript, base: Path, out_dir: Path) -> str:
     return re.sub(r"\{\{(\w+)\}\}", lambda m: fields.get(m[1], m[0]), page)
 
 
-def design_text(manuscript) -> list[str]:
-    """Texto que o modelo acrescenta por desenho (capa, expediente, sumário, rótulos das caixas)."""
-    meta = manuscript.meta
-    authors = [a.strip() for a in meta["authors"].split(",")]
-    texts = ["Clinic Editora", meta["course"], meta["title"], *authors, "Expediente", "Autores",
-             ", ".join(authors), "Versão", meta["version"], "Sumário"]
-    texts += [cite(b.text, manuscript.refs) for b in manuscript.blocks if b.type == "heading" and b.level <= 2]
-    texts += [LABELS[b.kind] for b in walk(manuscript.blocks) if b.type == "box"]
-    return texts
-
-
 def build(manuscript_path: str, out_dir: str) -> BuildResult:
     source = Path(manuscript_path)
     out = Path(out_dir)

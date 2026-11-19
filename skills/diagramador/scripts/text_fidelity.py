@@ -1,7 +1,6 @@
 """Meça a fidelidade do texto da SAIDA ao ORIGINAL nos dois sentidos (.md ou .pdf dos dois lados)."""
 
 import argparse
-from collections import Counter
 from difflib import SequenceMatcher
 from pathlib import Path
 import re
@@ -10,18 +9,18 @@ import unicodedata
 
 import pdfplumber
 
-from build_book import design_text
+from build_book import LABELS
 from manuscript import ManuscriptError, cite, parse
 
 THRESHOLD = 0.995
 LIGATURES = str.maketrans({"ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl", "ﬅ": "st", "ﬆ": "st"})
 # Cabeçalho e rodapé do modelo ficam nas margens; o corpo começa a 26 mm e termina a 24 mm do fim.
 HEADER_FRACTION, FOOTER_FRACTION = 0.07, 0.93
-LEADER = re.compile(r"(?:\s*\.){3,}\s*\d+")
+LEADER = re.compile(r"(?m)(?:\s*\.){4,}\s*\d+\s*$")  # pontilhado e página do sumário
 
 
-def _markdown_text(path: str) -> tuple[str, list[str]]:
-    """Texto do manuscrito (com citações renderizadas) e o texto que o modelo acrescenta por desenho."""
+def _markdown_text(path: str) -> str:
+    """Texto do manuscrito, com as citações renderizadas."""
     manuscript = parse(Path(path).read_text(encoding="utf-8"))
     parts: list[str] = []
 
@@ -39,16 +38,28 @@ def _markdown_text(path: str) -> tuple[str, list[str]]:
 
     for block in manuscript.blocks:
         emit(block)
-    return "\n".join(cite(p, manuscript.refs) for p in parts), design_text(manuscript)
+    return "\n".join(cite(p, manuscript.refs) for p in parts)
 
 
-def _pdf_text(path: str) -> str:
+def _pdf_pages(path: str) -> list[str]:
     with pdfplumber.open(path) as pdf:
-        pages = []
-        for page in pdf.pages:
-            body = page.crop((0, page.height * HEADER_FRACTION, page.width, page.height * FOOTER_FRACTION))
-            pages.append(body.extract_text() or "")
-    return LEADER.sub("", "\n".join(pages))  # pontilhado e página do sumário
+        return [
+            (page.crop((0, page.height * HEADER_FRACTION, page.width, page.height * FOOTER_FRACTION)).extract_text() or "")
+            for page in pdf.pages
+        ]
+
+
+def _pdf_text(path: str, *, template: bool = False) -> str:
+    """Texto do corpo. Com `template`, descarta capa, expediente, sumário e rótulos fixos das caixas."""
+    pages = _pdf_pages(path)
+    if template and len(pages) > 2 and "expediente" in pages[1].casefold() and "sumário" in pages[2].casefold():
+        start = 3
+        while start < len(pages) and LEADER.search(pages[start]):
+            start += 1  # sumário que passa de uma página
+        pages = pages[start:]
+        labels = {label.casefold() for label in LABELS.values()}
+        pages = ["\n".join(ln for ln in p.splitlines() if ln.strip().casefold() not in labels) for p in pages]
+    return "\n".join(pages)
 
 
 def _normalized(text: str) -> str:
@@ -68,33 +79,16 @@ def _tokens(text: str, vocabulary: set[str]) -> list[str]:
     return re.sub(r"(\w+)-\s+(\w+)", join, _normalized(text)).split()  # "5-10" fica
 
 
-def _drop_design(tokens: list[str], design: list[str], vocabulary: set[str]) -> list[str]:
-    budget = Counter(_tokens(" ".join(design), vocabulary))
-    kept = []
-    for token in tokens:
-        if budget[token] > 0:
-            budget[token] -= 1
-        else:
-            kept.append(token)
-    return kept
-
-
 def fidelity(original: str, output: str) -> tuple[float, float]:
     """(fração do original presente na saída, fração da saída que vem do original), na mesma ordem."""
     is_pdf = lambda p: p.lower().endswith(".pdf")  # noqa: E731
-    design: list[str] = []
-    if is_pdf(original):
-        text_a = _pdf_text(original)
+    text_a = _pdf_text(original) if is_pdf(original) else _markdown_text(original)
+    if is_pdf(output):  # o modelo só acrescenta texto de desenho a um original em Markdown
+        text_b = _pdf_text(output, template=not is_pdf(original))
     else:
-        text_a, design = _markdown_text(original)
-    if is_pdf(output):
-        text_b = _pdf_text(output)
-    else:
-        text_b = _markdown_text(output)[0]
+        text_b = _markdown_text(output)
     vocabulary = _vocabulary(text_a)
     a, b = _tokens(text_a, vocabulary), _tokens(text_b, vocabulary)
-    if is_pdf(output) and design:
-        b = _drop_design(b, design, vocabulary)
     total_a, total_b = sum(map(len, a)), sum(map(len, b))
     if not total_a:
         raise ValueError(f"{original}: sem texto para comparar")

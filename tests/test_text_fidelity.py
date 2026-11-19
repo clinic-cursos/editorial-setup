@@ -106,3 +106,13 @@ def test_compound_broken_at_hyphen_matches(tmp_path):
     a = write(tmp_path, "a.md", ["O efeito anti-inflamatório do pós-procedimento dura vários dias."])
     b = write(tmp_path, "b.md", ["O efeito anti-\ninflamatório do pós-\nprocedimento dura vários dias."])
     assert fidelity(str(a), str(b)) == (1.0, 1.0)
+
+
+def test_duplicated_paragraph_equal_to_heading_fails(tmp_path, layout_pdf):
+    def page(c):
+        c.setFont("Helvetica", 10)
+        c.drawString(60, 700, "Texto aprovado.")
+        c.drawString(60, 680, "Texto aprovado.")
+    md = tmp_path / "o.md"
+    md.write_text("title: Texto aprovado.\ncourse: C\nauthors: A\nversion: 1\n\nTexto aprovado.\n", encoding="utf-8")
+    assert main([str(md), str(layout_pdf(page))]) == 1
