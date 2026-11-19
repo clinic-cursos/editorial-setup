@@ -183,6 +183,39 @@ def test_repeated_header_and_number_ignored(open_pdf, layout_pdf, test_rules):
     assert [c.page for c in candidates] == [1, 2]
 
 
+def _band_page(number, footer_y=30, footer="TÍTULO DO LIVRO"):
+    def draw(document):
+        document.drawString(60, 740, "Parágrafo curto.")
+        document.drawString(60, footer_y, footer)
+        document.drawRightString(A4[0] - 60, 13 * 72 / 25.4, str(number))
+
+    return draw
+
+
+def test_number_not_matching_page_sequence_counts(open_pdf, layout_pdf, test_rules):
+    def stray(document):
+        document.drawString(60, 740, "Parágrafo curto.")
+        document.drawString(60, 15, "99")  # fora da sequência das páginas
+
+    pdf = open_pdf(layout_pdf(_band_page(1), _band_page(2), stray))
+    assert [c.page for c in checks.free_space(pdf, test_rules)] == [1, 2]
+
+
+def test_repeated_text_at_different_heights_counts(open_pdf, layout_pdf, test_rules):
+    pdf = open_pdf(layout_pdf(*(_band_page(n, footer_y=15 + 3 * n) for n in (1, 2, 3, 4))))
+    assert checks.free_space(pdf, test_rules) == []
+
+
+def test_repeated_text_needs_three_pages(open_pdf, layout_pdf, test_rules):
+    pdf = open_pdf(layout_pdf(_band_page(1), _band_page(2)))
+    assert checks.free_space(pdf, test_rules) == []
+
+
+def test_repeated_text_at_same_height_is_ignored(open_pdf, layout_pdf, test_rules):
+    pdf = open_pdf(layout_pdf(*map(_band_page, (1, 2, 3))))
+    assert [c.page for c in checks.free_space(pdf, test_rules)] == [1, 2, 3]
+
+
 def test_image_in_footer_band_counts_as_object(open_pdf, layout_pdf, test_rules):
     def draw(document):
         document.drawString(60, 740, "Parágrafo curto.")
