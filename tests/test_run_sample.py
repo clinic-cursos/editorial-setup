@@ -100,3 +100,9 @@ def test_stderr_alone_does_not_fail_fidelity(monkeypatch):
 def test_fidelity_fails_by_exit_code_or_ratio(monkeypatch):
     assert run_sample.fidelity_failed(fake_fidelity(monkeypatch, 1, "1.0000 1.0000\n", "número alterado: x\n"))
     assert run_sample.fidelity_failed(([0.9, 1.0], 0, 0))
+
+
+def test_pages_line_lists_only_page_numbers():
+    rows = [{"page": 3, "width_mm": 190.0}, {"page": 17, "width_mm": 190.0}]
+    assert run_sample.pages_line(rows) == "- Números das páginas candidatas: 3, 17"
+    assert run_sample.pages_line([]) == "- Números das páginas candidatas: nenhuma"

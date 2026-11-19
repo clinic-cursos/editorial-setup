@@ -165,6 +165,11 @@ def causes(problems: list, counts: collections.Counter, fidelity_problem: bool) 
     return out or ["- nenhuma"]
 
 
+def pages_line(candidates: list) -> str:
+    """Só os números das páginas; o JSON do free_space some com a pasta temporária."""
+    return "- Números das páginas candidatas: " + (", ".join(str(r["page"]) for r in candidates) or "nenhuma")
+
+
 def table(counts: collections.Counter) -> list[str]:
     if not counts:
         return ["- nenhum achado"]
@@ -259,6 +264,7 @@ def sample(pdf: Path, work: Path) -> list[str]:
         "",
         "## Imagens sintéticas (retângulos na paleta)",
         f"- Páginas candidatas (espaço livre acima do limite): {len(candidates)}",
+        pages_line(candidates),
         f"- Imagens de teste geradas (as primeiras candidatas, no máximo {MAX_IMAGES}): {min(len(candidates), MAX_IMAGES)}",
         f"- Imagens inseridas: {inserted}; retiradas por mudar a paginação: {removed}",
         "",
