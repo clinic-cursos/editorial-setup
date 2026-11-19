@@ -30,7 +30,7 @@ Confira as ferramentas da conversa.
 ## Barra de qualidade
 - Toda página da lista do passo 1 tem briefing, imagem ou pendência registrada.
 - Cada briefing tem os seis campos do modelo e menciona "sem texto na imagem".
-- Cada cor do briefing sai de `references/paleta.md`, com o valor hexadecimal.
+- Cada cor do briefing sai de `references/paleta.md`, com o valor hexadecimal. O marsala `#955251` é referência pública, não amostrada dos PDFs, a confirmar com a Paula; registre isso na ficha enquanto ela não confirmar.
 - Nenhuma imagem mostra anatomia, pele, procedimento, produto de marca, resultado de tratamento, pessoa ou texto.
 - Cada imagem entregue tem uma linha no registro, com ferramenta, data e o briefing usado.
 

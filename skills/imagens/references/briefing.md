@@ -9,7 +9,7 @@ Página: NN
 Tema: <assunto da página em poucas palavras>
 Conceito: <forma, textura, objeto simbólico ou composição abstrata que evoca o tema>
 Troca por conceito mais abstrato: <conceito original e o que o substituiu, ou "Não houve">
-Paleta: bordô #87082E, rosa claro #EAD4DB, marsala #955251, cinza #625E61 (valores em paleta.md)
+Paleta: bordô #87082E, rosa claro #EAD4DB, marsala #955251, cinza #625E61 (valores em paleta.md; marsala: referência pública, não amostrada, a confirmar com a Paula)
 Estilo: conceitual e clean, fundo claro, muito espaço vazio, sem sombra pesada
 Proporção: <largura> x <altura> mm (<razão>:1), do `free_space.py`
 Restrições: sem texto, número ou logotipo na imagem; sem rosto, pele, anatomia, procedimento nem produto
