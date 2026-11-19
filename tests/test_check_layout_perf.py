@@ -9,6 +9,8 @@ import pdfplumber
 from PIL import Image, ImageDraw
 import pytest
 
+from lib.pdfcheck import checks
+
 SCRIPTS = Path(__file__).resolve().parents[1] / "skills/diagramador/scripts"
 
 
@@ -38,8 +40,26 @@ def write_manuscript(directory, chapters):
     return source
 
 
+def test_layout_checks_reuse_deduplicated_characters(clean_pdf, open_pdf, test_rules, monkeypatch):
+    pdf = open_pdf(clean_pdf)
+    expected = [page.dedupe_chars().chars for page in pdf.pages]
+    dedupe_chars = pdfplumber.utils.dedupe_chars
+    calls = []
+
+    def count_deduplication(chars, **kwargs):
+        calls.append(len(chars))
+        return dedupe_chars(chars, **kwargs)
+
+    monkeypatch.setattr(pdfplumber.utils, "dedupe_chars", count_deduplication)
+    assert checks.check_overlaps(pdf, test_rules) == []
+    assert checks.check_duplicates(pdf, test_rules) == []
+    assert calls == [len(page.chars) for page in pdf.pages]
+    for page, chars in zip(pdf.pages, expected):
+        assert list(map(id, checks._deduped_page(page).chars)) == list(map(id, chars))
+
+
 @pytest.mark.skipif(os.environ.get("EDITORIAL_PERF") != "1", reason="requires EDITORIAL_PERF=1")
-def test_check_layout_finishes_dense_book_within_budget(tmp_path):
+def test_check_layout_finishes_dense_book_within_budget(tmp_path, record_property):
     source = write_manuscript(tmp_path, chapters=40)
     subprocess.run(
         [sys.executable, str(SCRIPTS / "build_book.py"), str(source), "--out", str(tmp_path)],
@@ -57,6 +77,7 @@ def test_check_layout_finishes_dense_book_within_budget(tmp_path):
         text=True,
     )
     elapsed = perf_counter() - start
+    record_property("check_layout_seconds", elapsed)
     assert result.returncode == 0, result.stderr or result.stdout
     assert f"Páginas: {pages}. Erros: 0." in result.stdout
     assert elapsed < 24, f"check_layout took {elapsed:.2f} s for {pages} pages (budget: 24 s)"

@@ -6,6 +6,7 @@ from itertools import chain
 from math import hypot
 from unicodedata import normalize
 
+from pdfplumber import utils
 from pdfplumber.page import LTContainer
 
 from .model import Finding, FreeSpace
@@ -22,9 +23,29 @@ _TOC_HEADING = re.compile(r"sum[áa]rio(?:\s*\(continua(?:ção)?\))?")
 _TOC_ENTRY = re.compile(r"(?P<title>.+?)(?P<leader>\s+|[.·…]{2,}|…)\s*(?P<number>[0-9]+)")
 
 
+class _IndexedChars(list):
+    def __init__(self, chars):
+        super().__init__(chars)
+        self._positions = {id(char): index for index, char in enumerate(self)}
+
+    def index(self, char):
+        # pdfplumber uses index to restore the order of the selected objects.
+        return self._positions[id(char)]
+
+
+def _deduped_page(page):
+    if not hasattr(page, "_pdfcheck_deduped_page"):
+        deduped = page.filter(lambda obj: True)
+        deduped.objects["char"] = utils.dedupe_chars(_IndexedChars(page.chars))
+        page._pdfcheck_deduped_page = deduped
+        if "_pdfcheck_deduped_page" not in page.cached_properties:
+            page.cached_properties = [*page.cached_properties, "_pdfcheck_deduped_page"]
+    return page._pdfcheck_deduped_page
+
+
 def _lines(page, *, return_chars=False):
     # dedupe_chars: negrito simulado (letra desenhada duas vezes no mesmo lugar) não conta
-    return page.dedupe_chars().extract_text_lines(y_tolerance=1, return_chars=return_chars)
+    return _deduped_page(page).extract_text_lines(y_tolerance=1, return_chars=return_chars)
 
 
 def _area(c) -> float:
@@ -40,7 +61,7 @@ def check_overlaps(pdf, rules: Rules) -> list[Finding]:
     # Vizinhos na ordem de leitura (kerning) não contam; pares viram um achado por região.
     out = []
     for page in pdf.pages:
-        chars = [c for c in page.dedupe_chars().chars if c["text"].strip() and _area(c) > 0]
+        chars = [c for c in _deduped_page(page).chars if c["text"].strip() and _area(c) > 0]
         order = sorted(range(len(chars)), key=lambda i: chars[i]["top"])
         regions: list[list] = []  # [x0, top, x1, bottom, pares]
         for n, i in enumerate(order):
