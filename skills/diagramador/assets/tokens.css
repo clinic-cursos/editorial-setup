@@ -32,6 +32,9 @@
   --size-cover-meta: 8pt;
   --size-toc: 10pt;
   --size-toc-chapter: 11pt;
+  --leading-cover-title: 1.15;
+  --leading-cover-meta: 1.7;
+  --leading-h1: 1.2;
   --tracking-caps: 0.06em;
 
   --page-margin-top: 26mm;
@@ -39,6 +42,7 @@
   --page-margin-inner: 22mm;
   --page-margin-outer: 22mm;
   --running-offset: 12mm;
+  --page-height: 297mm;
 
   --space-1: 2mm;
   --space-2: 4mm;

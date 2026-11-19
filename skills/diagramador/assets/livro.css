@@ -42,15 +42,15 @@ body { margin: 0; }
 p { margin: 0 0 var(--space-2); orphans: 2; widows: 2; }
 
 /* capa */
-.capa { page: capa; height: 297mm; box-sizing: border-box; padding: var(--space-5); background: var(--color-brand); color: var(--color-on-brand); display: flex; flex-direction: column; justify-content: space-between; }
+.capa { page: capa; height: var(--page-height); box-sizing: border-box; padding: var(--space-5); background: var(--color-brand); color: var(--color-on-brand); display: flex; flex-direction: column; justify-content: space-between; }
 .capa-selo, .capa-colecao { font: var(--weight-regular) var(--size-cover-meta) var(--font-title); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
-.capa h1 { string-set: booktitle content(); font: var(--weight-regular) var(--size-cover-title) / 1.15 var(--font-title); margin: 0 0 var(--space-3); }
+.capa h1 { string-set: booktitle content(); font: var(--weight-regular) var(--size-cover-title) / var(--leading-cover-title) var(--font-title); margin: 0 0 var(--space-3); }
 .capa-subtitulo { font: var(--weight-regular) var(--size-cover-sub) var(--font-body); }
-.capa-autores { font: var(--weight-regular) var(--size-cover-meta) / 1.7 var(--font-body); }
+.capa-autores { font: var(--weight-regular) var(--size-cover-meta) / var(--leading-cover-meta) var(--font-body); }
 
 /* expediente */
 .expediente { break-before: page; }
-.expediente h1, .capitulo h1 { font: var(--weight-regular) var(--size-h1) / 1.2 var(--font-title); color: var(--color-heading); margin: 0 0 var(--space-3); }
+.expediente h1, .capitulo h1 { font: var(--weight-regular) var(--size-h1) / var(--leading-h1) var(--font-title); color: var(--color-heading); margin: 0 0 var(--space-3); }
 
 /* sumario */
 .sumario { break-before: page; }

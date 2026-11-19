@@ -30,3 +30,13 @@ def test_fonts_ship_with_licenses():
     fonts = ASSETS / "fonts"
     assert (fonts / "OFL.txt").is_file() and (fonts / "OFL-SourceSans3.txt").is_file()
     assert len(list(fonts.glob("*.ttf"))) == 7
+
+
+MEASURE = re.compile(r"(?<![\w.#-])\d*\.?\d+(?:pt|mm|em|%)(?![\w])|/\s*\d*\.?\d+(?![\w.%])")
+# 100% is a proportion of the container, not a typographic measure.
+ALLOWED_MEASURES = {"100%"}
+
+
+def test_no_literal_measures_outside_tokens():
+    found = {m.group(0) for m in MEASURE.finditer(_css("livro.css"))} - ALLOWED_MEASURES
+    assert found == set()
