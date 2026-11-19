@@ -211,3 +211,10 @@ def test_range_with_hyphen_at_line_start_still_checked(tmp_path, layout_pdf):
 
 def test_renumbered_list_item_is_a_difference(tmp_path, layout_pdf):
     assert _compare(tmp_path, layout_pdf, "1. Composição\n2. Dose", "01 — Composição\n03 — Dose") == 1
+
+
+def test_bullet_markers_match_between_markdown_and_pdf(tmp_path, layout_pdf):
+    assert _compare(tmp_path, layout_pdf, "- Composição", "• Composição") == 0
+    md = tmp_path / "p.md"  # a bolinha só no PDF também não conta como texto
+    md.write_text(META + "Composição\n\n" + FILLER + "\n", encoding="utf-8")
+    assert fidelity(str(md), str(_line_pdf(layout_pdf, "• Composição"))) == (1.0, 1.0)

@@ -24,7 +24,8 @@ LIST_MARKER = re.compile(r"(?m)^[ \t]*(?:(\d{1,3})(?:[.)][ \t]+|[ \t]+[-–—][
 
 
 def _canonical_markers(text: str) -> str:
-    return LIST_MARKER.sub(lambda m: f"{int(m[1])}. " if m[1] else "• ", text)
+    # Mantém o valor de propósito: item renumerado (01 contra 02) continua sendo diferença; a bolinha não tem valor e sai.
+    return LIST_MARKER.sub(lambda m: f"{int(m[1])}. " if m[1] else "", text)
 
 
 def _markdown_text(path: str) -> str:
