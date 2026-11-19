@@ -90,3 +90,25 @@ def test_insert_cli_runs_without_pythonpath():
         capture_output=True, text=True,
     )
     assert run.returncode == 0, run.stderr
+
+
+def test_earlier_image_does_not_discard_later_one(tmp_path, monkeypatch, capsys):
+    source = tmp_path / "manuscrito.md"
+    chapter = "\n\n".join(PARAGRAPH for _ in range(14))
+    source.write_text(
+        "title: T\ncourse: C\nauthors: A\nversion: 1.0\n\n"
+        f"# Capítulo um\n\n{chapter}\n\n# Capítulo dois\n\n{chapter}\n",
+        encoding="utf-8",
+    )
+    images = tmp_path / "imagens"
+    images.mkdir()
+    Image.new("RGB", (300, 900), "#C88FA0").save(images / "pagina-05.png")  # alta: estoura a página 5
+    Image.new("RGB", (900, 300), "#C88FA0").save(images / "pagina-07.png")
+    real = insert_images._cap_pt
+    monkeypatch.setattr(insert_images, "_cap_pt", lambda free, h: 700.0 if free.page == 5 else real(free, h))
+    out = tmp_path / "out"
+    assert insert_images.main([str(source), str(images), "--out", str(out)]) == 0
+    captured = capsys.readouterr()
+    assert "página 5" in captured.err and "página 7" not in captured.err
+    layout = json.loads((out / "layout.json").read_text(encoding="utf-8"))
+    assert layout["comp-07"] == 7 and "comp-05" not in layout
