@@ -22,7 +22,7 @@ Soma dos pontos: <igual à nota>.
 
 | Eliminatório | Avaliado | Achado |
 | --- | --- | --- |
-| Referência que não existe | sim | <nenhum ou número do achado; só vale se nenhum identificador nem o título acha a obra> |
+| Referência que não existe | sim | <nenhum ou número do achado; só vale se todas as consultas deram `not-found` definitivo; com qualquer `unverified`, a referência fica `não verificada`, sem eliminatório> |
 | Conteúdo de slide ausente sem justificativa | sim | |
 | Divergência com o Board não sinalizada | sim | |
 
