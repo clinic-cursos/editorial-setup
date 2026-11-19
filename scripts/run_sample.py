@@ -43,6 +43,22 @@ def fail(message: str):
     sys.exit(2)
 
 
+def input_path(name: str, samples: Path) -> Path:
+    """O argumento é o nome de um PDF dentro da pasta de amostras; link, caminho absoluto e `..` que saem dela são recusados."""
+    pdf = (samples / name).resolve()
+    if not pdf.is_relative_to(samples.resolve()) or not pdf.is_file():
+        fail(f"PDF não encontrado em EDITORIAL_SAMPLES_DIR: {name}")
+    return pdf
+
+
+def report_path(name: str, pdf: Path, samples: Path) -> Path:
+    """O relatório nunca pode cair sobre o original nem dentro da pasta de amostras."""
+    report = Path(name).resolve()
+    if report == pdf.resolve() or report.is_relative_to(samples.resolve()) or report.suffix != ".md":
+        fail(f"Relatório recusado: precisa terminar em .md e ficar fora de EDITORIAL_SAMPLES_DIR ({name})")
+    return report
+
+
 def fill_metadata(manuscript: Path) -> dict:
     """Preencha título, curso e autores a partir da capa e do expediente que o extrator pôs no Markdown."""
     text = manuscript.read_text(encoding="utf-8")
@@ -230,10 +246,8 @@ def main(argv: list[str]) -> int:
     samples = os.environ.get("EDITORIAL_SAMPLES_DIR")
     if not samples:
         fail("Defina EDITORIAL_SAMPLES_DIR com a pasta dos livros.")
-    pdf = Path(samples) / argv[0]
-    if not pdf.is_file():
-        fail(f"PDF não encontrado em EDITORIAL_SAMPLES_DIR: {argv[0]}")
-    report = Path(argv[1])
+    pdf = input_path(argv[0], Path(samples))
+    report = report_path(argv[1], pdf, Path(samples))
     scratch = "/var/tmp" if Path("/var/tmp").is_dir() else None  # /tmp pode ficar na memória
     with tempfile.TemporaryDirectory(prefix="editorial-sample-", dir=scratch) as tmp:
         try:
