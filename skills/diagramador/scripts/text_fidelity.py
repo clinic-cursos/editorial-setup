@@ -45,14 +45,25 @@ def _pdf_text(path: str) -> str:
     return LEADER.sub("", "\n".join(pages))  # pontilhado e página do sumário
 
 
-def _tokens(text: str) -> list[str]:
+def _normalized(text: str) -> str:
     text = unicodedata.normalize("NFC", text).translate(LIGATURES).replace("\u00ad", "")
-    text = re.sub(r"(\w)-\s+(?=\w)", r"\1", text)  # só o hífen de quebra de linha; "5-10" fica
-    return text.casefold().split()  # casefold: o CSS põe títulos em caixa alta
+    return text.casefold()  # o CSS põe títulos em caixa alta
 
 
-def _drop_design(tokens: list[str], design: list[str]) -> list[str]:
-    budget = Counter(_tokens(" ".join(design)))
+def _vocabulary(text: str) -> set[str]:
+    return set(re.findall(r"\w+(?:-\w+)*", _normalized(text)))
+
+
+def _tokens(text: str, vocabulary: set[str]) -> list[str]:
+    def join(m):  # hífen de quebra de linha; composto só mantém o hífen se o original o tem
+        dashed, plain = f"{m[1]}-{m[2]}", m[1] + m[2]
+        return dashed if dashed in vocabulary and plain not in vocabulary else plain
+
+    return re.sub(r"(\w+)-\s+(\w+)", join, _normalized(text)).split()  # "5-10" fica
+
+
+def _drop_design(tokens: list[str], design: list[str], vocabulary: set[str]) -> list[str]:
+    budget = Counter(_tokens(" ".join(design), vocabulary))
     kept = []
     for token in tokens:
         if budget[token] > 0:
@@ -74,9 +85,10 @@ def fidelity(original: str, output: str) -> tuple[float, float]:
         text_b = _pdf_text(output)
     else:
         text_b = _markdown_text(output)[0]
-    a, b = _tokens(text_a), _tokens(text_b)
+    vocabulary = _vocabulary(text_a)
+    a, b = _tokens(text_a, vocabulary), _tokens(text_b, vocabulary)
     if is_pdf(output) and design:
-        b = _drop_design(b, design)
+        b = _drop_design(b, design, vocabulary)
     total_a, total_b = sum(map(len, a)), sum(map(len, b))
     if not total_a:
         raise ValueError(f"{original}: sem texto para comparar")

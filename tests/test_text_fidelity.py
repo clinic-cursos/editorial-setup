@@ -100,3 +100,9 @@ def test_built_book_keeps_fidelity(tmp_path):
     result = build(str(source), str(tmp_path / "o"))
     assert fidelity(str(source), result.pdf) == (1.0, 1.0)
     assert main([str(source), result.pdf]) == 0
+
+
+def test_compound_broken_at_hyphen_matches(tmp_path):
+    a = write(tmp_path, "a.md", ["O efeito anti-inflamatório do pós-procedimento dura vários dias."])
+    b = write(tmp_path, "b.md", ["O efeito anti-\ninflamatório do pós-\nprocedimento dura vários dias."])
+    assert fidelity(str(a), str(b)) == (1.0, 1.0)
