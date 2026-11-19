@@ -22,7 +22,7 @@ Soma dos pontos: <igual à nota>.
 
 | Eliminatório | Avaliado | Achado |
 | --- | --- | --- |
-| Referência que não existe | sim | <nenhum ou número do achado> |
+| Referência que não existe | sim | <nenhum ou número do achado; só vale se nenhum identificador nem o título acha a obra> |
 | Conteúdo de slide ausente sem justificativa | sim | |
 | Divergência com o Board não sinalizada | sim | |
 
@@ -42,7 +42,7 @@ Entram aqui as `unverified` (sem rede, sem DOI nem PMID, resposta malformada). V
 Uma por item, numeradas.
 
 ### N1. <título curto>
-- **Tipo:** referência inexistente, metadado divergente, afirmação sem suporte, extrapolação, divergência com o Board, slide órfão, informação regulatória a atualizar, terminologia, outro.
+- **Tipo:** referência inexistente, identificador errado (não eliminatório), metadado divergente, afirmação sem suporte, extrapolação, divergência com o Board, slide órfão, informação regulatória a atualizar, terminologia, outro.
 - **Eliminatório:** sim ou não.
 - **Localização:** <capítulo, seção, slide ou linha da tabela>.
 - **Evidência:** <o que a fonte ou o original diz, com a localização>.
