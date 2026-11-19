@@ -1,0 +1,66 @@
+from pathlib import Path
+import sys
+
+from PIL import Image
+from reportlab.lib.utils import ImageReader
+
+SCRIPTS = Path(__file__).resolve().parents[1] / "skills/diagramador/scripts"
+sys.path.insert(0, str(SCRIPTS))
+
+import check_layout  # noqa: E402
+
+
+def page(number, *lines, image=None):
+    """Página com texto, fólio no rodapé e, opcionalmente, uma imagem de (pixels)."""
+    def draw(document):
+        document.setFont("Helvetica", 12)
+        for y, text in lines:
+            document.drawString(80, y, text)
+        if number:
+            document.drawString(300, 40, str(number))
+        if image:
+            document.drawImage(ImageReader(Image.new("RGB", image, "#800020")), 100, 300, 288, 144)
+    return draw
+
+
+def run(monkeypatch, test_rules, pdf, *args):
+    monkeypatch.setattr(check_layout, "load_rules", lambda: test_rules)
+    return check_layout.main([str(pdf), *args])
+
+
+def test_check_layout_exit_codes(layout_pdf, tmp_path, test_rules, monkeypatch, capsys):
+    clean = layout_pdf(page(None, (700, "Capa sem fólio.")), page(2, (700, "Texto limpo.")), page(3, (700, "Outra página.")))
+    assert run(monkeypatch, test_rules, clean) == 0
+    assert "Erros: 0" in capsys.readouterr().out
+    overlap = layout_pdf(page(1, (700, "Linha de cima do trecho"), (696, "Linha que cai por cima")))
+    assert run(monkeypatch, test_rules, overlap) == 1
+    assert "overlap" in capsys.readouterr().out
+    assert run(monkeypatch, test_rules, tmp_path / "missing.pdf") == 2
+
+
+def test_check_layout_reports_toc_and_images(layout_pdf, test_rules, monkeypatch, capsys):
+    pdf = layout_pdf(
+        page(1, (700, "Sumário"), (680, "Introdução ........ 7")),
+        page(2, (700, "Texto."), image=(100, 50)),
+    )
+    assert run(monkeypatch, test_rules, pdf) == 1
+    out = capsys.readouterr().out
+    assert "toc-mismatch" in out and "image-low-resolution" in out
+
+
+def test_inherited_without_origin_follows_new_image_rule(layout_pdf, tmp_path, test_rules, monkeypatch, capsys):
+    pdf = layout_pdf(page(1, (700, "Texto."), image=(100, 50)))
+    assert run(monkeypatch, test_rules, pdf) == 1  # sem origem.json: imagem nova, erro
+    assert run(monkeypatch, test_rules, pdf, "--inherited", "FormXob.x") == 2  # lista de nomes não existe mais
+    assert run(monkeypatch, test_rules, pdf, "--inherited", str(tmp_path / "missing.json")) == 2
+
+
+def test_enlarged_inherited_image_follows_new_image_rule(layout_pdf, tmp_path, test_rules, monkeypatch, capsys):
+    pdf = layout_pdf(page(1, (700, "Texto."), image=(100, 50)))  # 25 ppi efetivos
+    origin = tmp_path / "origem.json"
+    origin.write_text('{"fig-1.png": {"pixels": [100, 50], "ppi": 25.0}}', encoding="utf-8")
+    assert run(monkeypatch, test_rules, pdf, "--inherited", str(origin)) == 0  # mesmo tamanho do original: aviso
+    assert "aviso | image-low-resolution" in capsys.readouterr().out
+    origin.write_text('{"fig-1.png": {"pixels": [100, 50], "ppi": 100.0}}', encoding="utf-8")
+    assert run(monkeypatch, test_rules, pdf, "--inherited", str(origin)) == 1  # ampliada: regra de imagem nova
+    assert "erro | image-low-resolution" in capsys.readouterr().out

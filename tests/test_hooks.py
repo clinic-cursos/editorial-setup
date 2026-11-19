@@ -84,6 +84,12 @@ def test_stop_reminds_ficha_once():
     assert decision(run("subagent_return.py", stop, "--stop"))["decision"] == "block"
 
 
+def test_stop_reminds_on_phase_done_without_number():
+    stop = {"hook_event_name": "Stop", "agent_type": "editor-chefe", "stop_hook_active": False,
+            "last_assistant_message": "Fase concluída: validação de conteúdo"}
+    assert decision(run("subagent_return.py", stop, "--stop")).get("decision") == "block"
+
+
 def test_hook_fails_open_on_bad_json():
     for script, args in (("editorial_guard.py", ()), ("subagent_return.py", ()), ("subagent_return.py", ("--stop",))):
         proc = run(script, None, *args, raw="{não é json")

@@ -1,0 +1,106 @@
+@import url("tokens.css");
+/* A familia se chama SourceSans3 (sem espacios) porque o WeasyPrint nomeia a fonte embutida pela familia e o auditor grafico confere "SourceSans3". */
+@font-face { font-family: "Montserrat"; font-weight: 400; src: url("fonts/Montserrat-Regular.ttf"); }
+@font-face { font-family: "Montserrat"; font-weight: 600; src: url("fonts/Montserrat-SemiBold.ttf"); }
+@font-face { font-family: "Montserrat"; font-weight: 700; src: url("fonts/Montserrat-Bold.ttf"); }
+@font-face { font-family: "SourceSans3"; font-weight: 400; src: url("fonts/SourceSans3-Regular.ttf"); }
+@font-face { font-family: "SourceSans3"; font-weight: 400; font-style: italic; src: url("fonts/SourceSans3-It.ttf"); }
+@font-face { font-family: "SourceSans3"; font-weight: 600; src: url("fonts/SourceSans3-Semibold.ttf"); }
+@font-face { font-family: "SourceSans3"; font-weight: 700; src: url("fonts/SourceSans3-Bold.ttf"); }
+
+
+@page {
+  size: A4;
+  margin: var(--page-margin-top) var(--page-margin-outer) var(--page-margin-bottom) var(--page-margin-inner);
+  @top-left {
+    content: "CLINIC EDITORA";
+    font: var(--weight-regular) var(--size-running) var(--font-title);
+    letter-spacing: var(--tracking-caps);
+    color: var(--color-header);
+    vertical-align: bottom;
+    padding-bottom: var(--running-offset);
+  }
+  @top-right {
+    content: string(booktitle);
+    text-transform: uppercase;
+    font: var(--weight-regular) var(--size-running) var(--font-title);
+    letter-spacing: var(--tracking-caps);
+    color: var(--color-header);
+    vertical-align: bottom;
+    padding-bottom: var(--running-offset);
+  }
+  @bottom-center {
+    content: counter(page);
+    font: var(--weight-regular) var(--size-running) var(--font-title);
+    color: var(--color-header);
+  }
+}
+@page capa { margin: 0; @top-left { content: none; } @top-right { content: none; } @bottom-center { content: none; } }
+
+html { font: var(--weight-regular) var(--size-body) / var(--leading-body) var(--font-body); color: var(--color-text); }
+body { margin: 0; }
+p { margin: 0 0 var(--space-2); orphans: 2; widows: 2; }
+
+/* capa */
+.capa { page: capa; height: var(--page-height); box-sizing: border-box; padding: var(--space-5); background: var(--color-brand); color: var(--color-on-brand); display: flex; flex-direction: column; justify-content: space-between; }
+.capa-selo, .capa-colecao { font: var(--weight-regular) var(--size-cover-meta) var(--font-title); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.capa h1 { string-set: booktitle content(); font: var(--weight-regular) var(--size-cover-title) / var(--leading-cover-title) var(--font-title); margin: 0 0 var(--space-3); }
+.capa-subtitulo { font: var(--weight-regular) var(--size-cover-sub) var(--font-body); }
+.capa-autores { font: var(--weight-regular) var(--size-cover-meta) / var(--leading-cover-meta) var(--font-body); }
+
+/* expediente */
+.expediente { break-before: page; }
+.expediente h1, .capitulo h1 { font: var(--weight-regular) var(--size-h1) / var(--leading-h1) var(--font-title); color: var(--color-heading); margin: 0 0 var(--space-3); }
+
+/* sumario */
+.sumario { break-before: page; }
+.sumario h1 { font: var(--weight-regular) var(--size-h1) var(--font-title); color: var(--color-heading); margin: 0 0 var(--space-3); }
+.sumario ol { list-style: none; margin: 0; padding: 0; }
+.sumario li { font: var(--weight-regular) var(--size-toc) / var(--leading-body) var(--font-body); margin-bottom: var(--space-1); }
+.sumario li.nivel-1 { font: var(--weight-semibold) var(--size-toc-chapter) var(--font-title); color: var(--color-heading); margin-top: var(--space-2); }
+.sumario a { color: inherit; text-decoration: none; }
+.sumario a::after { content: leader(".") target-counter(attr(href), page); }
+
+/* capitulo e titulos */
+.capitulo, .pagina-nova { break-before: page; }
+.rotulo { font: var(--weight-semibold) var(--size-label) var(--font-title); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--color-heading); margin: 0 0 var(--space-1); }
+.capitulo .lead { font-size: var(--size-h3); color: var(--color-muted); margin-bottom: var(--space-3); }
+h2 { font: var(--weight-bold) var(--size-h2) var(--font-title); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--color-heading); margin: var(--space-3) 0 var(--space-1); break-after: avoid; }
+h3 { font: var(--weight-semibold) var(--size-h3) var(--font-title); color: var(--color-heading); margin: var(--space-2) 0 var(--space-1); break-after: avoid; }
+ul, ol { margin: 0 0 var(--space-2); padding-left: var(--space-3); }
+
+/* tabela */
+table { width: 100%; border-collapse: collapse; margin: 0 0 var(--space-3); break-inside: avoid; }
+th { background: var(--color-brand); color: var(--color-on-brand); font: var(--weight-semibold) var(--size-label) var(--font-title); text-align: left; padding: var(--space-1) var(--space-2); }
+td { padding: var(--space-1) var(--space-2); }
+tbody tr:nth-child(even) td { background: var(--color-tint); }
+
+/* componentes editoriais */
+.estudo-pratica, .leitura-aprofundamento, .aplicacao-clinica, .ponto-chave, .atencao, .evidencia, .faq {
+  margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3); border-radius: var(--box-radius); break-inside: avoid;
+}
+.estudo-pratica > .rotulo, .leitura-aprofundamento > .rotulo, .aplicacao-clinica > .rotulo, .ponto-chave > .rotulo, .atencao > .rotulo, .evidencia > .rotulo, .faq > .rotulo { margin-bottom: var(--space-1); }
+.estudo-pratica > :last-child, .leitura-aprofundamento > :last-child, .aplicacao-clinica > :last-child, .ponto-chave > :last-child, .atencao > :last-child, .evidencia > :last-child, .faq > :last-child { margin-bottom: 0; }
+.estudo-pratica { background: var(--color-tint); border-left: var(--accent-width) solid var(--color-brand); }
+.leitura-aprofundamento { border: var(--rule-width) solid var(--color-rule); }
+.aplicacao-clinica { background: var(--color-tint); }
+.ponto-chave { background: var(--color-brand); color: var(--color-on-brand); }
+.ponto-chave > .rotulo { color: var(--color-on-brand); }
+.atencao { border: var(--accent-width) solid var(--color-brand); }
+.evidencia { border-top: var(--rule-width) solid var(--color-brand); border-bottom: var(--rule-width) solid var(--color-brand); padding-left: 0; padding-right: 0; }
+.evidencia .referencia { font-size: var(--size-caption); color: var(--color-muted); }
+.faq { border-left: var(--accent-width) solid var(--color-rule); }
+.faq dt { font-weight: var(--weight-semibold); color: var(--color-heading); }
+.faq dd { margin: 0 0 var(--space-2); }
+
+/* imagem, legenda e reserva */
+figure { margin: 0 0 var(--space-3); break-inside: avoid; }
+figure img { max-width: 100%; }
+.imagem-reserva { height: var(--image-reserve-height); background: var(--color-tint); border: var(--rule-width) solid var(--color-rule); }
+.legenda { font: var(--weight-regular) var(--size-caption) / var(--leading-caption) var(--font-body); color: var(--color-muted); margin-top: var(--space-1); }
+
+/* modulo de QR code comercial */
+.qr-modulo { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-2); border-top: var(--rule-width) solid var(--color-brand); padding-top: var(--space-1); margin-top: var(--space-3); break-inside: avoid; }
+.qr-modulo .qr-texto { font-size: var(--size-caption); color: var(--color-muted); }
+.qr-modulo .qr-rotulo { font: var(--weight-semibold) var(--size-label) var(--font-title); letter-spacing: var(--tracking-caps); color: var(--color-heading); }
+.qr-modulo .qr-codigo { width: var(--space-5); height: var(--space-5); background: var(--color-tint); }
