@@ -88,5 +88,8 @@ def test_planted_reference_flagged(monkeypatch, capsys):
 
 def test_manuscript_citations_match_references():
     manuscript = (SAMPLE / "manuscrito.md").read_text(encoding="utf-8")
+    body, _, listing = manuscript.partition("\n## Referências")
+    assert listing, "manuscript has no reference list"
     refs = {r["key"] for r in json.loads((SAMPLE / "referencias.json").read_text(encoding="utf-8"))}
-    assert set(re.findall(r"\[@([\w-]+)\]", manuscript)) == refs
+    assert set(re.findall(r"\[@([\w-]+)\]", body)) == refs, "every reference, planted one included, must be cited in the body"
+    assert set(re.findall(r"^- \[@([\w-]+)\]", listing, re.M)) == refs
