@@ -104,7 +104,7 @@ Origem: design system das aulas enviado pela Julie em 19/11/2026 (`docs/fontes/2
 - `scripts/clinic_deck.py`: o gerador.
 - `scripts/bold_deck.py`: variação de exploração ousada do gerador.
 - `assets/`: logos, foto de fundo, QR codes e ícones das parcerias (`assets/parcerias/`), como arquivos de imagem.
-- `references/exemplo_roteiro.json`: roteiro de exemplo.
+- `references/exemplo_roteiro.json`: roteiro de exemplo; mostra só o formato, e todo conteúdo clínico nele é marcador `[EXEMPLO: ...]` a substituir.
 
 Os scripts leem `assets/` pelo caminho relativo à própria pasta, então nada precisa ser montado antes de gerar. Se um asset faltar, peça ao usuário os logos e a foto de fundo da Clinic Cursos.
 
