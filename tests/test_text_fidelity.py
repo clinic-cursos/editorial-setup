@@ -218,3 +218,9 @@ def test_bullet_markers_match_between_markdown_and_pdf(tmp_path, layout_pdf):
     md = tmp_path / "p.md"  # a bolinha só no PDF também não conta como texto
     md.write_text(META + "Composição\n\n" + FILLER + "\n", encoding="utf-8")
     assert fidelity(str(md), str(_line_pdf(layout_pdf, "• Composição"))) == (1.0, 1.0)
+
+
+def test_dash_marker_before_number_is_flagged_for_review(tmp_path, layout_pdf, capsys):
+    # Escolha: traço seguido de dígito é ambíguo (lista ou intervalo); acusa e deixa uma pessoa conferir.
+    assert _compare(tmp_path, layout_pdf, "1. 10 dias", "01 - 10 dias") == 1
+    assert "número alterado" in capsys.readouterr().err
