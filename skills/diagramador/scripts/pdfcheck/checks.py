@@ -248,8 +248,11 @@ def check_toc(pdf, rules: Rules) -> list[Finding]:
                 (page.page_number, m["title"].rstrip(" .·…"), int(m["number"])) for m in matches
             )
         else:
-            for text in texts:
-                title_pages[text].add(page.page_number)
+            body_texts = [line["text"] for line in body]
+            for start in range(len(body_texts)):
+                for end in range(start + 1, min(start + 3, len(body_texts)) + 1):
+                    title = " ".join(body_texts[start:end]).rstrip(" .·…")
+                    title_pages[_normalized(title)].add(page.page_number)
 
     uses_printed_pages = any(number is not None for number in printed_pages.values())
     out = []
