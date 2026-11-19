@@ -10,7 +10,7 @@ import unicodedata
 import pdfplumber
 
 from build_book import LABELS
-from extract_pdf import HEADER_FRACTION, FOOTER_FRACTION, is_toc_page
+from extract_pdf import HEADER_FRACTION, FOOTER_FRACTION, toc_page_kind
 from manuscript import ManuscriptError, cite, parse
 
 THRESHOLD = 0.995
@@ -54,7 +54,7 @@ def _pdf_pages(path: str, *, drop_toc: bool) -> list[str]:
         return [
             (page.crop((0, page.height * HEADER_FRACTION, page.width, page.height * FOOTER_FRACTION)).extract_text() or "")
             for page in pdf.pages
-            if not drop_toc or not is_toc_page(page)
+            if not drop_toc or toc_page_kind(page) != "toc-only"
         ]
 
 

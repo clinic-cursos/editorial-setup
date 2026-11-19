@@ -7,6 +7,7 @@ from pathlib import Path
 import json
 import re
 import sys
+from typing import Literal
 import unicodedata
 
 import pdfplumber
@@ -22,17 +23,22 @@ MIN_GUTTER = 0.04  # largura mínima do vão entre colunas, em fração da pági
 MIN_COLUMN_WORDS = 12
 REFERENCE_GAP = 1.7  # salto entre linhas, em corpos de fonte, que abre outra referência
 TOC_TITLE = re.compile(r"sum[áa]rio(?:\s*\(continua(?:ção)?\))?")  # mesmo padrão de check_toc
+TOC_ENTRY = re.compile(r".+?(?:\s+|[.·…]{2,}|…)\s*[0-9]+")  # mesmo formato de check_toc
 
 
-def is_toc_page(page) -> bool:
-    """Identifica o sumário pelo primeiro texto fora do cabeçalho e do rodapé."""
+def toc_page_kind(page) -> Literal["toc-only", "mixed"] | None:
+    """Classifica a página pelo título e pelas linhas seguintes do corpo."""
     top, bottom = page.height * HEADER_FRACTION, page.height * FOOTER_FRACTION
-    for line in page.extract_text_lines(return_chars=False):
-        if top <= line["top"] and line["bottom"] <= bottom and line["text"].strip():
-            title = " ".join(unicodedata.normalize("NFKC", line["text"]).casefold().split())
-            # shortcut: páginas de continuação do sumário sem título são mantidas.
-            return TOC_TITLE.fullmatch(title) is not None
-    return False
+    lines = (
+        line["text"].strip()
+        for line in page.extract_text_lines(return_chars=False)
+        if top <= line["top"] and line["bottom"] <= bottom and line["text"].strip()
+    )
+    title = " ".join(unicodedata.normalize("NFKC", next(lines, "")).casefold().split())
+    # shortcut: páginas de continuação do sumário sem título são mantidas.
+    if TOC_TITLE.fullmatch(title):
+        return "toc-only" if all(TOC_ENTRY.fullmatch(line) for line in lines) else "mixed"
+    return None
 
 
 def is_wine(color):
@@ -164,9 +170,12 @@ def render(source, output, images_dir):
             raise ValueError("o PDF não tem texto extraível (talvez seja escaneado)")
         info = pdf.metadata or {}
         for number, page in enumerate(pdf.pages, 1):
-            if is_toc_page(page):
+            toc_kind = toc_page_kind(page)
+            if toc_kind == "toc-only":
                 warnings.append(f"página {number}: sumário do original descartado")
                 continue
+            if toc_kind == "mixed":
+                warnings.append(f"página {number}: sumário com texto de corpo, mantido para conferência")
             previous = None  # (tipo, top, tamanho) da linha anterior
             for top, kind, payload in page_items(page, body, images_dir, output, figures, warnings, number):
                 if previous and top < previous[1]:  # voltou ao topo: outra coluna
