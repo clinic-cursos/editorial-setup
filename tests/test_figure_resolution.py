@@ -41,6 +41,7 @@ def test_inherited_figure_keeps_original_resolution(tmp_path):
 
 
 def test_new_figure_is_not_enlarged_below_error_ppi(tmp_path):
-    findings = _compose(tmp_path, (900, 600))
+    findings = _compose(tmp_path, (900, 601))
     errors = [f.detail for f in findings if f.severity == "error"]
     assert errors == [], errors
+    assert any(f.kind == "image-low-resolution" and f.severity == "warning" for f in findings)

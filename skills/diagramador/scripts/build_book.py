@@ -4,6 +4,7 @@ import argparse
 from dataclasses import dataclass
 from html import escape
 import json
+from math import floor
 import os
 from pathlib import Path
 import sys
@@ -54,7 +55,9 @@ def _figure_width_pt(image: Path) -> float | None:
     ppi = metadata.get(image.name, {}).get("ppi")
     if ppi is None:
         ppi = load_rules().error_ppi
-    return pixels / ppi * 72
+    width = pixels / ppi * 72
+    # Deixe margem para a precisão da matriz do PDF mesmo em um décimo exato.
+    return floor((width - 0.00001) * 10) / 10
 
 
 def _render(block, base: Path, out_dir: Path, refs: dict[str, str]) -> str:
@@ -80,7 +83,7 @@ def _render(block, base: Path, out_dir: Path, refs: dict[str, str]) -> str:
         if not image.is_file():
             raise ManuscriptError(f"figura {block.fig_id}: arquivo {block.src} não encontrado ao lado do manuscrito")
         width = _figure_width_pt(image)
-        style = f' style="width:{width:.8f}pt"' if width is not None else ""
+        style = f' style="width:{width:.1f}pt"' if width is not None else ""
         return (f'<figure id="{block.id}"><img src="{_url(image, out_dir)}" alt="{e(block.text)}"{style}>'
                 f'<p class="legenda">{e(block.text)}</p></figure>')
     entries = "".join(f'<li class="referencia">{escape(d)}</li>' for _, d in block.entries)
