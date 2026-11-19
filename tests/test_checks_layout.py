@@ -1,7 +1,11 @@
+import json
+from pathlib import Path
+
 import pytest
 from reportlab.lib.pagesizes import A4
 
 from lib.pdfcheck import checks
+from lib.pdfcheck.rules import load_rules
 
 
 def test_low_ppi_new_image_is_error(open_pdf, placed_image_pdf, test_rules):
@@ -10,6 +14,14 @@ def test_low_ppi_new_image_is_error(open_pdf, placed_image_pdf, test_rules):
     resolution = [f for f in findings if f.kind == "image-low-resolution"]
     assert [(f.page, f.severity) for f in resolution] == [(1, "error")]
     assert "100" in resolution[0].detail
+
+
+def test_rotated_90_low_ppi_is_error(open_pdf, placed_image_pdf, test_rules):
+    pdf = open_pdf(placed_image_pdf(144, 72, rotation=90, pixels=(240, 120)))
+    finding, = checks.check_images(pdf, test_rules)
+    assert (finding.page, finding.kind, finding.severity) == (1, "image-low-resolution", "error")
+    # The axis-aligned box swaps the dimensions and would report 60 ppi.
+    assert "120.0 ppi" in finding.detail
 
 
 def test_low_ppi_inherited_image_is_warning(open_pdf, placed_image_pdf, test_rules):
@@ -142,3 +154,30 @@ def test_chapter_opening_not_candidate(open_pdf, layout_pdf, test_rules):
 
     pdf = open_pdf(layout_pdf(draw))
     assert checks.free_space(pdf, test_rules) == []
+
+
+@pytest.mark.parametrize("threshold, value", [
+    ("chapter_title_min_pt", 40),
+    ("chapter_title_min_width_fraction", 0.95),
+])
+def test_chapter_opening_thresholds_from_rules(open_pdf, layout_pdf, tmp_path, threshold, value):
+    def draw(document):
+        document.setFont("Helvetica-Bold", 32)
+        document.drawString(42, 690, "Capítulo 1. Introdução ao estudo")
+
+    pdf = open_pdf(layout_pdf(draw))
+    assert checks.free_space(pdf, load_rules()) == []
+
+    source = Path(__file__).resolve().parents[1] / "shared" / "rules" / "graphic-rules.json"
+    data = json.loads(source.read_text(encoding="utf-8"))
+    del data["chapter_title_min_pt"]
+    del data["chapter_title_min_width_fraction"]
+    custom = tmp_path / "graphic-rules.json"
+    custom.write_text(json.dumps(data), encoding="utf-8")
+    assert checks.free_space(pdf, load_rules(str(custom))) == []
+
+    data[threshold] = value
+    custom.write_text(json.dumps(data), encoding="utf-8")
+
+    candidate, = checks.free_space(pdf, load_rules(str(custom)))
+    assert candidate.page == 1

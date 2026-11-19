@@ -4,6 +4,8 @@
   "error_ppi": 150,
   "warning_ppi": 300,
   "free_space_fraction": 0.25,
+  "chapter_title_min_pt": 18,
+  "chapter_title_min_width_fraction": 0.5,
   "distortion_tolerance": 0.02,
   "page_size_pt": [595.28, 841.89],
   "allowed_repeats": [

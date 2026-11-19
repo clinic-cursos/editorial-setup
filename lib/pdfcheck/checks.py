@@ -249,7 +249,7 @@ def check_toc(pdf, rules: Rules) -> list[Finding]:
     return out
 
 
-def _chapter_opening(page, useful_width: float) -> bool:
+def _chapter_opening(page, useful_width: float, rules: Rules) -> bool:
     lines = _lines(page, return_chars=True)
     if not lines:
         return False
@@ -257,8 +257,8 @@ def _chapter_opening(page, useful_width: float) -> bool:
     title = max(lines, key=lambda line: max(char["size"] for char in line["chars"]))
     return (
         title["top"] < page.bbox[1] + page.height / 3
-        and title["x1"] - title["x0"] >= useful_width / 2
-        and max(char["size"] for char in title["chars"]) >= 18
+        and title["x1"] - title["x0"] >= useful_width * rules.chapter_title_min_width_fraction
+        and max(char["size"] for char in title["chars"]) >= rules.chapter_title_min_pt
     )
 
 
@@ -277,6 +277,6 @@ def free_space(pdf, rules: Rules) -> list[FreeSpace]:
             continue
         top = max(top, y0 + margin)
         fraction = (bottom - top) / useful_height
-        if fraction > rules.free_space_fraction and not _chapter_opening(page, x1 - x0):
+        if fraction > rules.free_space_fraction and not _chapter_opening(page, x1 - x0, rules):
             out.append(FreeSpace(page.page_number, x0, top, x1, bottom, fraction))
     return out
