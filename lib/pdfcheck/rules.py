@@ -37,6 +37,7 @@ class Rules:
     chapter_title_min_width_fraction: float = field(
         default_factory=lambda: _default_rule("chapter_title_min_width_fraction")
     )
+    front_matter_max_pages: int = field(default_factory=lambda: int(_default_rule("front_matter_max_pages")))  # páginas iniciais sem fólio
     page_margins_mm: dict = field(default_factory=lambda: _default_rule("page_margins_mm"))  # top/bottom, iguais ao tokens.css
 
 

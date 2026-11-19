@@ -294,3 +294,10 @@ def test_book_without_any_folio_is_flagged(open_pdf, layout_pdf, test_rules):
     assert "nenhuma página numerada" in findings[0].detail
     short = open_pdf(layout_pdf(*map(_with_footer, (None, None))))  # só capa e uma página: abaixo do mínimo
     assert checks.check_page_numbers(short, test_rules) == []
+
+
+def test_front_matter_exemption_is_limited(open_pdf, layout_pdf, test_rules):
+    assert test_rules.front_matter_max_pages == 8
+    numbers = (None,) * 9 + (10,)  # o primeiro fólio só aparece na 10ª página
+    pdf = open_pdf(layout_pdf(*map(_with_footer, numbers)))
+    assert [(f.page, f.kind) for f in checks.check_page_numbers(pdf, test_rules)] == [(9, "page-number")]
