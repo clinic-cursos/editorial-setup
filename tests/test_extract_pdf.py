@@ -105,3 +105,14 @@ def test_bordo_uppercase_label_wins_over_size(tmp_path):
     c.save()
     md = extract(path, tmp_path)[0].read_text(encoding="utf-8")
     assert "\n### ROTULO EM DESTAQUE\n" in md
+
+
+def test_images_dir_outside_manuscript_dir_fails(book_pdf, tmp_path):
+    out = tmp_path / "texto" / "manuscrito.md"
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), str(book_pdf), "--out", str(out), "--images", str(tmp_path / "figuras")],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 2
+    assert "dentro da pasta do manuscrito" in result.stderr
+    assert not out.exists()

@@ -133,6 +133,8 @@ def main():
     parser.add_argument("--images", type=Path, required=True, help="pasta das figuras extraídas")
     args = parser.parse_args()
     output, images = args.out.resolve(), args.images.resolve()
+    if not images.is_relative_to(output.parent):  # o leitor do manuscrito rejeita caminho com ".."
+        parser.error(f"a pasta de imagens {args.images} precisa ficar dentro da pasta do manuscrito {output.parent}")
     try:
         markdown, figures, warnings = render(args.pdf.resolve(), output, images)
     except Exception as error:  # pdfplumber e pypdf levantam tipos próprios em PDF ilegível
