@@ -18,7 +18,8 @@ from manuscript import ManuscriptError, parse
 try:  # dentro da skill a cópia fica ao lado do script; no repositório, em lib/
     from pdfcheck.checks import free_space
     from pdfcheck.rules import load_rules
-except ImportError:
+except ImportError:  # shortcut: a raiz do checkout só serve no repositório de desenvolvimento
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
     from lib.pdfcheck.checks import free_space
     from lib.pdfcheck.rules import load_rules
 

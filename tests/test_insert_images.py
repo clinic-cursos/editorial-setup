@@ -1,4 +1,6 @@
 import json
+import os
+import subprocess
 from pathlib import Path
 import sys
 
@@ -79,3 +81,12 @@ def test_insert_caps_tall_image_to_free_space(tmp_path):
     assert layout["comp-05"] == 5
     image, = pdf_images(out / "livro.pdf", 5)
     assert 0 < image["height"] <= 549.5  # o espaço livre da página 5; sem o limite seria 1362 pt
+
+
+def test_insert_cli_runs_without_pythonpath():
+    run = subprocess.run(
+        [sys.executable, str(SCRIPTS / "insert_images.py"), "--help"],
+        cwd="/", env={"PATH": os.environ["PATH"], "HOME": os.environ.get("HOME", "/")},
+        capture_output=True, text=True,
+    )
+    assert run.returncode == 0, run.stderr
