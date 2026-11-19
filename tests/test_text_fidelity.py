@@ -146,3 +146,25 @@ def test_compound_with_both_forms_in_original_matches(tmp_path):
     a = write(tmp_path, "a.md", ["O efeito anti-inflamatório e o termo antiinflamatório aparecem aqui."])
     b = write(tmp_path, "b.md", ["O efeito anti-\ninflamatório e o termo antiinflamatório aparecem aqui."])
     assert fidelity(str(a), str(b)) == (1.0, 1.0)
+
+
+def _list_pdf(layout_pdf, line):
+    def page(c):
+        c.setFont("Helvetica", 10)
+        c.drawString(60, 400, line)
+    return layout_pdf(page)
+
+
+def test_list_marker_style_is_not_a_number_change(tmp_path, layout_pdf):
+    pdf = _list_pdf(layout_pdf, "01 - Composição")
+    md = tmp_path / "o.md"
+    md.write_text(META + "1. Composição\n", encoding="utf-8")
+    assert fidelity(str(md), str(pdf)) == (1.0, 1.0)
+    assert main([str(md), str(pdf)]) == 0
+
+
+def test_number_inside_list_item_still_checked(tmp_path, layout_pdf):
+    pdf = _list_pdf(layout_pdf, "01 - Dose de 10 U")
+    md = tmp_path / "o.md"
+    md.write_text(META + "1. Dose de 20 U\n", encoding="utf-8")
+    assert main([str(md), str(pdf)]) == 1

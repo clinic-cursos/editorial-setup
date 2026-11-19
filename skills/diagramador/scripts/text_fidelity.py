@@ -18,6 +18,9 @@ LIGATURES = str.maketrans({"ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", 
 HEADER_FRACTION, FOOTER_FRACTION = 0.07, 0.93
 LEADER = re.compile(r"(?m)(?:\s*\.){4,}\s*\d+\s*$")  # pontilhado e página do sumário
 
+# Numeração de lista é formatação ("01 — x" no livro, "1. x" no manuscrito); número no meio da linha continua valendo.
+LIST_MARKER = re.compile(r"(?m)^[ \t]*(?:\d{1,3}(?:[.)]|[ \t]+[—–-])|•)[ \t]*")
+
 
 def _markdown_text(path: str) -> str:
     """Texto do manuscrito, com as citações renderizadas."""
@@ -88,6 +91,7 @@ def _analyze(original: str, output: str) -> tuple[tuple[float, float], list[str]
         text_b = _pdf_text(output, template=not is_pdf(original))
     else:
         text_b = _markdown_text(output)
+    text_a, text_b = LIST_MARKER.sub("", text_a), LIST_MARKER.sub("", text_b)
     vocabulary = _vocabulary(text_a)
     a, b = _tokens(text_a, vocabulary), _tokens(text_b, vocabulary)
     total_a, total_b = sum(map(len, a)), sum(map(len, b))
