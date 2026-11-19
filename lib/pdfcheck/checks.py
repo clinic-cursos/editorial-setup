@@ -195,7 +195,8 @@ def check_page_numbers(pdf, rules: Rules) -> list[Finding]:
     for page in pdf.pages:
         printed = _printed_number(_lines(page), _footer_top(page, rules))
         if printed is None:
-            out.append(Finding(page.page_number, "page-number", "error", "número de página ausente no rodapé"))
+            if expected is not None:  # antes do primeiro fólio (capa, páginas iniciais) a falta é do modelo
+                out.append(Finding(page.page_number, "page-number", "error", "número de página ausente no rodapé"))
         elif expected is not None and printed != expected:
             detail = f"número {printed} no rodapé, esperado {expected}"
             out.append(Finding(page.page_number, "page-number", "error", detail))

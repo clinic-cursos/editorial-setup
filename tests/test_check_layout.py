@@ -16,7 +16,8 @@ def page(number, *lines, image=None):
         document.setFont("Helvetica", 12)
         for y, text in lines:
             document.drawString(80, y, text)
-        document.drawString(300, 40, str(number))
+        if number:
+            document.drawString(300, 40, str(number))
         if image:
             document.drawImage(ImageReader(Image.new("RGB", image, "#800020")), 100, 300, 288, 144)
     return draw
@@ -28,7 +29,7 @@ def run(monkeypatch, test_rules, pdf, *args):
 
 
 def test_check_layout_exit_codes(layout_pdf, tmp_path, test_rules, monkeypatch, capsys):
-    clean = layout_pdf(page(1, (700, "Texto limpo.")), page(2, (700, "Outra página.")))
+    clean = layout_pdf(page(None, (700, "Capa sem fólio.")), page(2, (700, "Texto limpo.")), page(3, (700, "Outra página.")))
     assert run(monkeypatch, test_rules, clean) == 0
     assert "Erros: 0" in capsys.readouterr().out
     overlap = layout_pdf(page(1, (700, "Linha de cima do trecho"), (696, "Linha que cai por cima")))

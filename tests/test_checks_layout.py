@@ -273,3 +273,9 @@ def test_chapter_opening_thresholds_from_rules(open_pdf, layout_pdf, tmp_path, t
 
     candidate, = checks.free_space(pdf, load_rules(str(custom)))
     assert candidate.page == 1
+
+
+def test_front_matter_without_folio_is_not_an_error(open_pdf, layout_pdf, test_rules):
+    # A capa e as páginas iniciais não têm fólio no modelo; só falta ou salto depois do primeiro fólio conta.
+    pdf = open_pdf(layout_pdf(*map(_with_footer, (None, None, 3, 4, None, 6))))
+    assert [(f.page, f.kind) for f in checks.check_page_numbers(pdf, test_rules)] == [(5, "page-number")]
