@@ -25,7 +25,7 @@ Transformar o material recebido numa aula em .pptx editável, seguindo a skill `
 ## Barra de qualidade
 - O .pptx abre no python-pptx e traz os slides do roteiro mais as parcerias e a precificação inseridas pelo gerador (salvo `"parcerias": false`).
 - Nenhum nome de professor, preço, dose ou referência inventados; o que faltar fica genérico ou marcado `[confirmar]`.
-- Slide de evidência (`artigo`) só usa referência que veio do Editor Científico e passou pelo Auditor Científico; sem ela, marcador `[confirmar]`.
+- Slide de evidência (`artigo`) só usa referência verificável (estudo enviado pelo professor ou fonte conferida); sem fonte verificável, use o marcador `[confirmar]`. Numa aula de projeto com o Editor Científico, as referências dele são a fonte preferida.
 - Máximo de cerca de 40 palavras por slide de conteúdo; prompt de imagem nunca para caso clínico, antes e depois ou print de artigo.
 
 ## Saída

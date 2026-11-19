@@ -66,7 +66,7 @@ Todo slide aceita `notas` (vai para as notas do apresentador). Em qualquer texto
    - comparação de 2 ou mais opções em vários critérios → `tabela`;
    - sequência de ações → `passo_a_passo` (até 5 passos na horizontal; mais que isso ou com foto, vertical);
    - estrutura anatômica ou zonas de risco → `anatomia`;
-   - estudo citado → `artigo`, com a conclusão em 1 ou 2 frases e "na prática clínica". Slide de evidência só usa referência que veio do Editor Científico e passou pelo Auditor Científico; sem ela, `[confirmar]`;
+   - estudo citado → `artigo`, com a conclusão em 1 ou 2 frases e "na prática clínica". Slide de evidência só usa referência verificável (estudo enviado pelo professor ou fonte conferida); sem fonte verificável, `[confirmar]`. Numa aula de projeto com o Editor Científico, as referências dele são a fonte preferida;
    - complicação → `alerta`, sempre com sinais e conduta;
    - conceito → `texto_imagem`.
    Evite mais de 2 slides seguidos do mesmo tipo.
