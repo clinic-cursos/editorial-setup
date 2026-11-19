@@ -58,3 +58,14 @@ def test_check_layout_inherited_image_is_warning(layout_pdf, test_rules, monkeyp
         name = opened.pages[0].images[0]["name"]
     assert run(monkeypatch, test_rules, pdf, "--inherited", name) == 0
     assert "aviso | image-low-resolution" in capsys.readouterr().out
+
+
+def test_enlarged_inherited_image_follows_new_image_rule(layout_pdf, tmp_path, test_rules, monkeypatch, capsys):
+    pdf = layout_pdf(page(1, (700, "Texto."), image=(100, 50)))  # 25 ppi efetivos
+    origin = tmp_path / "origem.json"
+    origin.write_text('{"fig-1.png": {"pixels": [100, 50], "ppi": 25.0}}', encoding="utf-8")
+    assert run(monkeypatch, test_rules, pdf, "--inherited", str(origin)) == 0  # mesmo tamanho do original: aviso
+    assert "aviso | image-low-resolution" in capsys.readouterr().out
+    origin.write_text('{"fig-1.png": {"pixels": [100, 50], "ppi": 100.0}}', encoding="utf-8")
+    assert run(monkeypatch, test_rules, pdf, "--inherited", str(origin)) == 1  # ampliada: regra de imagem nova
+    assert "erro | image-low-resolution" in capsys.readouterr().out

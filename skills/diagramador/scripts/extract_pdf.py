@@ -4,6 +4,7 @@ import argparse
 from collections import Counter
 from os.path import relpath
 from pathlib import Path
+import json
 import re
 import sys
 import unicodedata
@@ -118,6 +119,10 @@ def page_items(page, body, images_dir, output, figures, warnings, number):
             filename = images_dir / f"{fig_id}{Path(image.name).suffix or '.png'}"
             figures["saved"][key] = filename
             figures["files"].append((filename, image.data))
+        pixels = tuple(placed["srcsize"])
+        ppi = round(min(pixels[0] / (placed["x1"] - placed["x0"]), pixels[1] / (placed["bottom"] - placed["top"])) * 72, 1)
+        entry = figures["origin"].setdefault(figures["saved"][key].name, {"pixels": list(pixels), "ppi": ppi})
+        entry["ppi"] = max(entry["ppi"], ppi)  # imagem reutilizada: vale o maior tamanho, o mais exigente
         relative = Path(relpath(figures["saved"][key], output.parent)).as_posix()
         column = int(split is not None and (placed["x0"] + placed["x1"]) / 2 > split)
         items.append((column, placed["top"], "figure", f"![]({relative}){{#{fig_id}}}"))
@@ -126,7 +131,7 @@ def page_items(page, body, images_dir, output, figures, warnings, number):
 
 def render(source, output, images_dir):
     warnings, blocks, list_items, references, in_references, joined = [], [], [], [], False, False
-    figures = {"count": 0, "files": [], "saved": {}, "reader": PdfReader(str(source))}
+    figures = {"count": 0, "files": [], "saved": {}, "origin": {}, "reader": PdfReader(str(source))}
     with pdfplumber.open(source) as pdf:
         body = body_size(pdf.pages)
         if not body:
@@ -197,7 +202,9 @@ def render(source, output, images_dir):
     if PLACEHOLDER in meta.values():
         warnings.append(f"metadados ausentes no PDF: preencha os campos «{PLACEHOLDER}» do manuscrito")
     header = "\n".join(f"{key}: {' '.join(value.split())}" for key, value in meta.items())
-    return "\n\n".join([header, *blocks]) + "\n", figures["files"], warnings
+    # origem.json: tamanho e ppi de cada imagem no PDF de entrada; o check_layout.py usa para achar imagem herdada ampliada
+    origin = json.dumps(figures["origin"], indent=2).encode()
+    return "\n\n".join([header, *blocks]) + "\n", figures["files"] + [(images_dir / "origem.json", origin)], warnings
 
 
 def reference_key(entry, taken):

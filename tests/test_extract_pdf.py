@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -137,7 +138,7 @@ def test_reused_image_referenced_twice(tmp_path):
     files = [line.split("](")[1].split(")")[0] for line in refs]
     assert len(refs) == 3 and len({r.split("#")[1] for r in refs}) == 3
     assert files[1] == files[2] != files[0]  # a mesma imagem aponta para um só arquivo
-    assert len(list(images.iterdir())) == 2
+    assert len(list(images.glob("*.png"))) == 2
     assert Image.open(out.parent / files[0]).getpixel((0, 0))[2] > 200  # azul primeiro
 
 
@@ -151,7 +152,7 @@ def test_inline_image_extracted(tmp_path):
     out, images, stderr = extract(path, tmp_path)
     refs = [line for line in out.read_text(encoding="utf-8").splitlines() if line.startswith("![")]
     assert len(refs) == 2 and "imagem" not in stderr
-    assert sorted(p.name for p in images.iterdir()) == ["fig-1.png", "fig-2.png"]
+    assert sorted(p.name for p in images.glob("*.png")) == ["fig-1.png", "fig-2.png"]
     assert Image.open(images / "fig-1.png").getpixel((0, 0))[2] > 200  # azul primeiro
 
 
@@ -264,3 +265,9 @@ def test_compact_references_warn(tmp_path):
     text(c, 646, "COSTA, C. Acido hialuronico na pratica clinica. Rio de Janeiro: Editora, 2019.")
     c.save()
     assert "verifique a separação das referências" in extract(path, tmp_path)[2]
+
+
+def test_origin_json_records_effective_ppi(book_pdf, tmp_path):
+    _, images, _ = extract(book_pdf, tmp_path)
+    origin = json.loads((images / "origem.json").read_text(encoding="utf-8"))
+    assert origin == {"fig-1.png": {"pixels": [40, 30], "ppi": 36.0}}  # 40 px em 80 pt
