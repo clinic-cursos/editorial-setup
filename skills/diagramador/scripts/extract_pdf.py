@@ -209,8 +209,8 @@ def main():
     output, images = args.out.resolve(), args.images.resolve()
     if not images.is_relative_to(output.parent):  # o leitor do manuscrito rejeita caminho com ".."
         parser.error(f"a pasta de imagens {args.images} precisa ficar dentro da pasta do manuscrito {output.parent}")
-    if " " in relpath(images, output.parent):  # a sintaxe de figura do manuscrito não aceita espaço
-        parser.error(f"a pasta de imagens {args.images} tem espaço no caminho: use um nome de pasta sem espaços")
+    if re.search(r"\s", relpath(images, output.parent)):  # a sintaxe de figura do manuscrito não aceita espaço em branco
+        parser.error(f"a pasta de imagens {args.images} tem espaço em branco no caminho: use um nome de pasta sem espaços")
     try:
         markdown, figures, warnings = render(args.pdf.resolve(), output, images)
     except Exception as error:  # pdfplumber e pypdf levantam tipos próprios em PDF ilegível

@@ -215,3 +215,14 @@ def test_two_column_page_read_column_by_column(tmp_path):
     assert md.index("Esquerda linha 6") < md.index("Direita linha 1")
     assert "Esquerda linha 1 do texto na primeira coluna Esquerda linha 2" in md
     assert "duas colunas" in stderr
+
+
+def test_images_dir_with_whitespace_fails(book_pdf, tmp_path):
+    out = tmp_path / "texto" / "manuscrito.md"
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), str(book_pdf), "--out", str(out), "--images", str(out.parent / "minhas\timagens")],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 2
+    assert "use um nome de pasta sem espaços" in result.stderr
+    assert not out.exists()
