@@ -213,6 +213,62 @@ def test_extract_retains_text_and_filters_slides(tmp_path, source_deck):
     assert not (tmp_path / "invalido").exists()
 
 
+@pytest.mark.parametrize("extension, image_format", [("png", "PNG"), ("jpg", "JPEG")])
+def test_extract_applies_crop_per_picture(tmp_path, extension, image_format):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    image = tmp_path / f"photo.{extension}"
+    with Image.new("RGB", (96, 64), "blue") as pixels:
+        pixels.paste("red", (12, 8, 60, 56))
+        pixels.save(image)
+    slide.shapes.add_picture(str(image), Inches(1), Inches(1), Inches(3))
+    cropped = slide.shapes.add_picture(str(image), Inches(1), Inches(4), Inches(2), Inches(2))
+    cropped.crop_left, cropped.crop_top = 0.125, 0.125
+    cropped.crop_right, cropped.crop_bottom = 0.375, 0.125
+    source = tmp_path / "original.pptx"
+    original.save(source)
+    folder = tmp_path / "rascunho"
+
+    result = run_cli("extrair", source, folder)
+
+    assert result.returncode == 0, result.stderr
+    draft = json.loads((folder / "roteiro-rascunho.json").read_text(encoding="utf-8"))
+    untouched, cropped = draft["slides"][0]["imagens"]
+    assert (folder / untouched["caminho"]).read_bytes() == image.read_bytes()
+    assert "recortada" not in untouched
+    with Image.open(folder / cropped["caminho"]) as exported:
+        assert exported.size == (48, 48)
+        assert exported.format == image_format
+        red, _, blue = exported.getpixel((24, 24))
+        assert red > 230 and blue < 25
+    assert cropped["recortada"] is True
+
+
+def test_extract_keeps_transparent_margin_for_negative_crop_in_group(tmp_path):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    image = tmp_path / "photo.png"
+    Image.new("RGB", (96, 64), "red").save(image)
+    group = slide.shapes.add_group_shape()
+    picture = group.shapes.add_picture(str(image), Inches(1), Inches(1), Inches(3))
+    picture.crop_left = -0.125
+    picture.crop_right = 0.25
+    source = tmp_path / "original.pptx"
+    original.save(source)
+    folder = tmp_path / "rascunho"
+
+    result = run_cli("extrair", source, folder)
+
+    assert result.returncode == 0, result.stderr
+    draft = json.loads((folder / "roteiro-rascunho.json").read_text(encoding="utf-8"))
+    item, = draft["slides"][0]["imagens"]
+    with Image.open(folder / item["caminho"]) as exported:
+        assert exported.size == (84, 64)
+        assert exported.getpixel((11, 32))[3] == 0
+        assert exported.getpixel((12, 32)) == (255, 0, 0, 255)
+    assert item["recortada"] is True
+
+
 def test_extract_suggests_layouts_from_simple_slide_content(tmp_path):
     prs = Presentation()
     cases = [

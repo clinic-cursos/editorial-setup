@@ -12,7 +12,7 @@ from typing import NamedTuple
 from unicodedata import category
 from zipfile import BadZipFile
 
-from PIL import Image, ImageStat
+from PIL import Image, ImageStat, JpegImagePlugin, UnidentifiedImageError
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE, PP_PLACEHOLDER
@@ -88,11 +88,11 @@ def relationship_attributes(element):
                 yield node, key, rid
 
 
-def image_parts(shape):
-    for _, _, rid in relationship_attributes(shape._element):
+def image_references(shape):
+    for node, _, rid in relationship_attributes(shape._element):
         rel = shape.part.rels.get(rid)
         if rel is not None and rel.reltype == RT.IMAGE and not rel.is_external:
-            yield rel.target_part
+            yield node, rel.target_part
 
 
 def covers_slide(shape, width, height):
@@ -504,7 +504,8 @@ def is_title_rule(shape, title_bounds):
 
 
 def drawing_counts(shapes):
-    images = [(shape.shape_id, bounds(shape)) for shape in shapes if next(image_parts(shape), None) is not None]
+    images = [(shape.shape_id, bounds(shape)) for shape in shapes
+              if next(image_references(shape), None) is not None]
     drawings = overlays = 0
     for shape in shapes:
         if is_drawing(shape):
@@ -529,8 +530,38 @@ def sized_images(shape, scale_x=1, scale_y=1):
         for child in shape.shapes:
             yield from sized_images(child, scale_x, scale_y)
     else:
-        for part in image_parts(shape):
-            yield part, width * scale_x, height * scale_y
+        for node, part in image_references(shape):
+            crop = node.getparent().find(qn("a:srcRect")) if node.tag == qn("a:blip") else None
+            yield part, crop, width * scale_x, height * scale_y
+
+
+def cropped_image(part, crop):
+    if crop is None or not any((crop.l, crop.t, crop.r, crop.b)):
+        return None
+    try:
+        image = Image.open(BytesIO(part.blob), formats=("PNG", "JPEG", "GIF", "BMP", "TIFF", "WEBP"))
+    except UnidentifiedImageError:
+        return None
+    with image:
+        width, height = image.size
+        left, top = round(width * crop.l), round(height * crop.t)
+        right, bottom = round(width * (1 - crop.r)), round(height * (1 - crop.b))
+        box = left, top, right, bottom
+        if box == (0, 0, width, height):
+            return None
+        if right <= left or bottom <= top:
+            raise ValueError("o recorte não contém pixels")
+        padded = left < 0 or top < 0 or right > width or bottom > height
+        output = BytesIO()
+        if image.format == "JPEG" and not padded:
+            image.crop(box).save(output, "JPEG", qtables=image.quantization,
+                                 subsampling=JpegImagePlugin.get_sampling(image),
+                                 icc_profile=image.info.get("icc_profile"))
+            return output.getvalue(), part.partname.ext
+        if padded or image.format != "PNG":
+            image = image.convert("RGBA")
+        image.crop(box).save(output, "PNG")
+        return output.getvalue(), "png"
 
 
 def extract(deck, folder, selection):
@@ -544,7 +575,7 @@ def extract(deck, folder, selection):
         shapes = list(slide.shapes)
         if backdrop is not None:
             shapes.append(backdrop)
-        image_frequency.update({part.sha1 for shape in shapes for part in image_parts(shape)})
+        image_frequency.update({part.sha1 for shape in shapes for _, part in image_references(shape)})
     # Conta a presença em pelo menos 90% do deck inteiro, mesmo com --slides.
     repeated = {digest for digest, count in image_frequency.items() if count > 1 and count * 10 >= total * 9}
     (folder / "img").mkdir(parents=True, exist_ok=True)
@@ -562,16 +593,24 @@ def extract(deck, folder, selection):
         content_ids = {shape.shape_id for shape in content}
         candidates = []
         for shape in ordered:
-            for part, w, h in sized_images(shape):
+            for part, crop, w, h in sized_images(shape):
                 decorative = (shape.shape_id not in content_ids or w < width * 0.06 or h < height * 0.06
                               or part.sha1 in repeated)
-                candidates.append((w * h, part, decorative))
+                candidates.append((w * h, part, crop, decorative))
         # Mantém o nome de cada arquivo na ordem original e ordena apenas a lista do roteiro.
         ranked = sorted(enumerate(candidates, 1), key=lambda item: item[1][0], reverse=True)
-        for index, (_, part, decorative) in ranked:
-            path = f"img/slide-{number}-{index}.{part.partname.ext}"
-            (folder / path).write_bytes(part.blob)
-            images.append({"caminho": path, "decorativa": decorative})
+        for index, (_, part, crop, decorative) in ranked:
+            try:
+                cropped = cropped_image(part, crop)
+            except (OSError, ValueError) as exc:
+                raise ValueError(f"slide {number}, imagem {part.partname}: não foi possível aplicar o recorte: {exc}") from exc
+            blob, extension = cropped if cropped is not None else (part.blob, part.partname.ext)
+            path = f"img/slide-{number}-{index}.{extension}"
+            (folder / path).write_bytes(blob)
+            item = {"caminho": path, "decorativa": decorative}
+            if cropped is not None:
+                item["recortada"] = True
+            images.append(item)
         content_images = [image["caminho"] for image in images if not image["decorativa"]]
         drawings, annotations = drawing_counts(content)
         title_text = title.text if title is not None else ""
