@@ -1,5 +1,14 @@
 # Histórico de versões
 
+## 0.2.2
+
+- O tipo `preservado` amplia o conteúdo copiado até a área útil, mantém a imagem de fundo do próprio slide, adiciona painel escuro quando o original tinha fundo escuro e evita duplicar o título.
+- Nas listas do estilo ousado, passo a passo, duas colunas, alerta e sumário, a altura dos itens acompanha o texto.
+- Sem imagem e sem prompt, não há painel nem quadro de prompt.
+- `pilares` aceita `selo`.
+- O `conferir` reprova texto sobreposto, agrupa os avisos de conteúdo preservado e inclui `preserved_findings` e `preserved_warnings` no JSON.
+- O rascunho do `extrair` grava `imagens` como lista de objetos com `caminho` e `decorativa`, formato aceito pelo gerador.
+
 ## 0.2.1
 
 - A skill de aulas documenta os campos do estilo ousado e inclui um roteiro de exemplo validado pelo `conferir`.

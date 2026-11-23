@@ -175,7 +175,7 @@ def test_model_matches_reference(tmp_path):
 
 @pytest.mark.parametrize("slide,model_size", [
     ({"tipo": "numero"}, 130),
-    ({"tipo": "anatomia"}, 40),
+    ({"tipo": "anatomia", "prompt_imagem": "Cena de teste"}, 40),
 ])
 def test_bold_number_size_respects_text_width(tmp_path, slide, model_size):
     values = ["123", "123456789012345"]
@@ -219,12 +219,109 @@ def test_bold_uses_relative_image_and_slide_text(tmp_path):
     assert not out.with_name("aula - prompts de imagem.md").exists()
 
 
+@pytest.mark.parametrize("kind,fields", [
+    ("pilares", {"pilares": [{"titulo": "Entrada", "texto": "Texto principal"}]}),
+    ("passo_a_passo", {"passos": [{"titulo": "Entrada", "texto": "Texto principal"}]}),
+    ("alerta", {"itens": [{"titulo": "Entrada", "texto": "Texto principal"}]}),
+    ("texto_imagem", {"texto": "Texto principal"}),
+])
+def test_bold_optional_image_panel_uses_full_text_width_when_omitted(tmp_path, kind, fields):
+    Image.new("RGB", (60, 40)).save(tmp_path / "foto.png")
+    slide = {"tipo": kind, "titulo": "Título de teste", "legenda": "Legenda de reserva", **fields}
+    path = write_script(tmp_path, [
+        slide, {**slide, "imagem": "foto.png"}, {**slide, "prompt_imagem": "Cena de teste"},
+    ], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    deck = Presentation(out)
+    text_only, with_photo, with_prompt = deck.slides
+    assert not any(shape.name == "!!foto" or shape.name.startswith("Texto do prompt ")
+                   for shape in text_only.shapes)
+    assert any(shape.name == "!!foto" and shape.shape_type == MSO_SHAPE_TYPE.PICTURE
+               for shape in with_photo.shapes)
+    assert any(shape.name == "!!foto" and shape.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE
+               for shape in with_prompt.shapes)
+    assert any(shape.name.startswith("Texto do prompt ") and "Cena de teste" in shape.text
+               for shape in with_prompt.shapes)
+    if kind == "passo_a_passo":
+        assert not any(shape.width == Inches(5.2) and shape.height == Inches(3)
+                       for shape in text_only.shapes)
+
+    full, narrow, prompt = (
+        next(shape for shape in generated.shapes if shape.has_text_frame and "Texto principal" in shape.text)
+        for generated in deck.slides
+    )
+    assert full.width > narrow.width == prompt.width
+    assert full.left + full.width == pytest.approx(deck.slide_width - Inches(0.45), abs=1)
+
+
+@pytest.mark.parametrize("panel", [{}, {"prompt_imagem": "Cena de teste"}], ids=["text-only", "with-panel"])
+def test_bold_pillars_badge_matches_module_without_covering_text(tmp_path, panel):
+    label = "Conheça nosso curso online de planejamento de aulas"
+    path = write_script(tmp_path, [
+        {"tipo": "modulo", "numero": 1, "titulo": "Planejamento", "selo": label},
+        {"tipo": "pilares", "titulo": "Planejamento", "selo": label,
+         "pilares": [{"titulo": f"Etapa {i}", "texto": f"Descrição da etapa {i}"} for i in range(1, 4)],
+         "info": "Atividade em grupo\nOficina de aulas", "referencia": "Roteiro da oficina", **panel},
+    ], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    module, pillars = Presentation(out).slides
+    module_label, pillars_label = [
+        next((shape for shape in slide.shapes if shape.has_text_frame and shape.text == label), None)
+        for slide in (module, pillars)
+    ]
+    assert module_label is not None
+    assert pillars_label is not None, "O selo deve aparecer no slide de pilares"
+
+    def badge_background(slide, box):
+        return next(shape for shape in slide.shapes if shape.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE
+                    and (shape.left, shape.top, shape.width, shape.height)
+                    == (box.left, box.top, box.width, box.height))
+
+    module_badge = badge_background(module, module_label)
+    pillars_badge = badge_background(pillars, pillars_label)
+    assert pillars_badge.auto_shape_type == module_badge.auto_shape_type
+    assert pillars_badge.fill.fore_color.rgb == module_badge.fill.fore_color.rgb
+    assert pillars_badge.height == module_badge.height
+    assert run_fingerprint(pillars_label.text_frame.paragraphs[0].runs[0]) == run_fingerprint(
+        module_label.text_frame.paragraphs[0].runs[0],
+    )
+
+    content = {shape.text: shape for shape in pillars.shapes
+               if shape.has_text_frame and shape.text and shape.shape_id != pillars_label.shape_id}
+    assert {"Descrição da etapa 3", "Atividade em grupo\nOficina de aulas", "Roteiro da oficina"} <= content.keys()
+    for caption, shape in content.items():
+        assert (
+            shape.left + shape.width <= pillars_badge.left
+            or pillars_badge.left + pillars_badge.width <= shape.left
+            or shape.top + shape.height <= pillars_badge.top
+            or pillars_badge.top + pillars_badge.height <= shape.top
+        ), caption
+
+
+@pytest.mark.parametrize("kind", ["anatomia", "comparativo"])
+def test_bold_required_image_panel_needs_image_or_prompt(tmp_path, kind):
+    path = write_script(tmp_path, [{"tipo": kind, "titulo": "Título de teste"}], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode != 0
+    assert f"{kind} exige imagem ou prompt_imagem" in result.stderr
+    assert not out.exists()
+
+
 @pytest.mark.parametrize("heading", [
     "Envelhecimento",
     "TECNOLOGIA DE FABRICAÇÃO DOS NEUROMODULADORES",
 ])
 def test_bold_text_image_title_fits_without_splitting_words(tmp_path, heading):
-    path = write_script(tmp_path, [{"tipo": "texto_imagem", "titulo": heading, "texto": "Corpo do slide"}])
+    path = write_script(tmp_path, [{
+        "tipo": "texto_imagem", "titulo": heading, "texto": "Corpo do slide", "prompt_imagem": "Cena de teste",
+    }])
     out = tmp_path / "aula.pptx"
     result = generate(path, out)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -249,7 +346,9 @@ def test_bold_text_image_title_fits_without_splitting_words(tmp_path, heading):
 @pytest.mark.parametrize("repetitions,exit_code", [(30, 0), (100, 1)])
 def test_bold_text_image_body_fits_or_keeps_overflow_for_review(tmp_path, repetitions, exit_code):
     content = "Texto de apoio " * repetitions + "Fim do texto."
-    path = write_script(tmp_path, [{"tipo": "texto_imagem", "titulo": "Título", "texto": content}])
+    path = write_script(tmp_path, [{
+        "tipo": "texto_imagem", "titulo": "Título", "texto": content, "prompt_imagem": "Cena de teste",
+    }])
     out = tmp_path / "aula.pptx"
     result = generate(path, out)
     assert result.returncode == exit_code, result.stdout + result.stderr
@@ -261,6 +360,55 @@ def test_bold_text_image_body_fits_or_keeps_overflow_for_review(tmp_path, repeti
         assert "Texto provavelmente estourado" in result.stdout
     else:
         assert 8 <= size < 11
+
+
+@pytest.mark.parametrize("kind,bottom,default_size,reduced,overflow", [
+    ("passo_a_passo", 4.78, 8.5, 13, 14),
+    ("duas_colunas", 5.075, 11, 8, 14),
+    ("alerta", 5.025, 9.5, 12, 17),
+    ("sumario", 4.95, 10, 9, 16),
+])
+@pytest.mark.parametrize("case", ["default", "reduced", "overflow"])
+def test_bold_list_fits_items_or_keeps_overflow_for_review(tmp_path, kind, bottom, default_size, reduced, overflow, case):
+    repetitions = {"default": 4, "reduced": reduced, "overflow": overflow}[case]
+    body = "Primeiro item. " + "Texto de teste com várias palavras. " * repetitions + "Final."
+    next_item = "Segundo item."
+    heading = "UM TÍTULO LONGO PARA TESTAR A TERCEIRA LINHA"
+    item_title = (
+        "UM TÍTULO DE TESTE QUE PRECISA OCUPAR TRÊS LINHAS PARA EXERCITAR O ESPAÇO"
+        if kind == "passo_a_passo" else "Entrada"
+    )
+    blocks = [{"titulo": item_title, "texto": body},
+              {"titulo": "Continuação", "texto": next_item}]
+    fields = {
+        "passo_a_passo": {"passos": blocks, "prompt_imagem": "Cena de teste"},
+        "duas_colunas": {"colunas": [{"titulo": heading, "itens": [body, next_item]}], "nota": "Rodapé"},
+        "alerta": {"itens": blocks, "urgente": "Rodapé", "prompt_imagem": "Cena de teste"},
+        "sumario": {"itens": [body, next_item]},
+    }
+    path = write_script(tmp_path, [{"tipo": kind, **fields[kind]}], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    slide = Presentation(out).slides[0]
+    first = next(shape for shape in slide.shapes if shape.has_text_frame and body in shape.text)
+    second = next(shape for shape in slide.shapes if shape.has_text_frame and next_item in shape.text)
+    run = next(run for paragraph in first.text_frame.paragraphs for run in paragraph.runs if run.text == body)
+    assert run.font.size.pt >= 8
+    if case == "overflow":
+        assert run.font.size.pt == 8
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert "Forma fora dos limites do slide" in result.stdout
+        return
+
+    if kind == "duas_colunas":
+        column = next(shape for shape in slide.shapes if shape.has_text_frame and shape.text == heading)
+        assert column.height > Inches(0.5)
+        assert column.top + column.height <= first.top
+    assert first.height > Inches(0.75)
+    assert first.top + first.height <= second.top
+    assert second.top + second.height <= Inches(bottom)
+    assert run.font.size.pt == (default_size if case == "default" else max(8, default_size - 1))
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("image_size", [(400, 100), (100, 400)])
@@ -301,11 +449,12 @@ def test_bold_animates_standard_layouts(tmp_path):
 def test_switching_to_bold_keeps_shared_content_fields(tmp_path):
     path = write_script(tmp_path, [
         {"tipo": "modulo", "titulo": "Módulo", "selo": "Material de apoio"},
-        {"tipo": "anatomia", "titulo": "Estruturas", "marcacoes": [{"nome": "A", "desc": "Descrição A"}]},
+        {"tipo": "anatomia", "titulo": "Estruturas", "marcacoes": [{"nome": "A", "desc": "Descrição A"}],
+         "prompt_imagem": "Cena de teste"},
         {"tipo": "alerta", "titulo": "Alerta", "sinais": ["Sinal A"], "conduta": ["Conduta A"],
          "urgente": "Aviso A"},
         {"tipo": "encerramento", "titulo": "Fim", "contatos": ["Site A"]},
-        {"tipo": "comparativo", "titulo": "Comparativo"},
+        {"tipo": "comparativo", "titulo": "Comparativo", "prompt_imagem": "Cena de teste"},
         {"tipo": "duas_colunas", "titulo": "Duas colunas"},
     ])
     out = tmp_path / "aula.pptx"

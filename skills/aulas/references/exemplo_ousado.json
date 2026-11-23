@@ -44,6 +44,7 @@
         {"titulo": "Revisão", "texto": "Confira a resposta."}
       ],
       "info": "**Oficina**\nAtividade em grupo",
+      "selo": "Conheça a oficina de aulas",
       "referencia": "Roteiro da oficina",
       "prompt_imagem": "Caderno aberto sobre uma mesa.",
       "estilo_imagem": "foto"
@@ -73,7 +74,6 @@
         {"titulo": "Compare", "texto": "Confira o texto na prévia."},
         {"titulo": "Anote", "texto": "Registre os ajustes."}
       ],
-      "legenda": "Duas pessoas revisando um roteiro.",
       "dica": "Comece pelo slide de abertura."
     },
     {

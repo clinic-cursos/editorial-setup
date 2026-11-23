@@ -25,7 +25,7 @@ from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION, XL_LABEL_POSITION
 from pptx.oxml.ns import qn
 from lxml import etree
 
-from restyle import PreservedSlides
+from restyle import PreservedFrame, PreservedSlides
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(HERE, "..", "assets")
@@ -960,7 +960,8 @@ def layout_preservado(prs, s, d, preserved):
     title_lines = d.get("titulo", "").rstrip().splitlines()
     divider_top = header_editorial(s, title_lines, d.get("kicker"), title_height=0.8)
     content_top = divider_top + 0.19
-    preserved.copy(s, d, (Inches(M), Inches(content_top), Inches(W - 2 * M), Inches(H - 0.35 - content_top)))
+    frame = PreservedFrame(Inches(M), Inches(content_top), Inches(W - 2 * M), Inches(H - 0.35 - content_top), PRETO)
+    preserved.copy(s, d, frame)
 
 
 LAYOUTS = {k[7:]: v for k, v in globals().items() if k.startswith("layout_")}
@@ -998,8 +999,18 @@ def build(spec, out, base_dir=".", *, layouts=LAYOUTS):
             if isinstance(d.get(k), str) and d[k] and not os.path.isabs(d[k]):
                 d[k] = os.path.join(base_dir, d[k])
         if "imagens" in d:
-            d["imagens"] = [os.path.join(base_dir, i) if isinstance(i, str) and not os.path.isabs(i) else i
-                            for i in d["imagens"]]
+            image_paths = []
+            for path in d["imagens"]:
+                if isinstance(path, dict):
+                    if path.get("decorativa") is True:
+                        continue
+                    path = path.get("caminho")
+                    if not isinstance(path, str):
+                        raise ValueError(f"slide {n}: caminho em imagens deve ser texto")
+                if isinstance(path, str) and not os.path.isabs(path):
+                    path = os.path.join(base_dir, path)
+                image_paths.append(path)
+            d["imagens"] = image_paths
         s = prs.slides.add_slide(blank)
         tipo = d.get("tipo")
         if tipo == "preservado":
