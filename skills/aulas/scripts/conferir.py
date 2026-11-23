@@ -11,7 +11,7 @@ from unicodedata import combining, normalize
 from lxml import etree
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE_TYPE
-from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE
+from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.oxml.ns import qn
 from pptx.util import Emu, Inches, Pt
@@ -78,7 +78,7 @@ def glyph_width(char, widths):
 
 
 def measure_line(line, width, wrap):
-    """Mede palavras que cruzam runs e devolve a maior fonte de cada linha visual."""
+    """Mede palavras que cruzam runs e devolve tamanho da fonte e avanço por linha visual."""
     text = "".join(part for part, _, _ in line)
     metrics = [(glyph_width(char, widths) * size / 1000, size)
                for part, size, widths in line for char in part]
@@ -94,14 +94,14 @@ def measure_line(line, width, wrap):
             continue
         wide_word |= advance > width
         if wrap and used and used + gap + advance > width:
-            rows.append(size)
+            rows.append((size, used))
             used = gap = size = 0
         used += gap + advance if used else advance
         size = max(size, max(point_size for _, point_size in token))
         gap = 0
     if not wrap and used > width:
         wide_word = True
-    rows.append(size or max((size for _, size, _ in line), default=0))
+    rows.append((size or max((size for _, size, _ in line), default=0), used))
     return rows, wide_word
 
 
@@ -228,19 +228,21 @@ def check_fill(properties, theme, palette, add, reference=None):
 def check_text(frame, shape, theme, palette, add, width, height, margins, top, slide_bottom, *, grows=False):
     text = frame.text.strip()
     if not text:
-        return 0
+        return 0, []
     if MARKER.search(text):
         add("marker", "Marcador editorial pendente.", "warning")
     fonts, colors = set(), set()
     available_width = Emu(width - margins[0] - margins[1]).pt
     available_height = Emu(height - margins[2] - margins[3]).pt
     cursor = text_bottom = 0
+    text_rows = []
     wide_word = False
     autofit = frame._bodyPr.normAutofit
     scale = autofit.fontScale / 100 if autofit is not None else 1
     family = clinic_deck.FONTE.casefold()
     is_quote = text == bold_deck.QUOTE_MARK
     for paragraph in frame.paragraphs:
+        alignment = {PP_ALIGN.CENTER: 0.5, PP_ALIGN.RIGHT: 1}.get(paragraph.alignment, 0)
         defaults = [paragraph._p.find(f"{qn('a:pPr')}/{qn('a:defRPr')}"),
                     *theme.defaults(shape, frame, paragraph.level)]
         lines = [[]]
@@ -282,13 +284,19 @@ def check_text(frame, shape, theme, palette, add, width, height, margins, top, s
             rows, over_width = measure_line(line, available_width, frame.word_wrap is not False)
             wide_word |= over_width
             has_text = any(part.strip() for part, _, _ in line)
-            for size in rows:
+            for size, advance in rows:
                 if not size:
                     continue
-                # Aproxima a extensão vertical da Montserrat (968 + 251 unidades por em).
-                line_height = size * 1.219
+                # Métricas verticais da Montserrat em unidades por em.
+                ascent = size * 0.968
+                line_height = ascent + size * 0.251
                 if has_text:
                     text_bottom = max(text_bottom, cursor + line_height)
+                    if advance:
+                        left = max(0, available_width - advance) * alignment
+                        # Estima a faixa das letras entre a altura das maiúsculas e a linha de base.
+                        baseline = cursor + ascent
+                        text_rows.append((left, baseline - size * 0.7, left + advance, baseline))
                 cursor += spacing.pt if hasattr(spacing, "pt") else line_height * (spacing or 1)
         cursor += paragraph.space_after.pt if paragraph.space_after is not None else 0
     for font in sorted(fonts):
@@ -296,7 +304,7 @@ def check_text(frame, shape, theme, palette, add, width, height, margins, top, s
     for color in sorted(colors):
         add("text_color", f"Cor de texto {color} fora da paleta.")
     if not text_bottom:
-        return 0
+        return 0, []
     grows = grows or frame.auto_size == MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
     anchor = {MSO_ANCHOR.MIDDLE: 0.5, MSO_ANCHOR.BOTTOM: 1}.get(frame.vertical_anchor, 0)
     offset = anchor * max(0, available_height - text_bottom)
@@ -310,7 +318,12 @@ def check_text(frame, shape, theme, palette, add, width, height, margins, top, s
     if reasons:
         severity = "warning" if MARKER_ONLY.fullmatch(text) else "error"
         add("overflow", "Texto provavelmente estourado. " + " ".join(reasons), severity)
-    return Pt(text_bottom) + margins[2] + margins[3]
+    left = shape.left + margins[0]
+    line_top = top + margins[2] + Pt(offset)
+    return Pt(text_bottom) + margins[2] + margins[3], [
+        (left + Pt(x1), line_top + Pt(y1), left + Pt(x2), line_top + Pt(y2))
+        for x1, y1, x2, y2 in text_rows
+    ]
 
 
 def check_table(shape, theme, palette, add, slide_bottom):
@@ -326,14 +339,14 @@ def check_table(shape, theme, palette, add, slide_bottom):
             height = sum(heights[row:last_row + 1])
             check_fill(cell._tc.tcPr, theme, palette, add)
             margins = (cell.margin_left, cell.margin_right, cell.margin_top, cell.margin_bottom)
-            needed = check_text(cell.text_frame, shape, theme, palette, add, width, height, margins,
-                                top, slide_bottom, grows=True)
+            needed, _ = check_text(cell.text_frame, shape, theme, palette, add, width, height, margins,
+                                   top, slide_bottom, grows=True)
             # A altura gravada é mínima. O crescimento da célula desloca as linhas seguintes.
             heights[last_row] += max(0, needed - height)
         top += heights[row]
 
 
-def check_shape(shape, theme, palette, add, slide_bottom, preserved=False):
+def check_shape(shape, theme, palette, add, slide_bottom, text_boxes, preserved=False):
     if shape._element._nvXxPr.cNvPr.get("hidden") in {"1", "true"}:
         return
     preserved = preserved or is_preserved(shape)
@@ -343,19 +356,34 @@ def check_shape(shape, theme, palette, add, slide_bottom, preserved=False):
 
     if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
         transform = shape._element.grpSpPr.xfrm
-        if shape.height and transform.chOff is not None and transform.chExt is not None:
-            slide_bottom = (transform.chOff.y
-                            + (slide_bottom - shape.top) * transform.chExt.cy / shape.height)
+        child_origin, child_extent = transform.chOff, transform.chExt
+        if shape.height and child_origin is not None and child_extent is not None:
+            slide_bottom = child_origin.y + (slide_bottom - shape.top) * child_extent.cy / shape.height
+        child_boxes = []
         for child in shape.shapes:
-            check_shape(child, theme, palette, add, slide_bottom, preserved)
+            check_shape(child, theme, palette, add, slide_bottom, child_boxes, preserved)
+        # A comparação usa retângulos alinhados aos eixos do slide.
+        if (child_boxes and child_origin is not None and child_extent is not None
+            and child_extent.cx and child_extent.cy and not (shape.rotation or transform.flipH or transform.flipV)):
+            scale_x, scale_y = shape.width / child_extent.cx, shape.height / child_extent.cy
+            offset_x = shape.left - child_origin.x * scale_x
+            offset_y = shape.top - child_origin.y * scale_y
+            for child, top, rows in child_boxes:
+                text_boxes.append((child, offset_y + top * scale_y, [
+                    (offset_x + x1 * scale_x, offset_y + y1 * scale_y,
+                     offset_x + x2 * scale_x, offset_y + y2 * scale_y)
+                    for x1, y1, x2, y2 in rows
+                ]))
     elif not shape.has_chart and shape._element.tag != qn("p:pic"):
         reference = shape._element.find(f"{qn('p:style')}/{qn('a:fillRef')}")
         check_fill(shape._element.find(qn("p:spPr")), theme, palette, finding, reference)
         if shape.has_text_frame:
             frame = shape.text_frame
             margins = (frame.margin_left, frame.margin_right, frame.margin_top, frame.margin_bottom)
-            check_text(frame, shape, theme, palette, finding, shape.width, shape.height, margins,
-                       shape.top, slide_bottom)
+            _, rows = check_text(frame, shape, theme, palette, finding, shape.width, shape.height,
+                                 margins, shape.top, slide_bottom)
+            if rows and not preserved and not shape.rotation:
+                text_boxes.append((shape, shape.top, rows))
         if shape.has_table:
             check_table(shape, theme, palette, finding, slide_bottom)
 
@@ -385,6 +413,7 @@ def inspect(path, style):
             ids = {str(shape.shape_id) for shape in slide.shapes}
             if timing is None or not any(target.get("spid") in ids for target in timing.iter(qn("p:spTgt"))):
                 add("animation", "Animação de forma ausente.")
+        text_boxes = []
         for shape in slide.shapes:
             box = bounds(shape)
             if (shape.name not in BLEED_NAMES
@@ -394,7 +423,16 @@ def inspect(path, style):
                 and not legacy_arc(shape, box)):
                 add("bounds", "Forma fora dos limites do slide.",
                     "warning" if is_preserved(shape) else "error", shape.name)
-            check_shape(shape, theme, palette, add, deck.slide_height)
+            check_shape(shape, theme, palette, add, deck.slide_height, text_boxes)
+        for upper, upper_top, upper_rows in text_boxes:
+            for lower, lower_top, lower_rows in text_boxes:
+                if upper_top < lower_top and any(
+                    max(x1, a1) < min(x2, a2) and max(y1, b1) < min(y2, b2)
+                    for x1, y1, x2, y2 in upper_rows for a1, b1, a2, b2 in lower_rows
+                ):
+                    severity = "warning" if MARKER_ONLY.fullmatch(upper.text.strip()) else "error"
+                    add("text_overlap", f"Texto sobreposto: {upper.name} invade a caixa de {lower.name}.",
+                        severity, upper.name)
     return {"style": style, "slides": len(deck.slides), "findings": findings,
             "errors": sum(item["severity"] == "error" for item in findings),
             "warnings": sum(item["severity"] == "warning" for item in findings)}

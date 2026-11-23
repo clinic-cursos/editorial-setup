@@ -31,6 +31,7 @@ def write_script(tmp_path, style, slides):
 @pytest.mark.parametrize("style,script", [
     ("padrao", EXAMPLE),
     ("ousado", SKILL / "references/modelo_hof_roteiro.json"),
+    ("ousado", SKILL / "references/exemplo_ousado.json"),
 ])
 def test_generated_deck_passes(tmp_path, style, script):
     deck = tmp_path / "aula.pptx"
@@ -119,6 +120,61 @@ def test_rejects_each_text_overflow_reason(tmp_path, name, geometry, auto_size, 
         (2, name, "overflow", "error"),
     ]
     assert reason in findings[0]["message"]
+
+
+LONG_TEXT = "Primeira linha segunda linha terceira linha quarta linha quinta linha"
+
+
+@pytest.mark.parametrize("upper_text,lower_left,variant,overlaps", [
+    (LONG_TEXT, 1.5, None, True),
+    ("Uma linha", 1.5, None, False),
+    (LONG_TEXT, 5, None, False),
+    (LONG_TEXT, 1.5, "grouped", True),
+    (LONG_TEXT, 1.5, "preserved_upper", False),
+    (LONG_TEXT, 1.5, "preserved_lower", False),
+])
+def test_checks_text_overlap_between_shapes(tmp_path, monkeypatch, upper_text, lower_left, variant, overlaps):
+    presentation = Presentation()
+    presentation.slides.add_slide(presentation.slide_layouts[6])
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    for position, name, left, top, value in (
+        ("lower", "Item inferior", lower_left, 1.75, "Próximo item"),
+        ("upper", "Item superior", 1, 1, upper_text),
+    ):
+        box = slide.shapes.add_textbox(Inches(left), Inches(top), Inches(3), Inches(0.4))
+        box.name = name
+        frame = box.text_frame
+        frame.auto_size = MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
+        frame.word_wrap = True
+        frame.text = value
+        for run in frame.paragraphs[0].runs:
+            run.font.name = "Montserrat"
+            run.font.size = Pt(20)
+            run.font.color.rgb = RGBColor(0x2A, 0x26, 0x25)
+        if variant == "grouped" and position == "lower":
+            box.top = Inches(5)
+            group = slide.shapes.add_group_shape([box])
+            group.top = Inches(1.75)
+        if variant == f"preserved_{position}":
+            monkeypatch.syspath_prepend(str(CLI.parent))
+            from conferir import mark_preserved
+
+            mark_preserved(box)
+    deck = tmp_path / "itens.pptx"
+    presentation.save(deck)
+
+    result = run_cli("conferir", deck, "--json")
+    assert result.returncode == int(overlaps), result.stderr or result.stdout
+    findings = json.loads(result.stdout)["findings"]
+    if overlaps:
+        assert [(item["slide"], item["shape"], item["rule"], item["severity"]) for item in findings] == [
+            (2, "Item superior", "text_overlap", "error"),
+        ]
+        message = findings[0]["message"]
+        assert message.startswith("Texto sobreposto")
+        assert "Item superior" in message and "Item inferior" in message
+    else:
+        assert findings == []
 
 
 def test_table_rows_grow_into_the_remaining_slide_space(tmp_path):
