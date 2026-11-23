@@ -107,8 +107,9 @@ def is_decoration(shape, first, width, height):
 def slide_content(presentation, slide):
     shapes = list(slide.shapes)
     width, height = presentation.slide_width, presentation.slide_height
-    content = [shape for shape in shapes if not is_decoration(shape, shapes[0], width, height)]
     title = slide.shapes.title
+    first = next((shape for shape in shapes if title is None or shape.shape_id != title.shape_id), None)
+    content = [shape for shape in shapes if not is_decoration(shape, first, width, height)]
     if title is None or not title.text.strip():
         # Sem placeholder, o primeiro texto curto na faixa superior é o candidato a título.
         title = next((shape for shape in reading_order(content)
@@ -125,8 +126,16 @@ def is_drawing(shape):
             and (not shape.text.strip() or "ARROW" in shape.auto_shape_type.name))
 
 
-def bounds(shape):
-    x, y, w, h = (getattr(shape, attr) or 0 for attr in ("left", "top", "width", "height"))
+def shape_size(shape):
+    if shape.has_table:
+        # O quadro de uma tabela importada pode divergir da grade que é exibida.
+        return sum(column.width for column in shape.table.columns), sum(row.height for row in shape.table.rows)
+    return shape.width or 0, shape.height or 0
+
+
+def bounds(shape, size=None):
+    x, y = shape.left or 0, shape.top or 0
+    w, h = shape_size(shape) if size is None else size
     angle = math.radians(shape.rotation)
     dx = (abs(w * math.cos(angle)) + abs(h * math.sin(angle))) / 2
     dy = (abs(w * math.sin(angle)) + abs(h * math.cos(angle))) / 2
@@ -258,7 +267,8 @@ class PreservedSlides:
         _, _, shapes = slide_content(deck, source)
         if not shapes:
             return []
-        geometry = [bounds(shape) for shape in shapes]
+        sizes = [shape_size(shape) for shape in shapes]
+        geometry = [bounds(shape, size) for shape, size in zip(shapes, sizes, strict=True)]
         left = min(rect[0] for rect in geometry)
         top = min(rect[1] for rect in geometry)
         width = max(rect[2] for rect in geometry) - left
@@ -283,11 +293,11 @@ class PreservedSlides:
                 node.set("id", str(next_id))
                 next_id += 1
 
-        for shape, element in zip(shapes, elements, strict=True):
+        for shape, element, (shape_width, shape_height) in zip(shapes, elements, sizes, strict=True):
             element.x = round((shape.left or 0) * scale + dx)
             element.y = round((shape.top or 0) * scale + dy)
-            element.cx = round((shape.width or 0) * scale)
-            element.cy = round((shape.height or 0) * scale)
+            element.cx = round(shape_width * scale)
+            element.cy = round(shape_height * scale)
             if shape.is_placeholder:
                 placeholder = element.ph
                 placeholder.getparent().remove(placeholder)
@@ -345,8 +355,15 @@ def scale_details(element, scale):
     for node in element.iter(qn("a:rPr"), qn("a:defRPr"), qn("a:endParaRPr")):
         if "sz" in node.attrib:
             node.set("sz", str(max(100, min(400000, round(int(node.get("sz")) * scale)))))
-    for tag, attr in (("a:gridCol", "w"), ("a:tr", "h"), ("a:ln", "w"),
-                      ("a:spcPts", "val"), ("a:buSzPts", "val")):
+    for tag, attr in (("a:gridCol", "w"), ("a:tr", "h"), ("a:ln", "w"), ("a:lnL", "w"),
+                      ("a:lnR", "w"), ("a:lnT", "w"), ("a:lnB", "w"), ("a:lnTlToBr", "w"),
+                      ("a:lnBlToTr", "w"), ("a:spcPts", "val"), ("a:buSzPts", "val")):
         for node in element.iter(qn(tag)):
             if attr in node.attrib:
                 node.set(attr, str(round(int(node.get(attr)) * scale)))
+    for body in element.iter(qn("p:txBody")):
+        for attr in ("lIns", "rIns", "tIns", "bIns"):
+            setattr(body.bodyPr, attr, round(getattr(body.bodyPr, attr) * scale))
+    for cell in element.iter(qn("a:tc")):
+        for attr in ("marL", "marR", "marT", "marB"):
+            setattr(cell, attr, round(getattr(cell, attr) * scale))
