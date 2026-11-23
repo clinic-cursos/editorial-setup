@@ -24,13 +24,13 @@ def run_cli(*args):
     return subprocess.run([sys.executable, str(CLI), *map(str, args)], capture_output=True, text=True)
 
 
-def restyle_one(tmp_path, original, style):
+def restyle_one(tmp_path, original, style, title="Novo título"):
     source = tmp_path / "original.pptx"
     original.save(source)
     script = tmp_path / "roteiro.json"
     script.write_text(json.dumps({
         "estilo": style, "avulso": True,
-        "slides": [{"tipo": "preservado", "deck": source.name, "slide": 1, "titulo": "Novo título"}],
+        "slides": [{"tipo": "preservado", "deck": source.name, "slide": 1, "titulo": title}],
     }), encoding="utf-8")
     out = tmp_path / "restyle.pptx"
     result = run_cli("gerar", script, out)
@@ -248,6 +248,32 @@ def test_extract_suggests_layouts_from_simple_slide_content(tmp_path):
     assert slides[3]["imagem_modo"] == slides[7]["imagem_modo"] == "conter"
     assert "imagem" not in slides[3]
     assert slides[4]["frase"] == "“Uma frase curta.”"
+
+
+@pytest.mark.parametrize("style", ["padrao", "ousado"])
+@pytest.mark.parametrize("title_source", ["detected", "script", "both"])
+def test_preserved_omits_only_first_matching_text_box(tmp_path, style, title_source):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    notes = slide.shapes.add_textbox(Inches(1), Inches(2), Inches(5), Inches(1))
+    notes.name = "Title with notes"
+    notes.text = "Título original\nTexto complementar"
+    title = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(5), Inches(1))
+    title.name = "Original title"
+    title.text = "Título original" if title_source == "detected" else "  TÍTULO:\v  ORIGINAL!"
+    repeated_top = 0.5 if title_source == "both" else 4
+    repeated = slide.shapes.add_textbox(Inches(1), Inches(repeated_top), Inches(5), Inches(1))
+    repeated.name = "Second match"
+    repeated.text = "título original."
+    script_title = "Título revisado" if title_source == "detected" else "Título original"
+
+    shapes = restyle_one(tmp_path, original, style, script_title)
+
+    copied_text = {shape.name: shape.text for shape in shapes if shape.has_text_frame}
+    assert title.name not in copied_text
+    assert copied_text[notes.name] == "Título original\nTexto complementar"
+    assert copied_text[repeated.name] == "título original."
+    assert sum(value.casefold() == script_title.casefold() for value in copied_text.values()) == 1
 
 
 @pytest.mark.parametrize("style", ["padrao", "ousado"])

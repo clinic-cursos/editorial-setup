@@ -8,6 +8,7 @@ import math
 from pathlib import Path
 import re
 from typing import NamedTuple
+from unicodedata import category
 from zipfile import BadZipFile
 
 from PIL import Image, ImageStat
@@ -183,9 +184,12 @@ def slide_content(presentation, slide):
                       if shape.has_text_frame and 0 < len(shape.text.strip()) <= 150
                       and (shape.top or 0) <= height * 0.22
                       and "\n" not in shape.text and "\v" not in shape.text), None)
-    return shapes, title, backdrops, [
-        shape for shape in content if title is None or shape.shape_id != title.shape_id
-    ], rectangle_color
+    return shapes, title, backdrops, content, rectangle_color
+
+
+def normalize_title(text):
+    words = "".join(" " if category(char).startswith("P") else char for char in text.casefold())
+    return " ".join(words.split())
 
 
 def rgb_channels(color):
@@ -309,7 +313,9 @@ def extract(deck, folder, selection):
     for number in numbers:
         slide = presentation.slides[number - 1]
         shapes, title, backdrops, content, _ = slide_content(presentation, slide)
-        content = backdrops + content
+        content = backdrops + [
+            shape for shape in content if title is None or shape.shape_id != title.shape_id
+        ]
         ordered = reading_order(shapes)
         images = []
         content_images = []
@@ -408,7 +414,15 @@ class PreservedSlides:
 
     def copy(self, target, script, box):
         deck, source = self.source(script.get("deck"), script.get("slide"))
-        _, _, backdrops, content, rectangle_color = slide_content(deck, source)
+        _, title, backdrops, content, rectangle_color = slide_content(deck, source)
+        titles = {normalize_title(script.get("titulo", ""))}
+        if title is not None:
+            titles.add(normalize_title(title.text))
+        titles.discard("")
+        for index, shape in enumerate(content):
+            if shape.has_text_frame and normalize_title(shape.text) in titles:
+                del content[index]
+                break
         shapes = backdrops + content
         if not shapes:
             return []
