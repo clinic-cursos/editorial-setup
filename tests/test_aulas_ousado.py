@@ -14,7 +14,7 @@ from zipfile import ZipFile
 from PIL import Image
 from pptx import Presentation
 from pptx.enum.dml import MSO_COLOR_TYPE
-from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
 from pptx.oxml.ns import qn
 from pptx.util import Inches
 import pytest
@@ -547,6 +547,57 @@ def test_bold_steps_with_panel_start_below_title(tmp_path, heading, lines):
         assert photo.top >= title.top + title.height
     assert last.top + last.height <= Inches(4.78)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("panel", [False, True])
+def test_bold_steps_keep_even_visible_gaps(tmp_path, monkeypatch, panel):
+    monkeypatch.syspath_prepend(str(SKILL / "scripts"))
+    from conferir import Theme, check_text
+
+    texts = ["Leia o material.", "Compare as notas.", "Confira os rótulos e as legendas."]
+    if panel:
+        texts += ["Organize o material da oficina e compartilhe as anotações com a turma.",
+                  "Prepare um resumo da oficina e envie junto com as observações de cada etapa."]
+    else:
+        texts[2] = "Confira os rótulos e as legendas antes de compartilhar as anotações com o grupo."
+        texts += ["Organize o material da oficina e compartilhe as anotações com a turma "
+                  "antes de preparar as próximas atividades em dupla.",
+                  "Prepare um resumo dos assuntos da oficina e envie junto com as anotações "
+                  "e as observações feitas ao longo de cada etapa."]
+    fields = {"prompt_imagem": "Material de leitura"} if panel else {}
+    path = write_script(tmp_path, [{
+        "tipo": "passo_a_passo", "titulo": "Roteiro",
+        "passos": [{"texto": value} for value in texts], **fields,
+    }], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    deck = Presentation(out)
+    slide = deck.slides[0]
+    boxes = {shape.text.strip(): shape for shape in slide.shapes if shape.has_text_frame}
+    theme = Theme(slide, deck)
+    text_rows = []
+    for value in texts:
+        box = boxes[value]
+        frame = box.text_frame
+        margins = frame.margin_left, frame.margin_right, frame.margin_top, frame.margin_bottom
+        _, rows = check_text(frame, box, theme, set(), lambda *args: None,
+                             box.width, box.height, margins, box.top, deck.slide_height)
+        text_rows.append(rows)
+    assert [len(rows) for rows in text_rows] == [1, 1, 1, 2, 2]
+    gaps = [second[0][1] - first[-1][3] for first, second in zip(text_rows, text_rows[1:])]
+    assert min(gaps) > 0
+    assert max(gaps) - min(gaps) <= Inches(0.02), [gap / Inches(1) for gap in gaps]
+
+    dots = [shape for shape in slide.shapes if shape.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE
+            and shape.auto_shape_type == MSO_SHAPE.OVAL]
+    assert len(dots) == len(texts)
+    for dot, value in zip(dots, texts):
+        assert dot.top - boxes[value].top == pytest.approx(Inches(0.03), abs=1)
+    track = next(shape for shape in slide.shapes if shape.shape_type == MSO_SHAPE_TYPE.LINE)
+    assert track.top == pytest.approx(dots[0].top + dots[0].height / 2, abs=1)
+    assert track.top + track.height == pytest.approx(dots[-1].top + dots[-1].height / 2, abs=1)
 
 
 @pytest.mark.parametrize("mode", [None, "sangrar", "conter", "esticar"])

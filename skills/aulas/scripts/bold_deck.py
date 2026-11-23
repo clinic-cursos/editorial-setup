@@ -483,6 +483,40 @@ def s_text_image(prs, s, d):
     morph(s); an.build()
 
 
+def space_steps(prs, slide, steps, track, bottom):
+    # Use the same Montserrat metrics as the editorial check for visible text.
+    from conferir import Theme, check_text
+
+    theme = Theme(slide, prs)
+    edges = []
+    for _, box in steps:
+        frame = box.text_frame
+        margins = frame.margin_left, frame.margin_right, frame.margin_top, frame.margin_bottom
+        _, rows = check_text(frame, box, theme, set(), lambda *args: None,
+                             box.width, box.height, margins, box.top, prs.slide_height)
+        edges.append((rows[0][1], rows[-1][3]) if rows else (box.top, box.top + box.height))
+
+    gaps = [start - end for (_, end), (start, _) in zip(edges, edges[1:])]
+    # Ignore rounding of the text positions to whole EMUs.
+    if max(gaps) - min(gaps) <= 2:
+        return
+    # Keep the original span unless the measured text needs more room.
+    gap = max(0, sum(gaps) / len(gaps))
+    tops = [steps[0][1].top]
+    for i, old_gap in enumerate(gaps):
+        tops.append(tops[-1] + steps[i + 1][1].top - steps[i][1].top + gap - old_gap)
+    if tops[-1] + steps[-1][1].height > Inches(bottom) + 1:
+        return
+
+    for i, ((dot, box), top) in enumerate(zip(steps, tops)):
+        top = round(top)
+        dot.top += top - box.top
+        box.top = top
+        if i + 1 < len(tops):
+            box.height = min(box.height, round(tops[i + 1]) - top)
+    track.end_y = round(steps[-1][0].top + steps[-1][0].height / 2)
+
+
 def s_steps(prs, s, d):
     an = Anim(s)
     bg(s, CREME)
@@ -524,14 +558,18 @@ def s_steps(prs, s, d):
     if len(rows) > 1:
         center = 0.17 if panel else 0.03 + dot_size / 2
         track_top = 1.55 + extra_height if panel else steps_top + center
-        line(s, M + dot_size / 2, track_top, M + dot_size / 2, boxes[-1][0] + center, color=ROSE, w=1.5)
+        track = line(s, M + dot_size / 2, track_top, M + dot_size / 2, boxes[-1][0] + center, color=ROSE, w=1.5)
+    steps = []
     for (h, t), (y, height) in zip(rows, boxes):
         c = rect(s, M, y + 0.03, dot_size, dot_size, fill=VINHO, line=CREME, shape=MSO_SHAPE.OVAL, lw=2)
         paragraphs = [[(h, {"bold": True, "color": PRETO, "size": heading_size})], _parse_bold(t)]
         if not panel:
             paragraphs = [runs for value, runs in zip((h, t), paragraphs) if value]
         a = text(s, M + 0.45, y, body_width, height, paragraphs, size=size)
+        steps.append((c, a))
         an.add(c, gap=0); an.add(a, gap=220, eff="left")
+    if len(steps) > 2 and boxes[-1][0] < H:
+        space_steps(prs, s, steps, track, steps_bottom)
     tip_x, tip_y, tip_width = (4.35, 4.45, 5.2) if panel else (M, 4.85, full_width)
     text(s, tip_x, tip_y, tip_width, 0.4, d.get("dica", ""), size=8.5, color=CINZA, italic=True)
     if not an.items:
