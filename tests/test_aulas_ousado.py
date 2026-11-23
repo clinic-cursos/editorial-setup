@@ -517,6 +517,90 @@ def test_bold_text_image_contains_picture_inside_panel(tmp_path, image_size):
     assert 2 * photo.top + photo.height == pytest.approx(deck.slide_height, abs=2)
 
 
+@pytest.mark.parametrize("heading,lines", [
+    ("Revisão em dupla", 1),
+    ("Preparação da leitura para a revisão em dupla", 2),
+])
+def test_bold_steps_with_panel_start_below_title(tmp_path, heading, lines):
+    path = write_script(tmp_path, [{
+        "tipo": "passo_a_passo", "titulo": heading, "prompt_imagem": "Material de leitura",
+        "passos": [{"titulo": "Leia", "texto": "Confira o material."},
+                   {"titulo": "Compare", "texto": "Converse em dupla."},
+                   {"titulo": "Anote", "texto": "Registre as dúvidas."},
+                   {"titulo": "Revise", "texto": "Confira as anotações."},
+                   {"titulo": "Envie", "texto": "Compartilhe o resumo."}],
+    }], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    slide = Presentation(out).slides[0]
+    boxes = {shape.text: shape for shape in slide.shapes if shape.has_text_frame}
+    title = boxes[heading]
+    first = boxes["Leia\nConfira o material."]
+    last = boxes["Envie\nCompartilhe o resumo."]
+    assert first.top >= title.top + title.height
+    if lines == 1:
+        assert first.top == Inches(1.38)
+    else:
+        assert title.height >= Inches(0.9)
+        assert first.top > Inches(1.38)
+        photo = next(shape for shape in slide.shapes if shape.name == "!!foto")
+        assert photo.top >= title.top + title.height
+    assert last.top + last.height <= Inches(4.78)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("mode", [None, "sangrar", "conter", "esticar"])
+def test_bold_comparison_image_mode(tmp_path, mode):
+    Image.new("RGB", (100, 200)).save(tmp_path / "diagrama.png")
+    fields = {"imagem_modo": mode} if mode is not None else {}
+    path = write_script(tmp_path, [{
+        "tipo": "comparativo", "titulo": "Dois formatos", "imagem": "diagrama.png", **fields,
+    }], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    if mode == "esticar":
+        assert result.returncode == 2
+        assert "imagem_modo de comparativo" in result.stderr
+        return
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    deck = Presentation(out)
+    photo = next(shape for shape in deck.slides[0].shapes if shape.name == "!!foto")
+    if mode == "conter":
+        assert (photo.crop_left, photo.crop_right, photo.crop_top, photo.crop_bottom) == (0, 0, 0, 0)
+        assert photo.width / photo.height == pytest.approx(0.5)
+        assert photo.height == Inches(2.7)
+        assert 2 * photo.left + photo.width == pytest.approx(deck.slide_width, abs=2)
+    else:
+        assert photo.crop_top > 0 and photo.crop_bottom > 0
+        assert photo.left == 0
+        assert photo.width == deck.slide_width
+    assert photo.top == 0
+
+
+def test_bold_comparison_columns_make_room_for_wrapped_items(tmp_path):
+    first_items = [
+        "Confira **o título e a ordem dos tópicos** antes da discussão em dupla.",
+        "Confira **os rótulos e as legendas** antes de compartilhar com o grupo.",
+    ]
+    next_items = ["Compare as anotações.", "Abra a prévia."]
+    path = write_script(tmp_path, [{
+        "tipo": "comparativo", "titulo": "Dois formatos", "prompt_imagem": "Material de leitura",
+        "colunas": [{"itens": [first, second]} for first, second in zip(first_items, next_items)],
+        "nota": "Abra a prévia antes de compartilhar.",
+    }], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    slide = Presentation(out).slides[0]
+    boxes = {shape.text: shape for shape in slide.shapes if shape.has_text_frame}
+    for first_text, next_text in zip(first_items, next_items):
+        first = boxes[first_text.replace("**", "")]
+        second = boxes[next_text]
+        assert first.height > Inches(0.3)
+        assert first.top + first.height <= second.top
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_bold_animates_standard_layouts(tmp_path):
     example = json.loads((SKILL / "references" / "exemplo_roteiro.json").read_text(encoding="utf-8"))
     fallback = {"tabela", "grafico", "antes_depois", "artigo", "caso_clinico", "referencias"}

@@ -491,26 +491,39 @@ def s_steps(prs, s, d):
     kicker(s, d.get("kicker", ""), M, 0.42, VINHO)
     panel = has_image_panel(d)
     full_width = W - 2 * M
-    heading = title(s, d.get("titulo", ""), M, 0.62, 6 if panel else full_width, 0.6,
-                    color=PRETO, size=26, hl=d.get("destaque_titulo"), hlc=VINHO)
+    heading_text = d.get("titulo", "")
+    heading_size = 26
+    heading_width = 6 if panel else full_width
+    heading_height = 0.6
     if panel:
-        rect(s, 4.35, 1.35, 5.2, 3.0, fill=BRANCO)
-        an.add(photo(s, d, 4.45, 1.45, 5.0, 2.8), gap=300, dur=700)
+        available = Inches(heading_width - 0.04).pt / heading_size
+        lines = sum(wrapped_rows(measured_words(line), available) for line in heading_text.splitlines())
+        if lines > 1:
+            heading_height = 0.04 + heading_size * (1.38 + 0.9 * 1.2) / 72
+    heading = title(s, heading_text, M, 0.62, heading_width, heading_height,
+                    color=PRETO, size=heading_size, hl=d.get("destaque_titulo"), hlc=VINHO)
+    extra_height = heading_height - 0.6
+    steps_top = 1.38 + extra_height
+    steps_bottom = 4.78
+    if panel:
+        rect(s, 4.35, 1.35 + extra_height, 5.2, 3.0 - extra_height, fill=BRANCO)
+        an.add(photo(s, d, 4.45, 1.45 + extra_height, 5.0, 2.8 - extra_height), gap=300, dur=700)
     rows = [(str(step.get("titulo", "")), step.get("texto", "")) for step in d.get("passos", [])]
     body_width = 3.4 if panel else full_width - 0.45
     if panel:
-        stride = max(0.31, min(0.68, 3.4 / max(len(rows), 1)))
-        tops = [1.38 + i * stride for i in range(len(rows))]
+        stride = max(0.31, min(0.68, (3.4 - extra_height) / max(len(rows), 1)))
+        tops = [steps_top + i * stride for i in range(len(rows))]
         size, boxes = fit_list([[(h, 10.5), (plain_text(t), None)] for h, t in rows],
-                               width=body_width, tops=tops, bottom=4.78, base_height=min(0.6, stride), body_size=8.5)
+                               width=body_width, tops=tops, bottom=steps_bottom,
+                               base_height=min(0.6, stride), body_size=8.5)
     else:
         size, boxes = fit_text_only_list([(h, plain_text(t)) for h, t in rows],
-                                         width=body_width, top=1.38, bottom=4.78)
+                                         width=body_width, top=steps_top, bottom=steps_bottom)
     heading_size = 10.5 if panel else size * TEXT_ONLY_ITEM_TITLE_SCALE
     dot_size = 0.28 if panel else size / 64
     if len(rows) > 1:
         center = 0.17 if panel else 0.03 + dot_size / 2
-        track_top = 1.55 if panel else 1.38 + center
+        track_top = 1.55 + extra_height if panel else steps_top + center
         line(s, M + dot_size / 2, track_top, M + dot_size / 2, boxes[-1][0] + center, color=ROSE, w=1.5)
     for (h, t), (y, height) in zip(rows, boxes):
         c = rect(s, M, y + 0.03, dot_size, dot_size, fill=VINHO, line=CREME, shape=MSO_SHAPE.OVAL, lw=2)
@@ -611,18 +624,26 @@ def s_anatomy(prs, s, d):
 
 
 def s_comparison(prs, s, d):
+    image_mode = d.get("imagem_modo", "sangrar")
+    if image_mode not in ("sangrar", "conter"):
+        raise ValueError("imagem_modo de comparativo deve ser sangrar ou conter")
+
     an = Anim(s)
     bg(s, NOITE)
-    photo(s, d, 0, 0, W, 2.7, dark=True)
+    photo(s, d, 0, 0, W, 2.7, dark=True, contain=image_mode == "conter")
     logo(s, True)
     heading = title(s, d.get("titulo", ""), M, 2.85, 6, 0.6, size=24, hl=d.get("destaque_titulo"))
+    bottom = H - 0.42 if d.get("nota") else H
     for k, col in enumerate(d.get("colunas", [])):
         h, its = col.get("titulo", ""), col.get("itens", [])
         x = M + k * 4.6
         an.add(text(s, x, 3.45, 4, 0.3, h.upper(), size=11, color=ROSE, bold=True), gap=100)
-        for i, it in enumerate(its):
+        tops = [3.78 + i * 0.3 for i in range(len(its))]
+        size, boxes = fit_list([[(plain_text(item), None)] for item in its], width=4.3,
+                               tops=tops, bottom=bottom, base_height=0.3, body_size=9.5)
+        for it, (y, height) in zip(its, boxes):
             segs = accent_runs(it, BRANCO)
-            an.add(text(s, x, 3.78 + i * 0.3, 4.3, 0.3, [segs], size=9.5, color=CINZA_CLARO), gap=90, eff="left")
+            an.add(text(s, x, y, 4.3, height, [segs], size=size, color=CINZA_CLARO), gap=90, eff="left")
     if d.get("nota"):
         r = rect(s, 0, H - 0.42, W, 0.42, fill=VINHO)
         t = text(s, M, H - 0.42, W - 2 * M, 0.42, [[("ATENÇÃO  ", {"bold": True, "color": ROSE_CLARO}),
