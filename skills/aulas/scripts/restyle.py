@@ -1,5 +1,6 @@
 """Extrai um roteiro e reaproveita objetos editáveis de slides PowerPoint."""
 
+from collections import Counter
 from colorsys import hls_to_rgb, rgb_to_hls
 from copy import deepcopy
 from io import BytesIO
@@ -303,9 +304,35 @@ def drawing_counts(shapes):
     return drawings, overlays
 
 
+def sized_images(shape, scale_x=1, scale_y=1):
+    width, height = shape_size(shape)
+    if shape.shape_type == GROUP:
+        transform = shape._element.xfrm
+        child_extent = transform.chExt if transform is not None else None
+        if child_extent is not None:
+            scale_x *= width / child_extent.cx if child_extent.cx else 1
+            scale_y *= height / child_extent.cy if child_extent.cy else 1
+        for child in shape.shapes:
+            yield from sized_images(child, scale_x, scale_y)
+    else:
+        for part in image_parts(shape):
+            yield part, width * scale_x, height * scale_y
+
+
 def extract(deck, folder, selection):
     presentation = open_deck(deck)
-    numbers = slide_numbers(selection, len(presentation.slides))
+    total = len(presentation.slides)
+    numbers = slide_numbers(selection, total)
+    width, height = presentation.slide_width, presentation.slide_height
+    image_frequency = Counter()
+    for slide in presentation.slides:
+        backdrop = background_picture(slide, width, height)
+        shapes = list(slide.shapes)
+        if backdrop is not None:
+            shapes.append(backdrop)
+        image_frequency.update({part.sha1 for shape in shapes for part in image_parts(shape)})
+    # Conta a presença em pelo menos 90% do deck inteiro, mesmo com --slides.
+    repeated = {digest for digest, count in image_frequency.items() if count > 1 and count * 10 >= total * 9}
     (folder / "img").mkdir(parents=True, exist_ok=True)
     slides = []
     section_number = 0
@@ -318,17 +345,20 @@ def extract(deck, folder, selection):
         ]
         ordered = reading_order(shapes)
         images = []
-        content_images = []
         content_ids = {shape.shape_id for shape in content}
+        candidates = []
         for shape in ordered:
-            exported = []
-            for part in image_parts(shape):
-                path = f"img/slide-{number}-{len(images) + 1}.{part.partname.ext}"
-                (folder / path).write_bytes(part.blob)
-                images.append(path)
-                exported.append(path)
-            if exported and shape.shape_id in content_ids:
-                content_images.extend(exported)
+            for part, w, h in sized_images(shape):
+                decorative = (shape.shape_id not in content_ids or w < width * 0.06 or h < height * 0.06
+                              or part.sha1 in repeated)
+                candidates.append((w * h, part, decorative))
+        # Mantém o nome de cada arquivo na ordem original e ordena apenas a lista do roteiro.
+        ranked = sorted(enumerate(candidates, 1), key=lambda item: item[1][0], reverse=True)
+        for index, (_, part, decorative) in ranked:
+            path = f"img/slide-{number}-{index}.{part.partname.ext}"
+            (folder / path).write_bytes(part.blob)
+            images.append({"caminho": path, "decorativa": decorative})
+        content_images = [image["caminho"] for image in images if not image["decorativa"]]
         drawings, annotations = drawing_counts(content)
         heading = title.text.strip() if title is not None else ""
         paragraphs = [value for shape in reading_order(content) for value in texts(shape) if value.strip()]
@@ -341,7 +371,20 @@ def extract(deck, folder, selection):
         # Preserva composições complexas antes de sugerir um layout, inclusive no primeiro slide.
         complex_content = (annotations >= 4 or len(content_images) > 1
                            or any(shape.has_table or shape.has_chart for shape in content))
-        if complex_content or (not content_images and (drawings or not (heading or paragraphs))):
+        short_heading = bool(heading) and len(heading) <= 80 and len(heading.splitlines()) == 1
+        entry["revisar"] = False
+        if not (heading or paragraphs):
+            entry["tipo"] = "preservado"
+            visual_content = content_images or any(
+                shape._element.tag != qn("p:pic")
+                and not (shape.has_text_frame and (shape.is_placeholder or shape.shape_type == MSO_SHAPE_TYPE.TEXT_BOX))
+                for shape in content
+            )
+            if visual_content:
+                entry.update(revisar=True, motivo="conteúdo só em imagem")
+            else:
+                entry["vazio"] = True
+        elif complex_content or (not content_images and drawings and not (short_heading and len(topics) == 1)):
             entry["tipo"] = "preservado"
         elif number == 1 and heading:
             entry["tipo"] = "capa"
@@ -351,19 +394,22 @@ def extract(deck, folder, selection):
             else:
                 entry["tipo"] = "preservado"
         else:
-            # Citação ocupa o slide inteiro. Divisória tem só título de uma linha, até 80 caracteres.
+            # Citação ocupa o slide inteiro. Divisória admite uma linha de chamada além do título curto.
             blocks = ([heading] if heading else []) + paragraphs
             quote = blocks[0].strip() if len(blocks) == 1 else ""
             if len(quote) > 2 and quote[1:-1].strip() and quote[-1] == QUOTE_END.get(quote[0]):
                 entry.update(tipo="frase", frase=quote)
-            elif heading and not topics and len(heading) <= 80 and len(heading.splitlines()) == 1:
-                section_number += 1
-                entry.update(tipo="modulo", numero=section_number)
             elif topics and any(word in heading.casefold() for word in ("conteúdo", "sumário")):
                 entry.update(tipo="sumario", itens=topics)
+            elif short_heading and len(topics) <= 1:
+                section_number += 1
+                entry.update(tipo="modulo", numero=section_number)
+                if topics:
+                    entry["selo"] = topics[0]
             else:
                 entry.update(tipo="texto_imagem", imagem_modo="conter", topicos=topics)
-        entry["revisar"] = entry["tipo"] not in {"preservado", "capa", "modulo"}
+        if entry["tipo"] not in {"preservado", "capa", "modulo"}:
+            entry["revisar"] = True
         slides.append(entry)
     path = folder / "roteiro-rascunho.json"
     path.write_text(json.dumps({"estilo": "ousado", "avulso": True, "slides": slides},

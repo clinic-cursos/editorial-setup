@@ -195,7 +195,7 @@ def test_extract_retains_text_and_filters_slides(tmp_path, source_deck):
     assert first["formas_desenhadas"] == 4
     assert first["tipo"] == "preservado"
     assert len(first["imagens"]) == 3
-    assert all((folder / path).read_bytes() == image for path in first["imagens"])
+    assert all((folder / item["caminho"]).read_bytes() == image for item in first["imagens"])
     assert [slide["tipo"] for slide in draft["slides"]] == ["preservado", "preservado", "texto_imagem", "modulo"]
     assert [slide["revisar"] for slide in draft["slides"]] == [False, False, True, False]
     assert draft["slides"][2]["imagem_modo"] == "conter"
@@ -248,6 +248,90 @@ def test_extract_suggests_layouts_from_simple_slide_content(tmp_path):
     assert slides[3]["imagem_modo"] == slides[7]["imagem_modo"] == "conter"
     assert "imagem" not in slides[3]
     assert slides[4]["frase"] == "“Uma frase curta.”"
+
+
+def test_extract_ranks_images_by_slide_area_and_filters_decorations(tmp_path):
+    prs = Presentation()
+    strip = tmp_path / "faixa.png"
+    logo = tmp_path / "marca.png"
+    photo = tmp_path / "foto.png"
+    Image.new("RGB", (1674, 50), "black").save(strip)
+    Image.new("RGB", (20, 20), "white").save(logo)
+    Image.new("RGB", (16, 16), "red").save(photo)
+    for number in range(1, 11):
+        slide = prs.slides.add_slide(prs.slide_layouts[5])
+        slide.shapes.title.text = f"Slide {number}"
+        if number < 10:
+            slide.shapes.add_picture(str(logo), Inches(1), Inches(1), Inches(6), Inches(3))
+        if number == 2:
+            slide.shapes.add_picture(str(strip), 0, 0, prs.slide_width, Inches(0.3))
+            group = slide.shapes.add_group_shape()
+            group.shapes.add_picture(str(photo), Inches(2), Inches(4), Inches(2), Inches(1))
+            group.width = Inches(4)
+            group.height = Inches(2)
+    source = tmp_path / "imagens.pptx"
+    prs.save(source)
+    folder = tmp_path / "rascunho"
+
+    result = run_cli("extrair", source, folder, "--slides", "2")
+
+    assert result.returncode == 0, result.stderr
+    slide, = json.loads((folder / "roteiro-rascunho.json").read_text(encoding="utf-8"))["slides"]
+    assert slide["tipo"] == "texto_imagem"
+    assert [(folder / item["caminho"]).read_bytes() for item in slide["imagens"]] == [
+        logo.read_bytes(), photo.read_bytes(), strip.read_bytes(),
+    ]
+    assert [item["decorativa"] for item in slide["imagens"]] == [True, False, True]
+    assert slide["imagem"] == slide["imagens"][1]["caminho"]
+
+
+def test_extract_maps_single_callout_to_module_badge(tmp_path):
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[5])
+    slide.shapes.title.text = "Aula de teste"
+    slide = prs.slides.add_slide(prs.slide_layouts[5])
+    slide.shapes.title.text = "Prática"
+    callout = "Conheça o material de apoio"
+    slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(1), Inches(6), Inches(6), Inches(0.5))
+    slide.shapes.add_textbox(Inches(1), Inches(6), Inches(6), Inches(0.5)).text = callout
+    source = tmp_path / "divisoria.pptx"
+    prs.save(source)
+    folder = tmp_path / "rascunho"
+
+    result = run_cli("extrair", source, folder)
+
+    assert result.returncode == 0, result.stderr
+    slide = json.loads((folder / "roteiro-rascunho.json").read_text(encoding="utf-8"))["slides"][1]
+    assert slide["tipo"] == "modulo"
+    assert slide["selo"] == callout
+    assert slide["textos"] == ["Prática", callout]
+
+
+def test_extract_preserves_textless_content_and_flags_empty_slides(tmp_path):
+    prs = Presentation()
+    photo = tmp_path / "foto.png"
+    Image.new("RGB", (16, 16), "red").save(photo)
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    slide.shapes.add_picture(str(photo), 0, 0, prs.slide_width, prs.slide_height)
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(1), Inches(2), Inches(2), Inches(2))
+    prs.slides.add_slide(prs.slide_layouts[5])
+    source = tmp_path / "sem-texto.pptx"
+    prs.save(source)
+    folder = tmp_path / "rascunho"
+
+    result = run_cli("extrair", source, folder)
+
+    assert result.returncode == 0, result.stderr
+    picture, drawing, empty = json.loads(
+        (folder / "roteiro-rascunho.json").read_text(encoding="utf-8")
+    )["slides"]
+    for slide in (picture, drawing):
+        assert slide["tipo"] == "preservado"
+        assert slide["revisar"] is True
+        assert slide["motivo"] == "conteúdo só em imagem"
+        assert not slide.get("vazio")
+    assert empty["vazio"] is True
 
 
 @pytest.mark.parametrize("style", ["padrao", "ousado"])
