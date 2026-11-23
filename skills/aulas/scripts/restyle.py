@@ -372,6 +372,72 @@ def rotated_crop(shape, frame):
             top + (height - h) / 2 + dx * math.sin(angle) + dy * math.cos(angle), w, h)
 
 
+def text_bounds(shape, theme, slide_height, *, original=False):
+    """Estima a extensão vertical com folga sem alterar a caixa editável."""
+    from conferir import check_text
+
+    def padded_height(frame, width, height, margins, top):
+        if not frame.text.strip():
+            return 0
+        if frame._bodyPr.get("vert", "horz") != "horz":
+            return height
+        needed, _ = check_text(frame, shape, theme, set(), lambda *args: None,
+                               width, height, margins, top, slide_height)
+        if not needed:
+            return height
+        anchor = {MSO_ANCHOR.MIDDLE: 0.5, MSO_ANCHOR.BOTTOM: 1}.get(frame.vertical_anchor, 0)
+        offset = anchor * max(0, height - needed)
+        return offset + needed + 0.2 * (needed - margins[2] - margins[3])
+
+    if not visible_shape(shape):
+        return None
+    x, y, width, height = shape_frame(shape)
+    if shape.shape_type == GROUP:
+        transform = shape._element.xfrm
+        if transform is None:
+            return None
+        origin, extent = transform.chOff, transform.chExt
+        boxes = [box for child in shape.shapes
+                 if (box := text_bounds(child, theme, slide_height, original=original)) is not None]
+        if not boxes or origin is None or extent is None:
+            return None
+        scale_x = width / extent.cx if extent.cx else 1
+        scale_y = height / extent.cy if extent.cy else 1
+        left, top = min(box[0] for box in boxes), min(box[1] for box in boxes)
+        right, bottom = max(box[2] for box in boxes), max(box[3] for box in boxes)
+        frame = (x + (left - origin.x) * scale_x, y + (top - origin.y) * scale_y,
+                 (right - left) * scale_x, (bottom - top) * scale_y)
+        return frame_bounds(rotated_crop(shape, frame), shape.rotation)
+    if shape.has_text_frame and shape.text.strip():
+        frame = shape.text_frame
+        fixed = frame.auto_size in (None, MSO_AUTO_SIZE.NONE)
+        if original and fixed:
+            return bounds(shape)
+        margins = frame.margin_left, frame.margin_right, frame.margin_top, frame.margin_bottom
+        needed = padded_height(frame, width, height, margins, y)
+        if fixed:
+            needed = max(height, needed)
+    elif shape.has_table:
+        table = shape.table
+        heights = [row.height for row in table.rows]
+        top = y
+        for index, row in enumerate(table.rows):
+            for col, cell in enumerate(row.cells):
+                if cell.is_spanned or not cell.text.strip():
+                    continue
+                end = index + cell.span_height
+                cell_height = sum(heights[index:end])
+                cell_width = sum(table.columns[i].width for i in range(col, col + cell.span_width))
+                margins = cell.margin_left, cell.margin_right, cell.margin_top, cell.margin_bottom
+                needed = padded_height(cell.text_frame, cell_width, cell_height, margins, top)
+                heights[end - 1] += max(0, needed - cell_height)
+            top += heights[index]
+        needed = top - y
+    else:
+        return None
+    return frame_bounds(rotated_crop(shape, (x, y, width, needed)), shape.rotation)
+
+
 def visible_copy(shape, element, theme, slide_height):
     if not visible_shape(shape):
         return None
@@ -639,42 +705,45 @@ class PreservedSlides:
             panel.line.fill.background()
 
         geometry = [frame_bounds(frame or shape_frame(shape), shape.rotation) for shape, _, frame in copies]
+        text_geometry = [rect for shape, _, _ in copies
+                         if (rect := text_bounds(shape, theme, deck.slide_height, original=True)) is not None]
         left = min(rect[0] for rect in geometry)
         top = min(rect[1] for rect in geometry)
         width = max(rect[2] for rect in geometry) - left
-        height = max(rect[3] for rect in geometry) - top
+        height = max(rect[3] for rect in geometry + text_geometry) - top
         scale = min(w / width if width else math.inf, h / height if height else math.inf)
         if not math.isfinite(scale):
             scale = 1
-        dx = x + (w - width * scale) / 2 - left * scale
-        dy = y + (h - height * scale) / 2 - top * scale
+        target_deck = target.part.package.presentation_part.presentation
+        target_theme = Theme(target, target_deck)
+        # Fontes herdadas e novas quebras podem mudar a altura após a escala.
+        for _ in range(64):
+            dx = x + (w - width * scale) / 2 - left * scale
+            dy = y + (h - height * scale) / 2 - top * scale
+            positioned = [position_copy(shape, element, frame, scale, dx, dy, target.shapes, target_theme)
+                          for shape, element, frame in copies]
+            bottom = max((rect[3] for element in positioned
+                          if (rect := text_bounds(target.shapes._shape_factory(element), target_theme,
+                                                  target_deck.slide_height)) is not None), default=y)
+            if bottom <= y + h + 1:  # Tolerância de 1 EMU pelo arredondamento do XML.
+                break
+            scale *= max(0.5, min(0.98, (h / 2) / (bottom - y - h / 2 + 2)))
+        else:
+            raise ValueError(f"o texto do slide {script.get('slide')} não cabe na área de conteúdo")
 
-        style_ids = {node.text for _, element, _ in copies for node in element.iter(qn("a:tableStyleId")) if node.text}
+        style_ids = {node.text for element in positioned for node in element.iter(qn("a:tableStyleId")) if node.text}
         if style_ids:
             self.copy_table_styles(style_ids, deck.part, target.part.package.presentation_part)
         tree = target.shapes._spTree
         next_id = tree.max_shape_id + 1
         ids = {}
-        for _, element, _ in copies:
+        for element in positioned:
             for node in element.iter(qn("p:cNvPr")):
                 ids[node.get("id")] = str(next_id)
                 node.set("id", str(next_id))
                 next_id += 1
 
-        for shape, element, frame in copies:
-            shape_x, shape_y, shape_width, shape_height = frame or shape_frame(shape)
-            element.x = round(shape_x * scale + dx)
-            element.y = round(shape_y * scale + dy)
-            element.cx = round(shape_width * scale)
-            element.cy = round(shape_height * scale)
-            if shape.is_placeholder:
-                placeholder = element.ph
-                placeholder.getparent().remove(placeholder)
-                if element.tag == qn("p:sp") and not (element.spPr.prstGeom is not None
-                                                      or element.spPr.custGeom is not None):
-                    element.nvSpPr.cNvSpPr.set("txBox", "1")
-            if shape.shape_type != GROUP:
-                scale_details(element, scale)
+        for element in positioned:
             for endpoint in list(element.iter(qn("a:stCxn"), qn("a:endCxn"))):
                 new_id = ids.get(endpoint.get("id"))
                 if new_id is None:
@@ -719,6 +788,39 @@ class PreservedSlides:
                 continue
             part = rel.target_ref if rel.is_external else self.import_part(rel.target_part, target.package)
             node.set(key, target.relate_to(part, rel.reltype, rel.is_external))
+
+
+def position_copy(shape, element, frame, scale, dx, dy, target_shapes, theme):
+    element = deepcopy(element)
+    x, y, width, height = frame or shape_frame(shape)
+    element.x = round(x * scale + dx)
+    element.y = round(y * scale + dy)
+    element.cx = round(width * scale)
+    element.cy = round(height * scale)
+    if shape.is_placeholder:
+        placeholder = element.ph
+        placeholder.getparent().remove(placeholder)
+        if element.tag == qn("p:sp") and element.spPr.prstGeom is None and element.spPr.custGeom is None:
+            element.nvSpPr.cNvSpPr.set("txBox", "1")
+    if shape.shape_type != GROUP:
+        if shape.has_text_frame or shape.has_table:
+            set_inherited_text_sizes(target_shapes._shape_factory(element), theme)
+        scale_details(element, scale)
+    return element
+
+
+def set_inherited_text_sizes(shape, theme):
+    frames = ([cell.text_frame for cell in shape.table.iter_cells() if not cell.is_spanned]
+              if shape.has_table else [shape.text_frame])
+    for frame in frames:
+        for paragraph in frame.paragraphs:
+            if not any(run.text and run.font.size is None for run in paragraph.runs):
+                continue
+            default = paragraph._p.get_or_add_pPr().get_or_add_defRPr()
+            if "sz" not in default.attrib:
+                sizes = (style.get("sz") for style in theme.defaults(shape, frame, paragraph.level)
+                         if style is not None and "sz" in style.attrib)
+                default.set("sz", next(sizes, "1800"))
 
 
 def scale_details(element, scale):

@@ -654,3 +654,28 @@ def test_preserved_excludes_empty_textbox_inside_group(tmp_path):
     copied = next(shape for shape in restyle_one(tmp_path, original, "ousado") if shape.name == group.name)
     assert [shape.name for shape in copied.shapes] == [visible.name]
     assert copied.height == pytest.approx(Inches(5.375 - 1.79), abs=1)
+
+
+@pytest.mark.parametrize("explicit_size", [True, False])
+def test_preserved_reserves_height_for_six_autofit_lines(tmp_path, explicit_size):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(2), Inches(2), Inches(1), Inches(1))
+    label = slide.shapes.add_textbox(Inches(2), Inches(4), Inches(5), Inches(3))
+    label.text_frame.auto_size = MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
+    label.text_frame.word_wrap = False
+    for index in range(6):
+        paragraph = label.text_frame.add_paragraph() if index else label.text_frame.paragraphs[0]
+        run = paragraph.add_run()
+        run.text = "Linha de conteúdo"
+        if explicit_size:
+            paragraph.line_spacing = Pt(24)
+            run.font.size = Pt(20)
+
+    copied = next(shape for shape in restyle_one(tmp_path, original, "ousado") if shape.name == label.name)
+    paragraphs = copied.text_frame.paragraphs
+    font_size = paragraphs[-1].runs[0].font.size or paragraphs[-1].font.size or Pt(18)
+    line_height = font_size * (0.968 + 0.251)
+    text_height = sum(paragraph.line_spacing or line_height for paragraph in paragraphs[:-1]) + line_height
+    estimated_bottom = copied.top + copied.text_frame.margin_top + 1.2 * text_height
+    assert estimated_bottom <= Inches(5.375)
