@@ -16,6 +16,7 @@ from PIL import Image, ImageStat
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE, PP_PLACEHOLDER
+from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE
 from pptx.exc import PackageNotFoundError
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.opc.oxml import serialize_part_xml
@@ -280,12 +281,137 @@ def shape_size(shape):
 
 
 def bounds(shape, size=None):
-    x, y = shape.left or 0, shape.top or 0
-    w, h = shape_size(shape) if size is None else size
-    angle = math.radians(shape.rotation)
+    return frame_bounds(shape_frame(shape, size), shape.rotation)
+
+
+def shape_frame(shape, size=None):
+    return shape.left or 0, shape.top or 0, *(shape_size(shape) if size is None else size)
+
+
+def frame_bounds(frame, rotation):
+    x, y, w, h = frame
+    angle = math.radians(rotation)
     dx = (abs(w * math.cos(angle)) + abs(h * math.sin(angle))) / 2
     dy = (abs(w * math.sin(angle)) + abs(h * math.cos(angle))) / 2
     return x + w / 2 - dx, y + h / 2 - dy, x + w / 2 + dx, y + h / 2 + dy
+
+
+def has_paint(shape):
+    from conferir import FILL_TAGS
+
+    properties = shape._element.spPr
+    style = shape._element.find(qn("p:style"))
+    for node, reference in ((properties, "fillRef"), (properties.ln, "lnRef")):
+        fill = next((item for item in node if item.tag in FILL_TAGS), None) if node is not None else None
+        if fill is not None:
+            if fill.tag != qn("a:noFill"):
+                return True
+            continue
+        ref = style.find(qn(f"a:{reference}")) if style is not None else None
+        if ref is not None and ref.get("idx") not in (None, "0", "1000"):
+            return True
+        if reference == "lnRef" and node is not None:
+            return True
+    return False
+
+
+def visible_shape(shape):
+    if shape._element._nvXxPr.cNvPr.get("hidden") in ("1", "true"):
+        return False
+    if shape._element.tag not in (qn("p:sp"), qn("p:cxnSp")):
+        return True
+    if shape.has_text_frame and shape.text.strip():
+        return True
+    return not shape.is_placeholder and has_paint(shape)
+
+
+def text_fit_frame(shape, theme, slide_height):
+    from conferir import check_text
+
+    if not shape.has_text_frame or not shape.text.strip() or has_paint(shape):
+        return None
+    frame = shape.text_frame
+    if (frame.auto_size not in (MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT, MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE)
+            or frame._bodyPr.get("vert", "horz") != "horz"):
+        return None
+    margins = frame.margin_left, frame.margin_right, frame.margin_top, frame.margin_bottom
+    height, rows = check_text(frame, shape, theme, set(), lambda *args: None, shape.width, shape.height,
+                              margins, shape.top, slide_height)
+    if not rows:
+        return None
+    left = min(row[0] for row in rows)
+    right = max(row[2] for row in rows)
+    top = min(row[1] for row in rows)
+    bottom = max(row[3] for row in rows)
+    x, y, w, h = shape.left, shape.top, shape.width, shape.height
+    width = right - left + margins[0] + margins[1]
+    if w > 1.3 * (right - left) and w > width:
+        x, w = left - margins[0], width
+    if h > 1.3 * (bottom - top):
+        anchor = {MSO_ANCHOR.MIDDLE: 0.5, MSO_ANCHOR.BOTTOM: 1}.get(frame.vertical_anchor, 0)
+        offset = anchor * max(0, h - height)
+        if frame.auto_size == MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT:
+            height = bottom - y - offset + margins[3]
+        if h > height:
+            y, h = y + offset, height
+    trimmed = x, y, w, h
+    return rotated_crop(shape, trimmed) if trimmed != shape_frame(shape) else None
+
+
+def rotated_crop(shape, frame):
+    x, y, w, h = frame
+    left, top, width, height = shape_frame(shape)
+    dx = x + w / 2 - (left + width / 2)
+    dy = y + h / 2 - (top + height / 2)
+    transform = shape._element.xfrm
+    if transform is not None:
+        dx = -dx if transform.flipH else dx
+        dy = -dy if transform.flipV else dy
+    angle = math.radians(shape.rotation)
+    return (left + (width - w) / 2 + dx * math.cos(angle) - dy * math.sin(angle),
+            top + (height - h) / 2 + dx * math.sin(angle) + dy * math.cos(angle), w, h)
+
+
+def visible_copy(shape, element, theme, slide_height):
+    if not visible_shape(shape):
+        return None
+    if shape.shape_type != GROUP:
+        return element, text_fit_frame(shape, theme, slide_height)
+
+    geometry = []
+    changed = False
+    for child, child_element in zip(shape.shapes, list(element.iter_shape_elms()), strict=True):
+        copied = visible_copy(child, child_element, theme, slide_height)
+        if copied is None:
+            element.remove(child_element)
+            changed = True
+            continue
+        _, frame = copied
+        if frame is not None:
+            child_element.x, child_element.y, child_element.cx, child_element.cy = map(round, frame)
+            changed = True
+        geometry.append(frame_bounds(frame or shape_frame(child), child.rotation))
+    if not geometry:
+        return None
+    transform = element.xfrm
+    if not changed or transform is None:
+        return element, None
+    child_origin, child_extent = transform.chOff, transform.chExt
+    if child_origin is None or child_extent is None:
+        return element, None
+
+    left = math.floor(min(rect[0] for rect in geometry))
+    top = math.floor(min(rect[1] for rect in geometry))
+    width = math.ceil(max(rect[2] for rect in geometry)) - left
+    height = math.ceil(max(rect[3] for rect in geometry)) - top
+    # Mantém a escala dos filhos ao reduzir a moldura do grupo.
+    scale_x = shape.width / child_extent.cx if child_extent.cx else 1
+    scale_y = shape.height / child_extent.cy if child_extent.cy else 1
+    frame = (shape.left + (left - child_origin.x) * scale_x,
+             shape.top + (top - child_origin.y) * scale_y, width * scale_x, height * scale_y)
+    child_origin.x, child_origin.y = left, top
+    child_extent.cx, child_extent.cy = width, height
+    return element, rotated_crop(shape, frame)
 
 
 def overlaps(first, second):
@@ -480,6 +606,8 @@ class PreservedSlides:
         return part
 
     def copy(self, target, script, box):
+        from conferir import Theme
+
         deck, source = self.source(script.get("deck"), script.get("slide"))
         _, title, backdrops, content, rectangle_color = slide_content(deck, source)
         titles = {normalize_title(script.get("titulo", ""))}
@@ -492,8 +620,10 @@ class PreservedSlides:
                 title_bounds = bounds(shape)
                 content = [item for item in content if not is_title_rule(item, title_bounds)]
                 break
-        shapes = backdrops + content
-        if not shapes:
+        theme = Theme(source, deck)
+        copies = [(shape, *copy) for shape in backdrops + content
+                  if (copy := visible_copy(shape, deepcopy(shape._element), theme, deck.slide_height)) is not None]
+        if not copies:
             return []
         x, y, w, h, panel_color = box
         dark = not backdrops and (is_dark(rectangle_color) if rectangle_color is not None
@@ -506,8 +636,7 @@ class PreservedSlides:
             panel.fill.fore_color.rgb = panel_color
             panel.line.fill.background()
 
-        sizes = [shape_size(shape) for shape in shapes]
-        geometry = [bounds(shape, size) for shape, size in zip(shapes, sizes, strict=True)]
+        geometry = [frame_bounds(frame or shape_frame(shape), shape.rotation) for shape, _, frame in copies]
         left = min(rect[0] for rect in geometry)
         top = min(rect[1] for rect in geometry)
         width = max(rect[2] for rect in geometry) - left
@@ -518,27 +647,30 @@ class PreservedSlides:
         dx = x + (w - width * scale) / 2 - left * scale
         dy = y + (h - height * scale) / 2 - top * scale
 
-        elements = [deepcopy(shape._element) for shape in shapes]
-        style_ids = {node.text for element in elements for node in element.iter(qn("a:tableStyleId")) if node.text}
+        style_ids = {node.text for _, element, _ in copies for node in element.iter(qn("a:tableStyleId")) if node.text}
         if style_ids:
             self.copy_table_styles(style_ids, deck.part, target.part.package.presentation_part)
         tree = target.shapes._spTree
         next_id = tree.max_shape_id + 1
         ids = {}
-        for element in elements:
+        for _, element, _ in copies:
             for node in element.iter(qn("p:cNvPr")):
                 ids[node.get("id")] = str(next_id)
                 node.set("id", str(next_id))
                 next_id += 1
 
-        for shape, element, (shape_width, shape_height) in zip(shapes, elements, sizes, strict=True):
-            element.x = round((shape.left or 0) * scale + dx)
-            element.y = round((shape.top or 0) * scale + dy)
+        for shape, element, frame in copies:
+            shape_x, shape_y, shape_width, shape_height = frame or shape_frame(shape)
+            element.x = round(shape_x * scale + dx)
+            element.y = round(shape_y * scale + dy)
             element.cx = round(shape_width * scale)
             element.cy = round(shape_height * scale)
             if shape.is_placeholder:
                 placeholder = element.ph
                 placeholder.getparent().remove(placeholder)
+                if element.tag == qn("p:sp") and not (element.spPr.prstGeom is not None
+                                                      or element.spPr.custGeom is not None):
+                    element.nvSpPr.cNvSpPr.set("txBox", "1")
             if shape.shape_type != GROUP:
                 scale_details(element, scale)
             for endpoint in list(element.iter(qn("a:stCxn"), qn("a:endCxn"))):
@@ -549,7 +681,7 @@ class PreservedSlides:
                     endpoint.set("id", new_id)
             self.relink(element, source.part, target.part)
             tree.insert_element_before(element, "p:extLst")
-        return list(target.shapes)[-len(elements):]
+        return list(target.shapes)[-len(copies):]
 
     def copy_table_styles(self, style_ids, source, target):
         # Os GUIDs das tabelas apontam para uma parte da apresentação, fora dos .rels do slide.

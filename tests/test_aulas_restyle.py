@@ -8,6 +8,7 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_FILL, MSO_THEME_COLOR
 from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE, MSO_SHAPE_TYPE
+from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.opc.oxml import serialize_part_xml
 from pptx.oxml import parse_xml
@@ -144,8 +145,10 @@ def source_deck(tmp_path):
     page.name = "Número de página"
     page.text = "1"
     slide.shapes.add_picture(str(image), Inches(1), Inches(2), Inches(4))
-    slide.shapes.add_textbox(Inches(6), Inches(3), Inches(3), Inches(0.3)).text = "Depois"
-    slide.shapes.add_textbox(Inches(6), Inches(2), Inches(3), Inches(0.3)).text = "Antes"
+    for y, value in ((3, "Depois"), (2, "Antes")):
+        textbox = slide.shapes.add_textbox(Inches(6), Inches(y), Inches(3), Inches(0.3))
+        textbox.text_frame.auto_size = MSO_AUTO_SIZE.NONE
+        textbox.text = value
     group = slide.shapes.add_group_shape()
     group.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(2), Inches(2.5), Inches(0.8), Inches(0.3)).text = "Rótulo"
     group.shapes.add_picture(str(image), Inches(2), Inches(3), Inches(0.5))
@@ -529,15 +532,28 @@ def test_preserved_objects_and_exact_standalone_slide_count(tmp_path, source_dec
     ("padrao", 1.4, 5.275),
     ("ousado", 1.79, 5.375),
 ])
-@pytest.mark.parametrize("extra_extent", ["table-frame", "background"])
+@pytest.mark.parametrize("extra_extent", ["table-frame", "background", "empty-shapes"])
 def test_preserved_fits_centered_content(tmp_path, style, content_top, content_bottom, extra_extent):
     original = Presentation()
-    slide = original.slides.add_slide(original.slide_layouts[5])
+    slide = original.slides.add_slide(original.slide_layouts[1 if extra_extent == "empty-shapes" else 5])
     slide.shapes.title.text = "Título original"
+    invisible = []
     if extra_extent == "background":
         background = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, original.slide_width, original.slide_height)
         background.fill.solid()
         background.fill.fore_color.rgb = RGBColor.from_string("FFFFFF")
+        invisible.append(background.name)
+    if extra_extent == "empty-shapes":
+        extent = 0, 0, original.slide_width, original.slide_height
+        empty = slide.shapes.add_textbox(*extent)
+        empty.name = "Empty source textbox"
+        empty.text = " \t "
+        transparent = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, *extent)
+        transparent.fill.background()
+        transparent.line.fill.background()
+        placeholder = slide.placeholders[1]
+        placeholder._element.spPr.append(parse_xml(f'<a:prstGeom {nsdecls("a")} prst="rect"><a:avLst/></a:prstGeom>'))
+        invisible.extend([empty.name, transparent.name, placeholder.name])
     label = slide.shapes.add_textbox(Inches(3), Inches(3), Inches(4), Inches(1))
     label.name = "Rótulo central"
     label.text_frame.margin_left = Inches(0.2)
@@ -593,5 +609,46 @@ def test_preserved_fits_centered_content(tmp_path, style, content_top, content_b
     assert copied_cell.margin_left == pytest.approx(Inches(0.1) * scale, abs=1)
     border_width = int(copied_cell._tc.tcPr.find(qn("a:lnL")).get("w"))
     assert border_width == pytest.approx(Pt(1) * scale, abs=1)
-    if extra_extent == "background":
-        assert all(shape.name != slide.shapes[1].name for shape in shapes)
+    assert {shape.name for shape in shapes}.isdisjoint(invisible)
+
+
+@pytest.mark.parametrize("frame_height", [0.48, 5])
+def test_preserved_fits_autofit_text_and_keeps_visible_shapes(tmp_path, frame_height):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[1])
+    slide.shapes.title.text = "Título original"
+    placeholder = slide.placeholders[1]
+    placeholder.left, placeholder.top = Inches(4), Inches(3)
+    placeholder.width, placeholder.height = Inches(2), Inches(1)
+    placeholder.text = "Texto em espaço reservado"
+    placeholder.text_frame.auto_size = MSO_AUTO_SIZE.NONE
+    oversized = slide.shapes.add_textbox(Inches(4), Inches(2), Inches(6), Inches(frame_height))
+    oversized.text_frame.auto_size = MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
+    run = oversized.text_frame.paragraphs[0].add_run()
+    run.text = "Rótulo"
+    run.font.size = Pt(18)
+    filled = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(4), Inches(3), Inches(1), Inches(1))
+    outlined = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(5), Inches(3), Inches(1), Inches(1))
+    outlined.fill.background()
+
+    copied = {shape.name: shape for shape in restyle_one(tmp_path, original, "ousado")}
+    assert {placeholder.name, oversized.name, filled.name, outlined.name} <= copied.keys()
+    label = copied[oversized.name]
+    assert label.text == oversized.text
+    assert copied[placeholder.name].text == placeholder.text
+    assert label.top >= Inches(1.79) - 1
+    assert label.top + label.height <= Inches(5.375) + 1
+    assert label.height < 0.99 * oversized.height * (copied[filled.name].height / filled.height)
+    assert label.text_frame.paragraphs[0].runs[0].font.size > Pt(18)
+
+
+def test_preserved_excludes_empty_textbox_inside_group(tmp_path):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    group = slide.shapes.add_group_shape()
+    group.shapes.add_textbox(0, 0, original.slide_width, original.slide_height)
+    visible = group.shapes.add_shape(MSO_SHAPE.OVAL, Inches(4), Inches(3), Inches(1), Inches(1))
+
+    copied = next(shape for shape in restyle_one(tmp_path, original, "ousado") if shape.name == group.name)
+    assert [shape.name for shape in copied.shapes] == [visible.name]
+    assert copied.height == pytest.approx(Inches(5.375 - 1.79), abs=1)
