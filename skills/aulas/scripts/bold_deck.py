@@ -465,9 +465,14 @@ def s_preserved(prs, s, d, preserved):
     bg(s, CREME)
     logo(s, False)
     kicker(s, d.get("kicker", ""), M, 0.22, VINHO)
-    heading = title(s, d.get("titulo", ""), M, 0.54, W - 2 * M - 1, 0.64, color=PRETO, size=26)
-    bar(s, M, 1.23, color=VINHO)
-    objects = preserved.copy(s, d, (Inches(M), Inches(1.43), Inches(W - 2 * M), Inches(H - 1.68)))
+    title_top, title_height = 0.54, 1.0
+    title_lines = [[(value, {})] for value in d.get("titulo", "").rstrip().splitlines()]
+    heading = text(s, M, title_top, W - 2 * M - 1, title_height, title_lines, size=26,
+                   color=PRETO, font=FONTE_FORTE, bold=True, spacing=0.9)
+    divider_top = title_top + title_height + 0.05
+    bar(s, M, divider_top, color=VINHO)
+    content_top = divider_top + 0.20
+    objects = preserved.copy(s, d, (Inches(M), Inches(content_top), Inches(W - 2 * M), Inches(H - 0.25 - content_top)))
     animation = Anim(s)
     for shape in [heading, *objects]:
         animation.add(shape, gap=0 if shape is not heading else 250)

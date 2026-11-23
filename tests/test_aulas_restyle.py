@@ -102,6 +102,42 @@ def test_extract_retains_text_and_filters_slides(tmp_path, source_deck):
 
 
 @pytest.mark.parametrize("style", ["padrao", "ousado"])
+def test_preserved_frame_keeps_divider_below_title(tmp_path, source_deck, style):
+    source, _ = source_deck
+    titles = ["Título curto", "INDICAÇÕES ESTÉTICAS\nAVANÇADAS\n\n"]
+    script = tmp_path / "roteiro.json"
+    script.write_text(json.dumps({
+        "estilo": style, "avulso": True,
+        "slides": [
+            {"tipo": "preservado", "deck": source.name, "slide": 1, "titulo": title, "kicker": "Teste"}
+            for title in titles
+        ],
+    }), encoding="utf-8")
+    out = tmp_path / "restyle.pptx"
+    result = run_cli("gerar", script, out)
+    assert result.returncode == 0, result.stderr
+
+    original = Presentation(source).slides[0]
+    copied_names = {shape.name for shape in list(original.shapes)[4:]}
+    for slide, title in zip(Presentation(out).slides, titles, strict=True):
+        expected = title.rstrip().upper() if style == "padrao" else title.rstrip()
+        heading = next(
+            shape for shape in slide.shapes
+            if shape.has_text_frame and shape.text.rstrip() == expected
+        )
+        divider = next(
+            shape for shape in slide.shapes
+            if shape.name == "!!barra" or (shape.shape_type == MSO_SHAPE_TYPE.LINE and shape.height == 0)
+        )
+        copied = [shape for shape in slide.shapes if shape.name in copied_names]
+        if "\n" in expected:
+            assert heading.height >= Inches(0.8 if style == "padrao" else 1.0)
+            assert [paragraph.text for paragraph in heading.text_frame.paragraphs] == expected.splitlines()
+        assert heading.top + heading.height < divider.top
+        assert min(shape.top for shape in copied) > divider.top + divider.height
+
+
+@pytest.mark.parametrize("style", ["padrao", "ousado"])
 def test_preserved_objects_and_exact_standalone_slide_count(tmp_path, source_deck, style):
     source, image = source_deck
     script = tmp_path / "roteiro.json"

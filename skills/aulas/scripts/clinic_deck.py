@@ -281,16 +281,19 @@ def header(s, title, dark_logo=False):
     s.shapes.add_picture(A("logo_branco.png"), Inches(W - M - 0.62), Inches(0.12), height=Inches(0.42))
 
 
-def header_editorial(s, title, kicker=None):
+def header_editorial(s, title, kicker=None, *, title_height=0.45):
     """Variação refinada (estilo dos slides novos do HOF): fundo claro,
     título vinho, grade de pontinhos e fio fino."""
     dots(s, M, 0.36)
     if kicker:
         text(s, M + 0.36, 0.18, 6, 0.22, kicker, size=8, color=ROSE, bold=True, caps=True)
-    text(s, M + 0.36, 0.3, W - 2 * M - 1.2, 0.45, title, size=20, color=VINHO,
+    title_top = 0.3
+    text(s, M + 0.36, title_top, W - 2 * M - 1.2, title_height, title, size=20, color=VINHO,
          font=FONTE_FORTE, bold=True, caps=True, anchor=MSO_ANCHOR.MIDDLE)
-    line(s, M, 0.86, W - M, 0.86, color=VINHO, w=0.75)
+    divider_top = title_top + title_height + 0.11
+    line(s, M, divider_top, W - M, divider_top, color=VINHO, w=0.75)
     s.shapes.add_picture(A("logo_cor.png"), Inches(W - M - 0.62), Inches(0.24), height=Inches(0.44))
+    return divider_top
 
 
 def footer(s, n, total, label=""):
@@ -954,8 +957,10 @@ PARCERIAS_PADRAO = [
 
 
 def layout_preservado(prs, s, d, preserved):
-    header_editorial(s, d.get("titulo", ""), d.get("kicker"))
-    preserved.copy(s, d, (Inches(M), Inches(1.05), Inches(W - 2 * M), Inches(H - 1.4)))
+    title_lines = d.get("titulo", "").rstrip().splitlines()
+    divider_top = header_editorial(s, title_lines, d.get("kicker"), title_height=0.8)
+    content_top = divider_top + 0.19
+    preserved.copy(s, d, (Inches(M), Inches(content_top), Inches(W - 2 * M), Inches(H - 0.35 - content_top)))
 
 
 LAYOUTS = {k[7:]: v for k, v in globals().items() if k.startswith("layout_")}
