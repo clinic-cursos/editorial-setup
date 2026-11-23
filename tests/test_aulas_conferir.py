@@ -6,6 +6,7 @@ import sys
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
+from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.util import Inches, Pt
 import pytest
 
@@ -78,6 +79,71 @@ def test_reports_rejections_and_warnings_by_slide(tmp_path):
         (2, "font", "error"), (2, "text_color", "error"), (2, "fill_color", "error"),
         (2, "bounds", "error"), (2, "overflow", "error"), (2, "marker", "warning"),
     }
+
+
+@pytest.mark.parametrize("name,geometry,auto_size,parts,reason", [
+    ("Palavra", (1, 3, 2), MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT,
+     ("MMMMMM", "MMMMM"), "Palavra"),
+    ("Caixa fixa", (1, 2.3, 0.62), MSO_AUTO_SIZE.NONE,
+     ("WWWWWW WWWWWW WWWWWW",), "altura da caixa"),
+    ("Base do slide", (6.45, 3, 0.4), MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT,
+     ("Um\v\v\vDois",), "borda inferior do slide"),
+])
+def test_rejects_each_text_overflow_reason(tmp_path, name, geometry, auto_size, parts, reason):
+    presentation = Presentation()
+    presentation.slides.add_slide(presentation.slide_layouts[6])
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    top, width, height = geometry
+    box = slide.shapes.add_textbox(Inches(1), Inches(top), Inches(width), Inches(height))
+    box.name = name
+    frame = box.text_frame
+    frame.auto_size = auto_size
+    frame.word_wrap = True
+    frame.margin_left = frame.margin_right = Inches(0.1)
+    if len(parts) == 1:
+        frame.text = parts[0]
+    else:
+        for part in parts:
+            frame.paragraphs[0].add_run().text = part
+    for run in frame.paragraphs[0].runs:
+        run.font.name = "Montserrat"
+        run.font.size = Pt(20)
+        run.font.color.rgb = RGBColor(0x2A, 0x26, 0x25)
+    deck = tmp_path / "estouro.pptx"
+    presentation.save(deck)
+
+    result = run_cli("conferir", deck, "--json")
+    assert result.returncode == 1, result.stderr or result.stdout
+    findings = json.loads(result.stdout)["findings"]
+    assert [(item["slide"], item["shape"], item["rule"], item["severity"]) for item in findings] == [
+        (2, name, "overflow", "error"),
+    ]
+    assert reason in findings[0]["message"]
+
+
+def test_table_rows_grow_into_the_remaining_slide_space(tmp_path):
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    for x, top in ((1, 1), (5, 6.35)):
+        shape = slide.shapes.add_table(2, 1, Inches(x), Inches(top), Inches(3), Inches(0.5))
+        shape.name = f"Tabela {x}"
+        for i, text in enumerate(("Um\vDois\vTrês", "Quatro")):
+            frame = shape.table.cell(i, 0).text_frame
+            frame.text = text
+            for run in frame.paragraphs[0].runs:
+                run.font.name = "Montserrat"
+                run.font.size = Pt(18)
+                run.font.color.rgb = RGBColor(0x2A, 0x26, 0x25)
+    deck = tmp_path / "tabelas.pptx"
+    presentation.save(deck)
+
+    result = run_cli("conferir", deck, "--json")
+    assert result.returncode == 1, result.stderr or result.stdout
+    overflows = [item for item in json.loads(result.stdout)["findings"] if item["rule"] == "overflow"]
+    assert [(item["slide"], item["shape"], item["severity"]) for item in overflows] == [
+        (1, "Tabela 5", "error"),
+    ]
+    assert "borda inferior do slide" in overflows[0]["message"]
 
 
 def test_preserved_font_remains_a_warning_when_reopened(tmp_path):

@@ -1,20 +1,20 @@
 """Confere a identidade e a geometria do deck e renderiza a prévia."""
 
 import json
-import math
 import re
 import shutil
 import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unicodedata import combining, normalize
 
 from lxml import etree
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE_TYPE
-from pptx.enum.text import MSO_AUTO_SIZE
+from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.oxml.ns import qn
-from pptx.util import Inches
+from pptx.util import Emu, Inches, Pt
 
 import bold_deck
 import clinic_deck
@@ -35,8 +35,74 @@ LEGACY_ARCS = ((0, 4.125, 2.4, 6.525), (7.6, -0.1, 10.1, 2.4),
                (-0.3, -0.3, 1.3, 1.3), (8, 3.425, 10.3, 5.725))
 BOUNDS_TOLERANCE = 10  # EMU, arredondamento de coordenadas de formas livres
 MARKER = re.compile(r"\[exemplo|\[confirmar\]", re.IGNORECASE)
+MARKER_ONLY = re.compile(r"\[(?:exemplo[^\]]*|confirmar)\]", re.IGNORECASE)
 PRESERVED_EXTENSION = "{A046E92C-840E-4D35-9C5C-4A96E281F065}"
 FILL_TAGS = {qn("a:" + name) for name in ("solidFill", "gradFill", "pattFill", "blipFill", "noFill", "grpFill")}
+
+# Avanços hmtx em milésimos de em. Regular e Bold vêm dos TTF do diagramador;
+# ExtraBold vem da Montserrat variável no peso 800. A tabela dispensa fonte instalada.
+WIDTH_CHARS = "".join(map(chr, range(32, 127))) + "\u2013\u2014‘’“”…•→"
+MONTSERRAT_WIDTHS = {
+    "regular": dict(zip(WIDTH_CHARS, (
+        262, 260, 373, 696, 615, 829, 669, 202, 329, 329, 386, 575, 212, 382, 212, 335, 662, 361,
+        568, 564, 661, 566, 609, 589, 638, 609, 212, 212, 575, 575, 575, 567, 1033, 717, 754, 709,
+        826, 669, 633, 773, 813, 302, 501, 711, 589, 955, 813, 839, 718, 839, 723, 615, 574, 792,
+        698, 1111, 656, 635, 651, 318, 335, 318, 576, 500, 600, 590, 678, 563, 678, 604, 339, 686,
+        677, 269, 274, 598, 269, 1061, 677, 627, 678, 678, 401, 489, 406, 673, 542, 879, 534, 542,
+        511, 334, 295, 334, 575, 500, 1000, 212, 212, 382, 382, 647, 295, 600,
+    ), strict=True)),
+    "bold": dict(zip(WIDTH_CHARS, (
+        283, 289, 437, 720, 638, 877, 728, 230, 357, 358, 434, 599, 262, 386, 262, 392, 679, 392,
+        590, 592, 689, 595, 637, 620, 660, 637, 262, 262, 599, 599, 599, 589, 1035, 766, 765, 724,
+        826, 671, 639, 771, 808, 328, 541, 740, 604, 955, 808, 844, 732, 844, 735, 638, 618, 788,
+        746, 1163, 714, 676, 671, 368, 392, 368, 600, 500, 600, 617, 690, 591, 692, 631, 387, 700,
+        691, 301, 307, 655, 301, 1049, 691, 655, 690, 690, 431, 531, 435, 687, 598, 937, 595, 598,
+        543, 391, 309, 391, 599, 500, 1000, 262, 262, 498, 498, 798, 358, 600,
+    ), strict=True)),
+    "extrabold": dict(zip(WIDTH_CHARS, (
+        291, 301, 462, 730, 647, 897, 752, 242, 369, 369, 453, 609, 283, 388, 283, 415, 685, 405,
+        599, 603, 700, 607, 649, 632, 669, 649, 283, 283, 609, 609, 609, 597, 1036, 786, 769, 730,
+        826, 672, 642, 770, 806, 339, 557, 752, 610, 954, 806, 846, 737, 846, 740, 647, 635, 786,
+        766, 1184, 737, 693, 679, 389, 415, 389, 610, 500, 600, 628, 695, 603, 698, 642, 406, 705,
+        696, 313, 320, 677, 313, 1045, 696, 666, 695, 695, 443, 547, 447, 692, 620, 956, 619, 620,
+        556, 414, 314, 414, 609, 500, 1000, 283, 283, 545, 545, 858, 383, 600,
+    ), strict=True)),
+}
+
+
+def glyph_width(char, widths):
+    if char in widths:
+        return widths[char]
+    # Letras acentuadas usam o avanço da base; símbolos ausentes usam 0,6 em.
+    return sum(widths.get(base, 600) for base in normalize("NFKD", char) if not combining(base))
+
+
+def measure_line(line, width, wrap):
+    """Mede palavras que cruzam runs e devolve a maior fonte de cada linha visual."""
+    text = "".join(part for part, _, _ in line)
+    metrics = [(glyph_width(char, widths) * size / 1000, size)
+               for part, size, widths in line for char in part]
+    used = gap = size = 0
+    rows = []
+    wide_word = False
+    # O espaço inseparável pertence à palavra para fins de quebra.
+    for match in re.finditer(r"(?:(?!\u00a0)\s)+|(?:\S|\u00a0)+", text):
+        token = metrics[match.start():match.end()]
+        advance = sum(length for length, _ in token)
+        if match.group().isspace() and "\u00a0" not in match.group():
+            gap += advance
+            continue
+        wide_word |= advance > width
+        if wrap and used and used + gap + advance > width:
+            rows.append(size)
+            used = gap = size = 0
+        used += gap + advance if used else advance
+        size = max(size, max(point_size for _, point_size in token))
+        gap = 0
+    if not wrap and used > width:
+        wide_word = True
+    rows.append(size or max((size for _, size, _ in line), default=0))
+    return rows, wide_word
 
 
 def mark_preserved(shape):
@@ -159,23 +225,31 @@ def check_fill(properties, theme, palette, add, reference=None):
         add("fill_color", f"Preenchimento {color} fora da paleta.")
 
 
-def check_text(frame, shape, theme, palette, add, width, height, margins):
-    if not frame.text.strip():
-        return
-    if MARKER.search(frame.text):
+def check_text(frame, shape, theme, palette, add, width, height, margins, top, slide_bottom, *, grows=False):
+    text = frame.text.strip()
+    if not text:
+        return 0
+    if MARKER.search(text):
         add("marker", "Marcador editorial pendente.", "warning")
     fonts, colors = set(), set()
-    available_width = (width - margins[0] - margins[1]) / 12700
-    available_height = (height - margins[2] - margins[3]) / 12700
-    total_height = longest_line = 0
+    available_width = Emu(width - margins[0] - margins[1]).pt
+    available_height = Emu(height - margins[2] - margins[3]).pt
+    cursor = text_bottom = 0
+    wide_word = False
+    autofit = frame._bodyPr.normAutofit
+    scale = autofit.fontScale / 100 if autofit is not None else 1
     family = clinic_deck.FONTE.casefold()
-    is_quote = frame.text.strip() == bold_deck.QUOTE_MARK
+    is_quote = text == bold_deck.QUOTE_MARK
     for paragraph in frame.paragraphs:
         defaults = [paragraph._p.find(f"{qn('a:pPr')}/{qn('a:defRPr')}"),
                     *theme.defaults(shape, frame, paragraph.level)]
         lines = [[]]
+        previous_size = next((int(style.get("sz")) / 100 for style in defaults
+                              if style is not None and "sz" in style.attrib), 18) * scale
         for node in paragraph._p:
             if node.tag == qn("a:br"):
+                if not lines[-1]:
+                    lines[-1].append(("", previous_size, MONTSERRAT_WIDTHS["regular"]))
                 lines.append([])
             content = node.findtext(qn("a:t"), "")
             if not content:
@@ -192,44 +266,74 @@ def check_text(frame, shape, theme, palette, add, width, height, margins):
             colors.update(set(color) - palette)
             if decorative:
                 continue
-            size = next((int(style.get("sz")) / 100 for style in styles if "sz" in style.attrib), 18)
-            tokens = re.split(r"([\v\n])", content)
-            for token in tokens:
-                if token in ("\v", "\n"):
+            size = next((int(style.get("sz")) / 100 for style in styles if "sz" in style.attrib), 18) * scale
+            previous_size = size
+            bold = next((style.get("b") in {"1", "true"} for style in styles if "b" in style.attrib), False)
+            weight = "extrabold" if font_family == clinic_deck.FONTE_FORTE.casefold() else "bold" if bold else "regular"
+            for token in re.split(r"([\v\n])", content):
+                if token in {"\v", "\n"}:
+                    lines[-1].append(("", size, MONTSERRAT_WIDTHS[weight]))
                     lines.append([])
                 elif token:
-                    lines[-1].append((token, size))
+                    lines[-1].append((token, size, MONTSERRAT_WIDTHS[weight]))
         spacing = paragraph.line_spacing
+        cursor += paragraph.space_before.pt if paragraph.space_before is not None else 0
         for line in lines:
-            if not line:
-                continue
-            length = sum(len(text) * size * 0.48 for text, size in line)
-            line_height = max(size for _, size in line)
-            rows = 1
-            if frame.word_wrap is not False and available_width > 0:
-                rows = max(1, math.ceil(length / available_width))
-            else:
-                longest_line = max(longest_line, length)
-            total_height += line_height
-            if rows > 1:
-                step = spacing.pt if hasattr(spacing, "pt") else line_height * (spacing or 1)
-                total_height += (rows - 1) * step
-        total_height += sum(value.pt for value in (paragraph.space_before, paragraph.space_after)
-                            if value is not None)
+            rows, over_width = measure_line(line, available_width, frame.word_wrap is not False)
+            wide_word |= over_width
+            has_text = any(part.strip() for part, _, _ in line)
+            for size in rows:
+                if not size:
+                    continue
+                # Aproxima a extensão vertical da Montserrat (968 + 251 unidades por em).
+                line_height = size * 1.219
+                if has_text:
+                    text_bottom = max(text_bottom, cursor + line_height)
+                cursor += spacing.pt if hasattr(spacing, "pt") else line_height * (spacing or 1)
+        cursor += paragraph.space_after.pt if paragraph.space_after is not None else 0
     for font in sorted(fonts):
         add("font", f"Fonte {font} fora da família {clinic_deck.FONTE}.")
     for color in sorted(colors):
         add("text_color", f"Cor de texto {color} fora da paleta.")
-    # Estimativa: largura média de 0,48 em por caractere, com tolerância para o impacto dos glifos
-    # e da quebra de linha real. Uma linha usa a altura da fonte; a partir da segunda, conta o entrelinhamento.
-    if frame.auto_size != MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE and (
-        total_height > max(0, available_height) * 1.20 + 2
-        or longest_line > max(0, available_width) * 1.20 + 2
-    ):
-        add("overflow", "Texto provavelmente estourado (estimativa por largura média do caractere).")
+    if not text_bottom:
+        return 0
+    grows = grows or frame.auto_size == MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
+    anchor = {MSO_ANCHOR.MIDDLE: 0.5, MSO_ANCHOR.BOTTOM: 1}.get(frame.vertical_anchor, 0)
+    offset = anchor * max(0, available_height - text_bottom)
+    reasons = []
+    if wide_word:
+        reasons.append("Palavra ou linha sem quebra excede a largura útil da caixa.")
+    if not grows and text_bottom > max(0, available_height) * 1.10:
+        reasons.append("Texto excede a altura da caixa fixa em mais de 10%.")
+    if Emu(slide_bottom - top - margins[2]).pt < offset + text_bottom:
+        reasons.append("Texto ultrapassa a borda inferior do slide.")
+    if reasons:
+        severity = "warning" if MARKER_ONLY.fullmatch(text) else "error"
+        add("overflow", "Texto provavelmente estourado. " + " ".join(reasons), severity)
+    return Pt(text_bottom) + margins[2] + margins[3]
 
 
-def check_shape(shape, theme, palette, add, preserved=False):
+def check_table(shape, theme, palette, add, slide_bottom):
+    table = shape.table
+    heights = [row.height for row in table.rows]
+    top = shape.top
+    for row, table_row in enumerate(table.rows):
+        for col, cell in enumerate(table_row.cells):
+            if cell.is_spanned:
+                continue
+            width = sum(table.columns[i].width for i in range(col, col + cell.span_width))
+            last_row = row + cell.span_height - 1
+            height = sum(heights[row:last_row + 1])
+            check_fill(cell._tc.tcPr, theme, palette, add)
+            margins = (cell.margin_left, cell.margin_right, cell.margin_top, cell.margin_bottom)
+            needed = check_text(cell.text_frame, shape, theme, palette, add, width, height, margins,
+                                top, slide_bottom, grows=True)
+            # A altura gravada é mínima. O crescimento da célula desloca as linhas seguintes.
+            heights[last_row] += max(0, needed - height)
+        top += heights[row]
+
+
+def check_shape(shape, theme, palette, add, slide_bottom, preserved=False):
     if shape._element._nvXxPr.cNvPr.get("hidden") in {"1", "true"}:
         return
     preserved = preserved or is_preserved(shape)
@@ -238,25 +342,22 @@ def check_shape(shape, theme, palette, add, preserved=False):
         add(rule, message, "warning" if preserved else severity, shape.name)
 
     if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+        transform = shape._element.grpSpPr.xfrm
+        if shape.height and transform.chOff is not None and transform.chExt is not None:
+            slide_bottom = (transform.chOff.y
+                            + (slide_bottom - shape.top) * transform.chExt.cy / shape.height)
         for child in shape.shapes:
-            check_shape(child, theme, palette, add, preserved)
+            check_shape(child, theme, palette, add, slide_bottom, preserved)
     elif not shape.has_chart and shape._element.tag != qn("p:pic"):
         reference = shape._element.find(f"{qn('p:style')}/{qn('a:fillRef')}")
         check_fill(shape._element.find(qn("p:spPr")), theme, palette, finding, reference)
         if shape.has_text_frame:
             frame = shape.text_frame
             margins = (frame.margin_left, frame.margin_right, frame.margin_top, frame.margin_bottom)
-            check_text(frame, shape, theme, palette, finding, shape.width, shape.height, margins)
+            check_text(frame, shape, theme, palette, finding, shape.width, shape.height, margins,
+                       shape.top, slide_bottom)
         if shape.has_table:
-            for cell in shape.table.iter_cells():
-                if cell.is_spanned:
-                    continue
-                row, col = cell._tc.row_idx, cell._tc.col_idx
-                width = sum(shape.table.columns[i].width for i in range(col, col + cell.span_width))
-                height = sum(shape.table.rows[i].height for i in range(row, row + cell.span_height))
-                check_fill(cell._tc.tcPr, theme, palette, finding)
-                margins = (cell.margin_left, cell.margin_right, cell.margin_top, cell.margin_bottom)
-                check_text(cell.text_frame, shape, theme, palette, finding, width, height, margins)
+            check_table(shape, theme, palette, finding, slide_bottom)
 
 
 def inspect(path, style):
@@ -293,7 +394,7 @@ def inspect(path, style):
                 and not legacy_arc(shape, box)):
                 add("bounds", "Forma fora dos limites do slide.",
                     "warning" if is_preserved(shape) else "error", shape.name)
-            check_shape(shape, theme, palette, add)
+            check_shape(shape, theme, palette, add, deck.slide_height)
     return {"style": style, "slides": len(deck.slides), "findings": findings,
             "errors": sum(item["severity"] == "error" for item in findings),
             "warnings": sum(item["severity"] == "warning" for item in findings)}
