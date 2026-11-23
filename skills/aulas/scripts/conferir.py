@@ -4,6 +4,7 @@ import json
 import re
 import shutil
 import subprocess
+from collections import Counter
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unicodedata import combining, normalize
@@ -19,6 +20,16 @@ from pptx.util import Emu, Inches, Pt
 import bold_deck
 import clinic_deck
 from restyle import bounds, open_deck
+
+
+PRESERVED_WARNING_LABELS = {
+    "bounds": ("forma fora dos limites do slide", "formas fora dos limites do slide"),
+    "fill_color": ("preenchimento fora da paleta", "preenchimentos fora da paleta"),
+    "font": ("fonte fora da família", "fontes fora da família"),
+    "marker": ("marcador editorial pendente", "marcadores editoriais pendentes"),
+    "overflow": ("estouro de texto", "estouros de texto"),
+    "text_color": ("cor de texto fora da paleta", "cores de texto fora da paleta"),
+}
 
 
 # Tons locais de clinic_deck.image, prompt_box, tabela, precificacao e parcerias.
@@ -352,7 +363,7 @@ def check_shape(shape, theme, palette, add, slide_bottom, text_boxes, preserved=
     preserved = preserved or is_preserved(shape)
 
     def finding(rule, message, severity="error"):
-        add(rule, message, "warning" if preserved else severity, shape.name)
+        add(rule, message, severity, shape.name, preserved=preserved)
 
     if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
         transform = shape._element.grpSpPr.xfrm
@@ -392,10 +403,12 @@ def inspect(path, style):
     deck = open_deck(path)
     palette = PALETTES[style]
     findings = []
+    preserved_findings = []
     for number, slide in enumerate(deck.slides, 1):
-        def add(rule, message, severity="error", shape=None):
-            findings.append({"slide": number, "shape": shape, "rule": rule, "severity": severity,
-                             "message": message})
+        def add(rule, message, severity="error", shape=None, *, preserved=False):
+            target = preserved_findings if preserved else findings
+            target.append({"slide": number, "shape": shape, "rule": rule,
+                           "severity": "warning" if preserved else severity, "message": message})
 
         theme = Theme(slide, deck)
         for layer in (slide, theme.layout, theme.master):
@@ -421,8 +434,8 @@ def inspect(path, style):
                      or box[2] > deck.slide_width + BOUNDS_TOLERANCE
                      or box[3] > deck.slide_height + BOUNDS_TOLERANCE)
                 and not legacy_arc(shape, box)):
-                add("bounds", "Forma fora dos limites do slide.",
-                    "warning" if is_preserved(shape) else "error", shape.name)
+                add("bounds", "Forma fora dos limites do slide.", shape=shape.name,
+                    preserved=is_preserved(shape))
             check_shape(shape, theme, palette, add, deck.slide_height, text_boxes)
         for upper, upper_top, upper_rows in text_boxes:
             for lower, lower_top, lower_rows in text_boxes:
@@ -434,6 +447,7 @@ def inspect(path, style):
                     add("text_overlap", f"Texto sobreposto: {upper.name} invade a caixa de {lower.name}.",
                         severity, upper.name)
     return {"style": style, "slides": len(deck.slides), "findings": findings,
+            "preserved_findings": preserved_findings, "preserved_warnings": len(preserved_findings),
             "errors": sum(item["severity"] == "error" for item in findings),
             "warnings": sum(item["severity"] == "warning" for item in findings)}
 
@@ -444,11 +458,17 @@ def report(path, style, *, as_json=False):
         print(json.dumps(result, ensure_ascii=False))
     else:
         print(f"Conferência ({style}): {result['slides']} slide(s), "
-              f"{result['errors']} reprovação(ões), {result['warnings']} aviso(s).")
+              f"{result['errors']} reprovação(ões), {result['warnings']} aviso(s), "
+              f"{result['preserved_warnings']} aviso(s) em conteúdo preservado.")
         for item in result["findings"]:
             severity = "Reprovação" if item["severity"] == "error" else "Aviso"
             shape = f" ({item['shape']})" if item["shape"] else ""
             print(f"Slide {item['slide']}{shape} | {severity}: {item['message']}")
+        counts = Counter((item["slide"], item["rule"]) for item in result["preserved_findings"])
+        for (slide, rule), count in sorted(counts.items()):
+            singular, plural = PRESERVED_WARNING_LABELS[rule]
+            label = singular if count == 1 else plural
+            print(f"Slide {slide} | Aviso: conteúdo preservado com {count} {label}.")
     return int(result["errors"] > 0)
 
 

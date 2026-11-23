@@ -176,6 +176,8 @@ Fora dele (skill instalada no ChatGPT, Codex ou Claude), com `python-pptx` insta
 
 Troque os caminhos de exemplo pelos do projeto. Remova `--slides` para extrair o deck inteiro. Em `conferir`, use o mesmo estilo do roteiro. `gerar` já executa a checagem automática. Se `gerar` ou `conferir` reprovar, corrija o roteiro e gere novamente antes de encaminhar a versão.
 
+Leia os avisos gerais em `findings` no JSON ou nas linhas com o achado individual no terminal e revise os avisos do conteúdo copiado por `preservado` nas linhas agrupadas por slide e motivo ou no campo `preserved_findings` do `--json` para ver o detalhe por forma.
+
 Exemplo mínimo de roteiro:
 
 ```json

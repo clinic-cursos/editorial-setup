@@ -202,25 +202,62 @@ def test_table_rows_grow_into_the_remaining_slide_space(tmp_path):
     assert "borda inferior do slide" in overflows[0]["message"]
 
 
-def test_preserved_font_remains_a_warning_when_reopened(tmp_path):
+def test_preserved_warnings_are_grouped_by_slide_and_rule(tmp_path):
     source = Presentation()
     slide = source.slides.add_slide(source.slide_layouts[6])
-    box = slide.shapes.add_textbox(Inches(1), Inches(2), Inches(3), Inches(1))
-    run = box.text_frame.paragraphs[0].add_run()
-    run.text = "Texto preservado"
-    run.font.name = "Arial"
+    boxes = []
+    for number in (1, 2):
+        box = slide.shapes.add_textbox(Inches(number), Inches(2), Inches(1), Inches(1))
+        box.name = f"Conteúdo original {number}"
+        run = box.text_frame.paragraphs[0].add_run()
+        run.text = "M" * 100
+        run.font.name = "Arial"
+        run.font.size = Pt(20)
+        run.font.color.rgb = RGBColor(1, 2, 3)
+        boxes.append(box)
+    slide.shapes.add_group_shape(boxes)
     original = tmp_path / "original.pptx"
     source.save(original)
     script = write_script(tmp_path, "padrao", [
-        {"tipo": "preservado", "deck": original.name, "slide": 1, "titulo": "Título"},
+        {"tipo": "preservado", "deck": original.name, "slide": 1, "titulo": title}
+        for title in ("Primeiro", "Segundo")
     ])
     deck = tmp_path / "preservado.pptx"
-    result = run_cli("gerar", script, deck)
+    result = run_cli("gerar", script, deck, "--sem-conferir")
     assert result.returncode == 0, result.stderr or result.stdout
+
+    presentation = Presentation(deck)
+    slide = presentation.slides[0]
+    box = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(4), Inches(1))
+    box.name = "Nota editorial"
+    run = box.text_frame.paragraphs[0].add_run()
+    run.text = "[confirmar]"
+    run.font.name = "Montserrat"
+    run.font.color.rgb = RGBColor(0x2A, 0x26, 0x25)
+    presentation.save(deck)
+
+    result = run_cli("conferir", deck)
+    assert result.returncode == 0, result.stderr or result.stdout
+    lines = result.stdout.splitlines()
+    assert "1 aviso(s), 12 aviso(s) em conteúdo preservado" in lines[0]
+    assert len(lines[1:]) == 7
+    assert "Slide 1 (Nota editorial) | Aviso: Marcador editorial pendente." in lines
+    for number in (1, 2):
+        for label in ("fontes fora da família", "cores de texto fora da paleta", "estouros de texto"):
+            assert lines.count(f"Slide {number} | Aviso: conteúdo preservado com 2 {label}.") == 1
+
     result = run_cli("conferir", deck, "--json")
     assert result.returncode == 0, result.stderr or result.stdout
-    assert any(item["rule"] == "font" and item["severity"] == "warning"
-               for item in json.loads(result.stdout)["findings"])
+    report = json.loads(result.stdout)
+    assert (report["errors"], report["warnings"], report["preserved_warnings"]) == (0, 1, 12)
+    assert [(item["shape"], item["rule"]) for item in report["findings"]] == [("Nota editorial", "marker")]
+    details = report["preserved_findings"]
+    assert len(details) == 12
+    assert {(item["slide"], item["shape"], item["rule"], item["severity"]) for item in details} == {
+        (slide, f"Conteúdo original {shape}", rule, "warning")
+        for slide in (1, 2) for shape in (1, 2) for rule in ("font", "text_color", "overflow")
+    }
+    assert all(item["message"] for item in details)
 
 
 def test_georgia_is_allowed_only_in_the_decorative_quote(tmp_path):
