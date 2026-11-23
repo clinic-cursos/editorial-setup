@@ -3,8 +3,10 @@
 
 from hashlib import sha1
 from pathlib import Path
+import re
 
 from lxml import etree
+from PIL import Image
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
@@ -133,7 +135,20 @@ def bar(s, x, y, w=0.6, color=ROSE, h=0.05):
     return name(rect(s, x, y, w, h, fill=color), "!!barra")
 
 
-def photo(s, d, x, y, w, h, *, dark=False, prompt_height=None):
+def photo(s, d, x, y, w, h, *, dark=False, prompt_height=None, contain=False):
+    path = d.get("imagem")
+    if contain and path and Path(path).exists():
+        with Image.open(path) as source:
+            width, height = source.size
+        scale = min(w / width, h / height)
+        width *= scale
+        height *= scale
+        picture = s.shapes.add_picture(
+            path, Inches(x + (w - width) / 2), Inches(y + (h - height) / 2),
+            Inches(width), Inches(height),
+        )
+        return name(picture, "!!foto")
+
     label = {
         "prompt": d.get("prompt_imagem") or d.get("legenda") or d.get("titulo") or "Imagem do slide",
         "titulo": d.get("titulo", ""),
@@ -141,7 +156,6 @@ def photo(s, d, x, y, w, h, *, dark=False, prompt_height=None):
         "estilo": d.get("estilo_imagem", True),
     }
     before = len(s.shapes)
-    path = d.get("imagem")
     height = prompt_height if prompt_height and not (path and Path(path).exists()) else h
     shape = image(s, path, x, y, w, height, label, dark)
     if shape.shape_type != MSO_SHAPE_TYPE.PICTURE:
@@ -254,13 +268,53 @@ def s_pillars(prs, s, d):
     morph(s); an.build()
 
 
+def text_image_font_size(paragraphs, width, height, model_size, min_size, spacing):
+    # Estimate Montserrat widths in em with room for wide glyphs, independent of
+    # installed fonts. Measure the box inside the 0.02-inch margins from text().
+    width_pt = Inches(width - 0.04).pt
+    height_pt = Inches(height - 0.04).pt
+    lines = [
+        [(sum(1 if ch in "MWmw" else 0.85 if ch.isupper() else 0.75 for ch in word),
+          len(gap) * 0.35)
+         for word, gap in re.findall(r"(\S+)(\s*)", line)]
+        for paragraph in paragraphs for line in paragraph.splitlines()
+    ]
+    widest_word = max((word for line in lines for word, _ in line), default=0)
+    for size in range(model_size, min_size, -1):
+        available = width_pt / size
+        if widest_word > available:
+            continue
+        rows = len(lines)
+        for line in lines:
+            used = gap = 0
+            for word, next_gap in line:
+                if used + gap + word > available:
+                    rows += 1
+                    used = word
+                else:
+                    used += gap + word
+                gap = next_gap
+        # Include room for the first line's glyphs and the following baselines.
+        if not rows or size * (1.38 + (rows - 1) * spacing * 1.2) <= height_pt:
+            return size
+    # Preserve overflowing text at the floor so the editorial check can flag it.
+    return min_size
+
+
 def s_text_image(prs, s, d):
+    image_mode = d.get("imagem_modo", "sangrar")
+    if image_mode not in ("sangrar", "conter"):
+        raise ValueError("imagem_modo de texto_imagem deve ser sangrar ou conter")
+
     an = Anim(s)
     bg(s, CREME)
-    photo(s, d, W - 3, 0, 3, H)
+    photo(s, d, W - 3, 0, 3, H, contain=image_mode == "conter")
     logo(s, False, M, 0.4)
     kicker(s, d.get("kicker", ""), M, 1.3, VINHO)
-    an.add(title(s, d.get("titulo", ""), M, 1.6, 5.4, 1.8, color=PRETO, size=46, hl=d.get("destaque_titulo"), hlc=VINHO), eff="up", dur=700, gap=400)
+    heading = d.get("titulo", "")
+    title_size = text_image_font_size([heading], 5.4, 1.8, 46, 18, spacing=0.9)
+    an.add(title(s, heading, M, 1.6, 5.4, 1.8, color=PRETO, size=title_size,
+                 hl=d.get("destaque_titulo"), hlc=VINHO), eff="up", dur=700, gap=400)
     if d.get("seta"):
         ln = line(s, 5.75, 1.0, 5.75, 4.6, color=VINHO, w=2.5)
         tri = rect(s, 5.62, 4.55, 0.26, 0.22, fill=VINHO, shape=MSO_SHAPE.ISOSCELES_TRIANGLE)
@@ -274,7 +328,10 @@ def s_text_image(prs, s, d):
         else:
             body.append(topic)
     body.append(d.get("destaque", ""))
-    an.add(text(s, M, 3.55, 5.0, 1.2, [row for row in body if row], size=11, color=TEXTO), eff="up")
+    body = [row for row in body if row]
+    body_size = text_image_font_size([str(row).replace("**", "") for row in body], 5.0, 1.2,
+                                     11, 8, spacing=1.1)
+    an.add(text(s, M, 3.55, 5.0, 1.2, body, size=body_size, color=TEXTO), eff="up")
     morph(s); an.build()
 
 

@@ -8,12 +8,15 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+from textwrap import wrap
 from zipfile import ZipFile
 
+from PIL import Image
 from pptx import Presentation
 from pptx.enum.dml import MSO_COLOR_TYPE
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.oxml.ns import qn
+from pptx.util import Inches
 import pytest
 
 SKILL = Path(__file__).resolve().parents[1] / "skills" / "aulas"
@@ -170,11 +173,79 @@ def test_bold_uses_relative_image_and_slide_text(tmp_path):
     out = tmp_path / "aula.pptx"
     result = generate(path, out)
     assert result.returncode == 0, result.stderr
-    slide = Presentation(out).slides[0]
+    deck = Presentation(out)
+    slide = deck.slides[0]
     photo = next(shape for shape in slide.shapes if shape.name == "!!foto")
     assert photo.shape_type == MSO_SHAPE_TYPE.PICTURE
+    assert photo.width == Inches(3) and photo.height == deck.slide_height
+    assert photo.crop_left > 0 and photo.crop_right > 0
     assert {"Título independente", "Texto independente"} <= set(fingerprint(slide)["texts"])
     assert not out.with_name("aula - prompts de imagem.md").exists()
+
+
+@pytest.mark.parametrize("heading", [
+    "Envelhecimento",
+    "TECNOLOGIA DE FABRICAÇÃO DOS NEUROMODULADORES",
+])
+def test_bold_text_image_title_fits_without_splitting_words(tmp_path, heading):
+    path = write_script(tmp_path, [{"tipo": "texto_imagem", "titulo": heading, "texto": "Corpo do slide"}])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+    slide = Presentation(out).slides[0]
+    title, body = (
+        next(shape for shape in slide.shapes if shape.has_text_frame and shape.text == value)
+        for value in (heading, "Corpo do slide")
+    )
+    frame = title.text_frame
+    size = frame.paragraphs[0].runs[0].font.size.pt
+    width = title.width.pt - frame.margin_left.pt - frame.margin_right.pt
+    # Use a conservative average to verify wrapping in the emitted title box.
+    columns = int(width / (size * 0.75))
+    assert all(len(word) <= columns for word in heading.split())
+    rows = wrap(heading, width=columns, break_long_words=False, break_on_hyphens=False)
+    height = len(rows) * size * 1.2 + frame.margin_top.pt + frame.margin_bottom.pt
+    assert height <= title.height.pt
+    assert title.top + title.height <= body.top
+    assert 18 <= size < 46
+
+
+@pytest.mark.parametrize("repetitions,exit_code", [(30, 0), (100, 1)])
+def test_bold_text_image_body_fits_or_keeps_overflow_for_review(tmp_path, repetitions, exit_code):
+    content = "Texto de apoio " * repetitions + "Fim do texto."
+    path = write_script(tmp_path, [{"tipo": "texto_imagem", "titulo": "Título", "texto": content}])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == exit_code, result.stdout + result.stderr
+    slide = Presentation(out).slides[0]
+    body = next(shape for shape in slide.shapes if shape.has_text_frame and shape.text == content)
+    size = body.text_frame.paragraphs[0].runs[0].font.size.pt
+    if exit_code:
+        assert size == 8
+        assert "Texto provavelmente estourado" in result.stdout
+    else:
+        assert 8 <= size < 11
+
+
+@pytest.mark.parametrize("image_size", [(400, 100), (100, 400)])
+def test_bold_text_image_contains_picture_inside_panel(tmp_path, image_size):
+    Image.new("RGB", image_size).save(tmp_path / "diagrama.png")
+    path = write_script(tmp_path, [{
+        "tipo": "texto_imagem", "titulo": "Diagrama", "imagem": "diagrama.png", "imagem_modo": "conter",
+    }])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+    deck = Presentation(out)
+    photo = next(shape for shape in deck.slides[0].shapes if shape.name == "!!foto")
+    assert photo.shape_type == MSO_SHAPE_TYPE.PICTURE
+    assert photo.width / photo.height == pytest.approx(image_size[0] / image_size[1], abs=1e-5)
+    assert (photo.crop_left, photo.crop_right, photo.crop_top, photo.crop_bottom) == (0, 0, 0, 0)
+    panel_left = deck.slide_width - Inches(3)
+    assert panel_left <= photo.left <= photo.left + photo.width <= deck.slide_width
+    assert 0 <= photo.top <= photo.top + photo.height <= deck.slide_height
+    assert 2 * photo.left + photo.width == pytest.approx(panel_left + deck.slide_width, abs=2)
+    assert 2 * photo.top + photo.height == pytest.approx(deck.slide_height, abs=2)
 
 
 def test_bold_animates_standard_layouts(tmp_path):

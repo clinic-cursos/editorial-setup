@@ -42,7 +42,7 @@ Declare `estilo` no roteiro. Para roteiros antigos sem esse campo, a ferramenta 
 | `capa` | abertura da aula | titulo, curso, subtitulo (só "Módulo N") |
 | `modulo` | divisória entre módulos | numero, titulo, descricao, selo |
 | `sumario` | tópicos / conteúdo programático | titulo, info (horários), itens[], destaque (índice) |
-| `texto_imagem` | conceito com 2–4 pontos + imagem clínica | kicker, titulo, topicos[] (str ou {titulo, texto}), imagem, legenda, lado (direita/esquerda), destaque |
+| `texto_imagem` | conceito com 2–4 pontos + imagem clínica | kicker, titulo, topicos[] (str ou {titulo, texto}), imagem, legenda, lado (direita/esquerda), destaque. No estilo ousado, foto usa `imagem_modo: "sangrar"` (padrão), enquanto diagrama, print e infográfico usam `imagem_modo: "conter"`. |
 | `anatomia` | imagem anatômica grande com marcações | titulo, imagem, legenda, marcacoes[{nome, x, y, desc}] (x,y de 0 a 1 sobre a imagem), nota |
 | `passo_a_passo` | técnica em etapas | titulo, passos[{titulo, texto}], imagem (opcional → layout vertical), dica |
 | `antes_depois` | resultado comparativo | titulo, antes, depois, rotulo_antes, rotulo_depois, legenda (produto · técnica · tempo) |
@@ -60,6 +60,8 @@ Declare `estilo` no roteiro. Para roteiros antigos sem esse campo, a ferramenta 
 | `encerramento` | contato e próximos passos | titulo, mensagem, contatos[], qr (imagem ou null para espaço reservado), qr_legenda, selo |
 
 Todo slide aceita `notas` (vai para as notas do apresentador). Em qualquer texto, `**trecho**` vira negrito vinho.
+
+No `texto_imagem` ousado, o gerador reduz o título de 46 até 18 pt e o corpo de 11 até 8 pt, em passos de 1 pt, conforme a largura das palavras e a altura estimada. Se ainda houver excesso no tamanho mínimo, o texto inteiro segue para o `conferir`.
 
 ## Escolha a entrada
 
