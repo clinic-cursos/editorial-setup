@@ -11,6 +11,7 @@ from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE, PP_PLACEHOLDER
 from pptx.exc import PackageNotFoundError
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
+from pptx.opc.oxml import serialize_part_xml
 from pptx.opc.packuri import PackURI
 from pptx.oxml import parse_xml
 from pptx.oxml.ns import qn
@@ -253,6 +254,9 @@ class PreservedSlides:
         dy = y + (h - height * scale) / 2 - top * scale
 
         elements = [deepcopy(shape._element) for shape in shapes]
+        style_ids = {node.text for element in elements for node in element.iter(qn("a:tableStyleId")) if node.text}
+        if style_ids:
+            self.copy_table_styles(style_ids, deck.part, target.part.package.presentation_part)
         tree = target.shapes._spTree
         next_id = tree.max_shape_id + 1
         ids = {}
@@ -281,6 +285,28 @@ class PreservedSlides:
             self.relink(element, source.part, target.part)
             tree.insert_element_before(element, "p:extLst")
         return list(target.shapes)[-len(elements):]
+
+    def copy_table_styles(self, style_ids, source, target):
+        # Os GUIDs das tabelas apontam para uma parte da apresentação, fora dos .rels do slide.
+        try:
+            source_part = source.part_related_by(RT.TABLE_STYLES)
+        except KeyError:
+            return
+        target_part = target.part_related_by(RT.TABLE_STYLES)
+        target_styles = parse_xml(target_part.blob)
+        original_count = len(target_styles)
+        style_tag = qn("a:tblStyle")
+        missing = style_ids - {node.get("styleId") for node in target_styles.findall(style_tag)}
+        if not missing:
+            return
+        for style in parse_xml(source_part.blob).findall(style_tag):
+            style_id = style.get("styleId")
+            if style_id in missing:
+                self.relink(style, source_part, target_part)
+                target_styles.append(style)
+                missing.remove(style_id)
+        if len(target_styles) > original_count:
+            target_part.blob = serialize_part_xml(target_styles)
 
     def relink(self, element, source, target):
         for node, key, rid in list(relationship_attributes(element)):

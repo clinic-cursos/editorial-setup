@@ -6,12 +6,16 @@ import sys
 from PIL import Image
 from pptx import Presentation
 from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE, MSO_SHAPE_TYPE
-from pptx.oxml.ns import qn
+from pptx.opc.constants import RELATIONSHIP_TYPE as RT
+from pptx.opc.oxml import serialize_part_xml
+from pptx.oxml import parse_xml
+from pptx.oxml.ns import nsdecls, qn
 from pptx.util import Inches
 import pytest
 
 
 CLI = Path(__file__).resolve().parents[1] / "skills/aulas/scripts/aulas.py"
+CUSTOM_TABLE_STYLE = "{B57B5B66-607D-4D58-ABFC-B740DDD1FF2C}"
 
 
 def run_cli(*args):
@@ -47,6 +51,15 @@ def source_deck(tmp_path):
     table = slide.shapes.add_table(1, 2, Inches(1), Inches(5), Inches(4), Inches(0.5)).table
     table.cell(0, 0).text = "Célula A"
     table.cell(0, 1).text = "Célula B"
+    table._tbl.tblPr.find(qn("a:tableStyleId")).text = CUSTOM_TABLE_STYLE
+    style_part = prs.part.part_related_by(RT.TABLE_STYLES)
+    styles = parse_xml(style_part.blob)
+    styles.append(parse_xml(
+        f'<a:tblStyle {nsdecls("a")} styleId="{CUSTOM_TABLE_STYLE}" styleName="Teste">'
+        '<a:wholeTbl><a:tcStyle><a:fill><a:solidFill><a:srgbClr val="9C4C48"/>'
+        '</a:solidFill></a:fill></a:tcStyle></a:wholeTbl></a:tblStyle>'
+    ))
+    style_part.blob = serialize_part_xml(styles)
     for number in range(2, 6):
         other = prs.slides.add_slide(prs.slide_layouts[5])
         other.shapes.title.text = f"Slide {number}"
@@ -101,7 +114,8 @@ def test_preserved_objects_and_exact_standalone_slide_count(tmp_path, source_dec
     assert result.returncode == 0, result.stderr
     presentation = Presentation(out)
     assert len(presentation.slides) == 1
-    shapes = presentation.slides[0].shapes
+    slide = presentation.slides[0]
+    shapes = slide.shapes
     original = Presentation(source).slides[0].shapes
     kept = list(original)[4:]
     copied = [shape for shape in shapes if shape.name in {item.name for item in kept}]
@@ -113,7 +127,18 @@ def test_preserved_objects_and_exact_standalone_slide_count(tmp_path, source_dec
     assert group.shapes[0].text == "Rótulo"
     assert group.shapes[1].image.blob == image
     assert copied[-1].table.cell(0, 1).text == "Célula B"
-    assert len({shape.shape_id for shape in shapes} | {shape.shape_id for shape in group.shapes}) == len(shapes) + len(group.shapes)
+    shape_ids = [node.get("id") for node in slide._element.iter(qn("p:cNvPr"))]
+    assert len(set(shape_ids)) == len(shape_ids)
+    rel_prefix = qn("r:id").rsplit("}", 1)[0] + "}"
+    used_rels = {value for node in slide._element.iter() for attr, value in node.attrib.items()
+                 if attr.startswith(rel_prefix) and value}
+    assert used_rels <= set(slide.part.rels)
+    table_style_id = copied[-1].table._tbl.tblPr.find(qn("a:tableStyleId")).text
+    assert table_style_id == CUSTOM_TABLE_STYLE
+    styles = parse_xml(presentation.part.part_related_by(RT.TABLE_STYLES).blob)
+    definitions = [node for node in styles.iter(qn("a:tblStyle")) if node.get("styleId") == table_style_id]
+    assert len(definitions) == 1
+    assert definitions[0].find(".//" + qn("a:srgbClr")).get("val") == "9C4C48"
     for shape in copied:
         if shape.shape_type == MSO_SHAPE_TYPE.LINE:
             assert int(shape._element.find(".//" + qn("a:endCxn")).get("id")) == group.shapes[0].shape_id
