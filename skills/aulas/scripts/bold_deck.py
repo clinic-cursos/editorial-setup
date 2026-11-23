@@ -2,6 +2,7 @@
 """Layouts do estilo editorial ousado, com Morph e animações de entrada."""
 
 from hashlib import sha1
+from math import sqrt
 from pathlib import Path
 import re
 
@@ -180,6 +181,23 @@ def accent_runs(value, color):
             for i, part in enumerate(value.split("**")) if part]
 
 
+def crop_pillar_photo(picture, path):
+    with Image.open(path) as source:
+        width, height = source.size
+        bounds = source.convert("L").point(lambda pixel: 255 if pixel < 245 else 0).getbbox()
+    # Trim paired near-white margins baked into the source before centering the cover.
+    if not bounds or bounds[1] == 0 or bounds[3] == height:
+        return
+    left, top, right, bottom = bounds
+    panel_ratio = picture.width / picture.height
+    crop_x = max(0, (right - left - (bottom - top) * panel_ratio) / 2)
+    crop_y = max(0, (bottom - top - (right - left) / panel_ratio) / 2)
+    picture.crop_left = (left + crop_x) / width
+    picture.crop_right = (width - right + crop_x) / width
+    picture.crop_top = (top + crop_y) / height
+    picture.crop_bottom = (height - bottom + crop_y) / height
+
+
 # ---------------------------------------------------------------- slides
 def s_cover(prs, s, d):
     an = Anim(s)
@@ -269,12 +287,17 @@ def s_pillars(prs, s, d):
     badge_text = d.get("selo")
     badge_width = 2.9
     badge_left = W - M - badge_width
-    info = [accent_runs(row, ROSE) for row in d.get("info", "").splitlines()]
+    info_value = d.get("info", "")
+    info = [accent_runs(row, ROSE) for row in info_value.splitlines()]
     if panel:
-        photo(s, d, 0, 0, 4.3, H, dark=True, prompt_height=H - 1)
-        r = rect(s, 0, H - 1.0, 4.3, 1.0, fill=NOITE)
+        picture = photo(s, d, 0, 0, 4.3, H, dark=True, prompt_height=H - 1)
+        if picture.shape_type == MSO_SHAPE_TYPE.PICTURE:
+            crop_pillar_photo(picture, d["imagem"])
+        info_height = max(0.7, list_text_height([(plain_text(info_value), 9)], 3.6, 9))
+        band_height = info_height + 0.3
+        r = rect(s, 0, H - band_height, 4.3, band_height, fill=NOITE)
         _alpha(r, 0.6)
-        text(s, M, H - 0.85, 3.6, 0.7, info, size=9, color=BRANCO)
+        text(s, M, H - (info_height + 0.15), 3.6, info_height, info, size=9, color=BRANCO)
     elif info:
         info_width = badge_left - M - 0.15 if badge_text else full_width
         text(s, M, H - 0.85, info_width, 0.45, info, size=9, color=BRANCO)
@@ -287,7 +310,24 @@ def s_pillars(prs, s, d):
     rows = [(pillar.get("titulo", ""), pillar.get("texto", "")) for pillar in d.get("pilares", [])]
     if panel:
         size, heading_size = 9.5, 13
-        boxes = [(2.0 + i * 0.95, 0.85) for i in range(len(rows))]
+        bottom = H - (0.7 if badge_text else 0.4)
+        heading_heights = [max(0.3, list_text_height([(plain_text(h).upper(), heading_size)], body_width, size))
+                           for h, _ in rows]
+        while True:
+            body_heights = [max(0.5, list_text_height([(plain_text(t), size)], body_width, size))
+                            for _, t in rows]
+            heights = [h + b + 0.05 for h, b in zip(heading_heights, body_heights)]
+            if 2.0 + sum(heights) + 0.1 * max(0, len(rows) - 1) <= bottom or size == MIN_LIST_BODY_SIZE:
+                break
+            size = max(MIN_LIST_BODY_SIZE, size - 1)
+        boxes = []
+        top = 2.0
+        for height in heights:
+            if top + height > bottom:
+                # Keep the item editable and let conferir report it without covering the footer.
+                top = max(top, H)
+            boxes.append((top, height))
+            top += height + 0.1
     else:
         footer = 0.85 if info else 0.7 if badge_text else 0.4
         size, boxes = fit_text_only_list([(plain_text(h).upper(), plain_text(t)) for h, t in rows],
@@ -296,7 +336,8 @@ def s_pillars(prs, s, d):
     for i, ((h, t), (y, height)) in enumerate(zip(rows, boxes)):
         if panel:
             number_top, number_height, number_size = y - 0.1, 0.9, 36
-            heading_height, body_top, body_height = 0.3, y + 0.32, 0.5
+            heading_height, body_height = heading_heights[i], body_heights[i]
+            body_top = y + heading_height + 0.02
         else:
             number_top, number_height, number_size = y, height, size
             heading_height = list_text_height([(plain_text(h).upper(), heading_size)], body_width, size) if h else 0
@@ -584,13 +625,25 @@ def number_font_size(value, width, model_size):
 
 
 def s_number(prs, s, d):
+    from conferir import MONTSERRAT_WIDTHS, glyph_width
+
     an = Anim(s)
     bg(s, NOITE)
-    big_arc(s, 2.2, -0.7, 7.0, VINHO, 0.55, 180, 360)
+    arc_x, arc_y, diameter, thickness = 2.2, -0.7, 7.0, 0.55
+    big_arc(s, arc_x, arc_y, diameter, VINHO, thickness, 180, 360)
     logo(s, True)
     kicker(s, d.get("kicker", ""), M, 0.55)
     value = str(d.get("valor", ""))
-    an.add(text(s, 0, 1.55, W, 1.8, value, size=number_font_size(value, W, 130),
+    value_top = 1.55
+    radius = diameter / 2 - thickness
+    arc_center_x, arc_center_y = arc_x + diameter / 2, arc_y + diameter / 2
+    half_chord = sqrt(radius ** 2 - (arc_center_y - value_top) ** 2)
+    # The value stays centered on the slide, so use the nearer end of the chord.
+    available = Inches(2 * (half_chord - abs(arc_center_x - W / 2) - 0.1)).pt
+    widths = MONTSERRAT_WIDTHS["extrabold"]
+    advance = sum(glyph_width(char, widths) for char in plain_text(value)) / 1000
+    size = min(number_font_size(value, W, 130), max(1, int(available / max(1, advance))))
+    an.add(text(s, 0, value_top, W, 1.8, value, size=size,
                 color=BRANCO, font=FONTE_FORTE, bold=True, align=PP_ALIGN.CENTER, spacing=0.8),
            eff="up", dur=800, gap=300)
     an.add(text(s, 0, 3.25, W, 0.5, d.get("legenda", ""), size=16, color=ROSE, bold=True, align=PP_ALIGN.CENTER), gap=400)

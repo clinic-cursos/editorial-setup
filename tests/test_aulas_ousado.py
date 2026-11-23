@@ -200,6 +200,77 @@ def test_bold_number_size_respects_text_width(tmp_path, slide, model_size):
             assert 0 < size < model_size
 
 
+@pytest.mark.parametrize("value,advance", [("3 a 4", 2.513), ("WWWWW", 5.920)])
+def test_bold_number_fits_inside_arc(tmp_path, value, advance):
+    out = tmp_path / "aula.pptx"
+    result = generate(write_script(tmp_path, [{"tipo": "numero", "valor": value}]), out)
+    assert result.returncode == 0, result.stdout + result.stderr
+    shape = next(shape for shape in Presentation(out).slides[0].shapes
+                 if shape.has_text_frame and shape.text == value)
+    size = shape.text_frame.paragraphs[0].runs[0].font.size.pt
+    left = shape.left.pt + (shape.width.pt - size * advance) / 2
+    # Borda interna esquerda na altura do topo do valor, mais 0,1 pol de folga.
+    assert left >= Inches(3.1279).pt
+
+
+@pytest.mark.parametrize("dimensions,content", [
+    ((240, 160), (0, 16, 240, 144)),
+    ((80, 240), (0, 0, 80, 240)),
+])
+def test_bold_pillars_photo_covers_panel(tmp_path, dimensions, content):
+    photo = Image.new("RGB", dimensions, (254, 254, 254))
+    photo.paste((90, 70, 65), content)
+    photo.save(tmp_path / "foto.png")
+    path = write_script(tmp_path, [{"tipo": "pilares", "imagem": "foto.png"}])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+    deck = Presentation(out)
+    picture = next(shape for shape in deck.slides[0].shapes if shape.name == "!!foto")
+    assert (picture.left, picture.top, picture.width, picture.height) == (
+        0, 0, Inches(4.3), deck.slide_height,
+    )
+    width, height = dimensions
+    left, top, right, bottom = content
+    assert picture.crop_top * height >= top
+    assert picture.crop_bottom * height >= height - bottom
+    assert picture.crop_left - picture.crop_right == pytest.approx((left + right - width) / width)
+    assert picture.crop_top - picture.crop_bottom == pytest.approx((top + bottom - height) / height)
+    cropped_width = width * (1 - picture.crop_left - picture.crop_right)
+    cropped_height = height * (1 - picture.crop_top - picture.crop_bottom)
+    assert cropped_width / cropped_height == pytest.approx(4.3 / 5.625, abs=0.0001)
+
+
+def test_bold_pillars_keeps_dividers_below_item_text(tmp_path):
+    long_body = " ".join(["Detalhe importante para a atividade."] * 4)
+    rows = [{"titulo": "Primeiro", "texto": long_body}, {"titulo": "Próximo", "texto": "Resumo"}]
+    path = write_script(tmp_path, [{"tipo": "pilares", "prompt_imagem": "Cena de teste", "pilares": rows}])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    shapes = Presentation(out).slides[0].shapes
+    body = next(shape for shape in shapes if shape.has_text_frame and shape.text == long_body)
+    divider = next(shape for shape in shapes if shape.shape_type == MSO_SHAPE_TYPE.LINE)
+    following = next(shape for shape in shapes if shape.has_text_frame and shape.text == "PRÓXIMO")
+    assert body.height > Inches(0.5)
+    assert body.top + body.height < divider.top < following.top
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_bold_pillars_grows_info_band(tmp_path):
+    info = "\n".join(f"Informação {i}" for i in range(1, 6))
+    Image.new("RGB", (100, 100), (90, 70, 65)).save(tmp_path / "foto.png")
+    path = write_script(tmp_path, [{"tipo": "pilares", "imagem": "foto.png", "info": info}])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    shapes = Presentation(out).slides[0].shapes
+    label = next(shape for shape in shapes if shape.has_text_frame and shape.text == info)
+    band = next(shape for shape in shapes if shape.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE
+                and shape.left == 0 and shape.width == Inches(4.3))
+    assert band.height > Inches(1)
+    assert band.top < label.top < label.top + label.height < band.top + band.height
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_bold_uses_relative_image_and_slide_text(tmp_path):
     path = write_script(tmp_path, [{
         "tipo": "texto_imagem", "titulo": "Título independente", "texto": "Texto independente",
