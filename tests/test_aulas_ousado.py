@@ -263,6 +263,55 @@ def test_bold_text_image_body_fits_or_keeps_overflow_for_review(tmp_path, repeti
         assert 8 <= size < 11
 
 
+@pytest.mark.parametrize("kind,bottom,default_size,reduced,overflow", [
+    ("passo_a_passo", 4.78, 8.5, 13, 14),
+    ("duas_colunas", 5.075, 11, 8, 14),
+    ("alerta", 5.025, 9.5, 12, 17),
+    ("sumario", 4.95, 10, 9, 16),
+])
+@pytest.mark.parametrize("case", ["default", "reduced", "overflow"])
+def test_bold_list_fits_items_or_keeps_overflow_for_review(tmp_path, kind, bottom, default_size, reduced, overflow, case):
+    repetitions = {"default": 4, "reduced": reduced, "overflow": overflow}[case]
+    body = "Primeiro item. " + "Texto de teste com várias palavras. " * repetitions + "Final."
+    next_item = "Segundo item."
+    heading = "UM TÍTULO LONGO PARA TESTAR A TERCEIRA LINHA"
+    item_title = (
+        "UM TÍTULO DE TESTE QUE PRECISA OCUPAR TRÊS LINHAS PARA EXERCITAR O ESPAÇO"
+        if kind == "passo_a_passo" else "Entrada"
+    )
+    blocks = [{"titulo": item_title, "texto": body},
+              {"titulo": "Continuação", "texto": next_item}]
+    fields = {
+        "passo_a_passo": {"passos": blocks},
+        "duas_colunas": {"colunas": [{"titulo": heading, "itens": [body, next_item]}], "nota": "Rodapé"},
+        "alerta": {"itens": blocks, "urgente": "Rodapé"},
+        "sumario": {"itens": [body, next_item]},
+    }
+    path = write_script(tmp_path, [{"tipo": kind, **fields[kind]}], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    slide = Presentation(out).slides[0]
+    first = next(shape for shape in slide.shapes if shape.has_text_frame and body in shape.text)
+    second = next(shape for shape in slide.shapes if shape.has_text_frame and next_item in shape.text)
+    run = next(run for paragraph in first.text_frame.paragraphs for run in paragraph.runs if run.text == body)
+    assert run.font.size.pt >= 8
+    if case == "overflow":
+        assert run.font.size.pt == 8
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert "Forma fora dos limites do slide" in result.stdout
+        return
+
+    if kind == "duas_colunas":
+        column = next(shape for shape in slide.shapes if shape.has_text_frame and shape.text == heading)
+        assert column.height > Inches(0.5)
+        assert column.top + column.height <= first.top
+    assert first.height > Inches(0.75)
+    assert first.top + first.height <= second.top
+    assert second.top + second.height <= Inches(bottom)
+    assert run.font.size.pt == (default_size if case == "default" else max(8, default_size - 1))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 @pytest.mark.parametrize("image_size", [(400, 100), (100, 400)])
 def test_bold_text_image_contains_picture_inside_panel(tmp_path, image_size):
     Image.new("RGB", image_size).save(tmp_path / "diagrama.png")

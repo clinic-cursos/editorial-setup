@@ -25,6 +25,7 @@ NOITE2 = RGBColor(0x2A, 0x1A, 0x19)
 CREME = RGBColor(0xFA, 0xF6, 0xF4)
 QUOTE_FONT = "Georgia"
 QUOTE_MARK = "“"
+MIN_LIST_BODY_SIZE = 8
 
 P14 = "http://schemas.microsoft.com/office/powerpoint/2010/main"
 P159 = "http://schemas.microsoft.com/office/powerpoint/2015/09/main"
@@ -200,13 +201,18 @@ def s_agenda(prs, s, d):
     text(s, M, 3.45, 2.7, 0.8, [accent_runs(row, ROSE) for row in d.get("info", "").splitlines()],
          size=9.5, color=CINZA_CLARO)
     rows = max(6, (len(items) + 1) // 2)
-    for i, item in enumerate(items):
-        col, row = divmod(i, rows)
+    stride = max(0.5, 4.2 / rows)
+    for col, start in enumerate(range(0, len(items), rows)):
         x = 3.85 + col * 3.0
-        y = 0.75 + row * 4.2 / rows
-        a = text(s, x, y, 0.6, 0.5, f"{i+1:02d}", size=20, color=ROSE, font=FONTE_FORTE, bold=True)
-        b = text(s, x + 0.62, y + 0.06, 2.2, 0.5, item, size=10, color=PRETO, bold=False)
-        an.add(a, gap=0); an.add(b, gap=90)
+        column = items[start:start + rows]
+        tops = [0.75 + max(row * 0.5, row * 4.2 / rows) for row in range(len(column))]
+        size, boxes = fit_list([[(plain_text(item), None)] for item in column], width=2.2,
+                               tops=tops, bottom=4.95, base_height=min(0.5, stride - 0.06),
+                               body_size=10, inset=0.06)
+        for i, (item, (y, height)) in enumerate(zip(column, boxes), start + 1):
+            a = text(s, x, y, 0.6, 0.5, f"{i:02d}", size=20, color=ROSE, font=FONTE_FORTE, bold=True)
+            b = text(s, x + 0.62, y + 0.06, 2.2, height, item, size=size, color=PRETO)
+            an.add(a, gap=0); an.add(b, gap=90)
     morph(s); an.build()
 
 
@@ -269,37 +275,84 @@ def s_pillars(prs, s, d):
     morph(s); an.build()
 
 
-def text_image_font_size(paragraphs, width, height, model_size, min_size, spacing):
+def measured_words(line):
     # Estimate Montserrat widths in em with room for wide glyphs, independent of
-    # installed fonts. Measure the box inside the 0.02-inch margins from text().
+    # installed fonts.
+    return [(sum(1 if ch in "MWmw" else 0.85 if ch.isupper() else 0.75 for ch in word),
+             len(gap) * 0.35)
+            for word, gap in re.findall(r"(\S+)(\s*)", line)]
+
+
+def wrapped_rows(words, available):
+    rows = 1
+    used = gap = 0
+    for word, next_gap in words:
+        if used and used + gap + word > available:
+            rows += 1
+            used = word
+        else:
+            used += gap + word
+        gap = next_gap
+    return rows
+
+
+def text_image_font_size(paragraphs, width, height, model_size, min_size, spacing):
+    # Measure the box inside the 0.02-inch margins from text().
     width_pt = Inches(width - 0.04).pt
     height_pt = Inches(height - 0.04).pt
-    lines = [
-        [(sum(1 if ch in "MWmw" else 0.85 if ch.isupper() else 0.75 for ch in word),
-          len(gap) * 0.35)
-         for word, gap in re.findall(r"(\S+)(\s*)", line)]
-        for paragraph in paragraphs for line in paragraph.splitlines()
-    ]
+    lines = [measured_words(line) for paragraph in paragraphs for line in paragraph.splitlines()]
     widest_word = max((word for line in lines for word, _ in line), default=0)
     for size in range(model_size, min_size, -1):
         available = width_pt / size
         if widest_word > available:
             continue
-        rows = len(lines)
-        for line in lines:
-            used = gap = 0
-            for word, next_gap in line:
-                if used + gap + word > available:
-                    rows += 1
-                    used = word
-                else:
-                    used += gap + word
-                gap = next_gap
+        rows = sum(wrapped_rows(line, available) for line in lines)
         # Include room for the first line's glyphs and the following baselines.
         if not rows or size * (1.38 + (rows - 1) * spacing * 1.2) <= height_pt:
             return size
     # Preserve overflowing text at the floor so the editorial check can flag it.
     return min_size
+
+
+def plain_text(value):
+    return str(value).replace("**", "")
+
+
+def list_text_height(paragraphs, width, body_size):
+    available = Inches(width - 0.04).pt
+    height = 0
+    for value, fixed_size in paragraphs:
+        if value:
+            size = fixed_size or body_size
+            rows = sum(wrapped_rows(measured_words(line), available / size)
+                       for line in re.split(r"[\n\v]", value))
+            height += size * (1.38 + (rows - 1) * 1.32)
+    return 0.04 + height / 72
+
+
+def fit_list(items, *, width, tops, bottom, base_height, body_size, inset=0):
+    if not items:
+        return body_size, []
+    size = body_size
+    while True:
+        heights = [max(base_height, list_text_height(item, width, size)) for item in items]
+        end = tops[-1] + inset + base_height + sum(height - base_height for height in heights)
+        if end <= bottom + 1e-9 or size == MIN_LIST_BODY_SIZE:
+            break
+        size = max(MIN_LIST_BODY_SIZE, size - 1)
+
+    boxes = []
+    shift = 0
+    for top, height in zip(tops, heights):
+        y = top + shift
+        # Keep the complete overflowing item editable beyond the slide, where
+        # conferir reports it instead of letting it cover the footer.
+        if y + inset + height > bottom + 1e-9 and y < H:
+            shift += H - y
+            y = H
+        boxes.append((y, height))
+        shift += height - base_height
+    return size, boxes
 
 
 def s_text_image(prs, s, d):
@@ -330,7 +383,7 @@ def s_text_image(prs, s, d):
             body.append(topic)
     body.append(d.get("destaque", ""))
     body = [row for row in body if row]
-    body_size = text_image_font_size([str(row).replace("**", "") for row in body], 5.0, 1.2,
+    body_size = text_image_font_size([plain_text(row) for row in body], 5.0, 1.2,
                                      11, 8, spacing=1.1)
     an.add(text(s, M, 3.55, 5.0, 1.2, body, size=body_size, color=TEXTO), eff="up")
     morph(s); an.build()
@@ -347,14 +400,17 @@ def s_steps(prs, s, d):
     p = photo(s, d, 4.45, 1.45, 5.0, 2.8)
     an.add(p, gap=300, dur=700)
     steps = d.get("passos", [])
-    step_height = min(0.68, 3.4 / max(len(steps), 1))
+    stride = max(0.31, min(0.68, 3.4 / max(len(steps), 1)))
+    tops = [1.38 + i * stride for i in range(len(steps))]
+    rows = [(str(step.get("titulo", "")), step.get("texto", "")) for step in steps]
+    size, boxes = fit_list([[(h, 10.5), (plain_text(t), None)] for h, t in rows],
+                           width=3.4, tops=tops, bottom=4.78, base_height=min(0.6, stride), body_size=8.5)
     if len(steps) > 1:
-        line(s, M + 0.14, 1.55, M + 0.14, 1.55 + step_height * (len(steps) - 1), color=ROSE, w=1.5)
-    for i, step in enumerate(steps):
-        h, t = step.get("titulo", ""), step.get("texto", "")
-        y = 1.38 + i * step_height
+        line(s, M + 0.14, 1.55, M + 0.14, boxes[-1][0] + 0.17, color=ROSE, w=1.5)
+    for (h, t), (y, height) in zip(rows, boxes):
         c = rect(s, M, y + 0.03, 0.28, 0.28, fill=VINHO, line=CREME, shape=MSO_SHAPE.OVAL, lw=2)
-        a = text(s, M + 0.45, y, 3.4, 0.6, [[(h, {"bold": True, "color": PRETO, "size": 10.5})], _parse_bold(t)], size=8.5)
+        a = text(s, M + 0.45, y, 3.4, height,
+                 [[(h, {"bold": True, "color": PRETO, "size": 10.5})], _parse_bold(t)], size=size)
         an.add(c, gap=0); an.add(a, gap=220, eff="left")
     text(s, 4.35, 4.45, 5.2, 0.4, d.get("dica", ""), size=8.5, color=CINZA, italic=True)
     morph(s); an.build()
@@ -390,15 +446,21 @@ def s_two_columns(prs, s, d):
     logo(s, False)
     heading = title(s, d.get("titulo", ""), M, 0.45, 4.5, 0.6, size=24)
     for k, col in enumerate(d.get("colunas", [])):
-        lab, items = col.get("titulo", ""), col.get("itens", [])
+        lab, items = col.get("titulo", "").upper(), col.get("itens", [])
         fg = BRANCO if k == 0 else VINHO
         sub = ROSE_CLARO if k == 0 else TEXTO
         x = M + k * (W / 2)
-        an.add(text(s, x, 1.3, 4, 0.5, lab.upper(), size=20, color=fg, font=FONTE_FORTE, bold=True), eff="up", gap=200)
-        for i, it in enumerate(items):
-            y = 2.0 + i * 0.62
+        label_height = max(0.5, list_text_height([(plain_text(lab), 20)], 4, 20))
+        bottom = H - 0.55
+        label_top = 1.3 if 1.3 + label_height <= bottom else H
+        an.add(text(s, x, label_top, 4, label_height, lab, size=20,
+                    color=fg, font=FONTE_FORTE, bold=True), eff="up", gap=200)
+        tops = [label_top + label_height + 0.2 + i * 0.62 for i in range(len(items))]
+        size, boxes = fit_list([[(plain_text(item), None)] for item in items], width=3.9,
+                               tops=tops, bottom=bottom, base_height=0.55, body_size=11, inset=0.02)
+        for it, (y, height) in zip(items, boxes):
             mk = text(s, x, y, 0.4, 0.4, "✕" if k == 0 else "!", size=13, color=ROSE if k == 0 else VINHO, bold=True)
-            t = text(s, x + 0.42, y + 0.02, 3.9, 0.55, it, size=11, color=sub)
+            t = text(s, x + 0.42, y + 0.02, 3.9, height, it, size=size, color=sub)
             an.add(mk, gap=0); an.add(t, gap=150, eff="left")
     text(s, M, H - 0.55, 4.2, 0.4, d.get("nota", ""), size=7.5, color=ROSE_CLARO, italic=True)
     if not an.items:
@@ -473,11 +535,14 @@ def s_alert(prs, s, d):
     if not items:
         items = [{"titulo": label, "texto": " · ".join(d[key])}
                  for key, label in (("sinais", "Sinais de alerta"), ("conduta", "Conduta")) if d.get(key)]
-    for i, item in enumerate(items):
-        h, t = item.get("titulo", ""), item.get("texto", "")
-        y = 2.55 + i * 0.75
+    rows = [(item.get("titulo", "").upper(), item.get("texto", "")) for item in items]
+    tops = [2.55 + i * 0.75 for i in range(len(rows))]
+    size, boxes = fit_list([[(h, 12), (t, None)] for h, t in rows], width=5.5, tops=tops,
+                           bottom=H - 0.6, base_height=0.7, body_size=9.5)
+    for i, ((h, t), (y, height)) in enumerate(zip(rows, boxes)):
         n = rect(s, M + 0.1, y + 0.05, 0.08, 0.55, fill=ALERTA if i < 2 else ROSE)
-        a = text(s, M + 0.35, y, 5.5, 0.7, [[(h.upper(), {"bold": True, "color": BRANCO, "size": 12})], [(t, {"color": CINZA_CLARO})]], size=9.5)
+        a = text(s, M + 0.35, y, 5.5, height,
+                 [[(h, {"bold": True, "color": BRANCO, "size": 12})], [(t, {"color": CINZA_CLARO})]], size=size)
         an.add(n, gap=0); an.add(a, gap=250, eff="left")
     if d.get("urgente"):
         an.add(text(s, M + 0.35, H - 0.6, 5.5, 0.45, d["urgente"], size=9, color=ROSE_CLARO, bold=True))
