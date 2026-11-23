@@ -22,6 +22,7 @@ import pytest
 SKILL = Path(__file__).resolve().parents[1] / "skills" / "aulas"
 FIXTURE = Path(__file__).parent / "fixtures" / "aulas" / "modelo-v1.json"
 MODEL = SKILL / "references" / "modelo_hof_roteiro.json"
+BOLD_EXAMPLE = SKILL / "references" / "exemplo_ousado.json"
 MORPH = "{http://schemas.microsoft.com/office/powerpoint/2015/09/main}morph"
 # Cada !!foto mantém a geometria original e ganha as caixas de texto do prompt.
 # Os slides 5, 6 e 13 têm título, corpo e instrução. Os demais incluem aviso.
@@ -93,6 +94,41 @@ def assert_motion(slide):
     assert timing is not None
     targets = {int(target.get("spid")) for target in timing.iter(qn("p:spTgt"))}
     assert targets and targets <= {shape.shape_id for shape in slide.shapes}
+
+
+def test_bold_example_passes_editorial_check(tmp_path):
+    assert BOLD_EXAMPLE.is_file(), "Falta o roteiro de exemplo do estilo ousado"
+    example = json.loads(BOLD_EXAMPLE.read_text(encoding="utf-8"))
+    assert example["estilo"] == "ousado"
+    assert Counter(slide["tipo"] for slide in example["slides"]) == Counter({
+        kind: 1 for kind in (
+            "capa", "sumario", "modulo", "frase", "pilares", "texto_imagem",
+            "passo_a_passo", "numero", "duas_colunas", "anatomia", "comparativo",
+            "alerta", "numeros", "encerramento",
+        )
+    })
+    out = tmp_path / "exemplo.pptx"
+    result = generate(BOLD_EXAMPLE, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert len(Presentation(out).slides) == len(example["slides"])
+
+
+def field_names(value):
+    if isinstance(value, dict):
+        return set(value).union(*(field_names(item) for item in value.values()))
+    if isinstance(value, list):
+        return set().union(*(field_names(item) for item in value))
+    return set()
+
+
+def test_bold_example_fields_are_documented():
+    skill = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+    _, heading, remainder = skill.partition("## Campos no estilo ousado\n")
+    assert heading, "Falta a seção Campos no estilo ousado"
+    section = remainder.split("\n## ", 1)[0]
+    example = json.loads(BOLD_EXAMPLE.read_text(encoding="utf-8"))
+    missing = sorted(field for field in field_names(example) if f"`{field}`" not in section)
+    assert not missing, f"Campos do exemplo ausentes na seção: {missing}"
 
 
 def test_model_matches_reference(tmp_path):

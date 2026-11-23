@@ -61,7 +61,39 @@ Declare `estilo` no roteiro. Para roteiros antigos sem esse campo, a ferramenta 
 
 Todo slide aceita `notas` (vai para as notas do apresentador). Em qualquer texto, `**trecho**` vira negrito vinho.
 
+## Campos no estilo ousado
+
+Use [o roteiro de exemplo](references/exemplo_ousado.json) como ponto de partida. Na raiz, declare `estilo` como `"ousado"` e forneça `slides`, uma lista de objetos. O `titulo` da raiz é opcional e identifica a aula no arquivo de prompts. O booleano opcional `avulso` impede as inserções automáticas quando vale `true`. Em aulas completas, os booleanos opcionais `precificacao` e `parcerias` controlam essas inserções e valem `true` por padrão.
+
+Cada slide precisa de `tipo`. Todos aceitam `notas`, texto opcional para o apresentador. Os campos da tabela são opcionais para o gerador, salvo os indicados como obrigatórios. Use texto simples quando o formato não estiver indicado. As quantidades e linhas são recomendações de espaço. Em slides de conteúdo, mantenha cerca de 40 palavras e confira a prévia.
+
+| Tipo | Campos e formato | Limite prático | Sem imagem fornecida |
+|---|---|---|---|
+| `capa` | `curso`, `titulo`, `titulo_secundario`, `subtitulo` (só "Módulo N"). | Uma linha para cada campo. | Foto de fundo da casa, sem quadro. |
+| `sumario` | `titulo` (padrão "Conteúdo programático"), `itens` (lista de textos com numeração automática), `resumo`, `info` (texto com quebras de linha, aceita `**negrito**`). | Até 12 itens de uma linha em duas colunas, resumo de até duas linhas e até três linhas de horários. | Sem quadro. |
+| `modulo` | `numero` (inteiro ou texto numérico, exibido com pelo menos dois dígitos), `titulo`, `descricao`, `selo`. | Dois dígitos e uma linha por campo de texto. | Sem quadro. |
+| `frase` | `frase`, `autor`, `selos` (lista de rótulos). | Frase de até quatro linhas, autor em uma linha e até três selos curtos lado a lado. | Sem quadro. |
+| `pilares` | Campos de imagem abaixo. `kicker` (rótulo acima do título), `titulo`, `destaque_titulo` (trecho exato do título), `info` (sobre a base da imagem, aceita `**negrito**`), `pilares` (lista de objetos com `titulo` e `texto`), `referencia`. | Até três pilares, cada um com título de uma linha e texto de até duas linhas. Use até duas linhas para o título e para `info` e uma para a referência. | Quadro de prompt à esquerda. |
+| `texto_imagem` | Campos de imagem abaixo. `kicker`, `titulo`, `destaque_titulo` (trecho exato do título), `seta` (booleano), `texto`, `topicos` (lista de textos ou objetos com `titulo` e `texto`), `destaque` (texto final), `imagem_modo` (`"sangrar"` por padrão, `"conter"` para mostrar a imagem inteira). | Título de até duas linhas e de dois a quatro tópicos curtos. Some o texto inicial e o destaque ao orçamento de 40 palavras. | Quadro de prompt à direita, inclusive no modo `"conter"`. |
+| `passo_a_passo` | Campos de imagem abaixo. `kicker`, `titulo`, `destaque_titulo` (trecho exato do título), `passos` (lista de objetos com `titulo` e `texto`), `dica`. | Até cinco passos, cada um com título de uma linha e texto de até duas linhas. Título do slide e dica de uma linha. | Quadro de prompt à direita. A lista fica à esquerda mesmo sem foto. |
+| `numero` | `kicker`, `valor` (número ou texto, pode incluir unidade), `legenda` (abaixo do valor), `texto`. | Até cinco caracteres para manter o valor grande, legenda de uma linha e texto de até duas linhas. Valores mais longos reduzem a fonte. | Sem quadro. |
+| `duas_colunas` | `titulo`, `colunas` (lista de objetos com `titulo` e `itens`, uma lista de textos), `nota`. | Até duas colunas, cada uma com título de uma linha e até cinco itens de uma linha. Nota de uma linha. | Sem quadro. |
+| `anatomia` | Campos de imagem abaixo. `kicker`, `titulo`, `marcacoes` (lista de objetos com `nome` e `desc`), `passos` (lista de textos que substitui a lista de descrições quando preenchida), `indicador` (objeto com `valor`, número ou texto, e `texto`), `nota`. Os nomes aparecem juntos acima da lista numerada. | Até cinco descrições ou passos curtos, de uma linha cada com indicador. Nomes juntos em uma linha, valor de até três caracteres para manter a fonte grande e nota de uma linha. | Quadro de prompt à esquerda. |
+| `comparativo` | Campos de imagem abaixo. `titulo`, `destaque_titulo` (trecho exato do título), `colunas` (lista de objetos com `titulo` e `itens`, uma lista de textos que aceitam `**negrito**`), `nota` (faixa de atenção). | Até duas colunas com quatro itens de uma linha cada. Título do slide, títulos das colunas e nota de uma linha. | Quadro de prompt na faixa superior. |
+| `alerta` | Campos de imagem abaixo. `intercorrencia` (rótulo acima do título), `titulo`, `itens` (lista de objetos com `titulo` e `texto`), `sinais` e `conduta` (listas de textos usadas quando `itens` está vazio ou ausente), `urgente`. | Até três blocos, com título de uma linha e texto de até duas linhas. Forneça sinais e conduta em dois blocos ou nas listas equivalentes. Use uma linha para `urgente`. | Quadro de prompt à direita. |
+| `numeros` | `kicker`, `titulo`, `destaque_titulo` (trecho exato do título), `itens` (lista de objetos com `valor`, número ou texto, e `texto`), `nota`. | Até três indicadores na mesma linha, valores de até cinco caracteres e textos de até duas linhas. Nota de uma linha. | Sem quadro. |
+| `encerramento` | `titulo`, `mensagem`, `contatos` (lista de textos, um por linha), `qr` (caminho da imagem), `qr_legenda` (só com `qr` preenchido, padrão "Material de apoio"), `selo`. | Título de uma linha, mensagem de até duas e até três contatos. Legenda e selo de uma linha cada. | Foto de fundo da casa. Sem `qr` ou com `null`, nada é reservado para o QR. Caminho inválido gera um espaço com o rótulo "QR code". |
+| `preservado` | `deck` (caminho de um PowerPoint existente) e `slide` (inteiro a partir de 1, dentro do deck) são obrigatórios. `titulo` e `kicker` compõem o cabeçalho. | Até duas linhas de título e uma de kicker. A composição original é redimensionada para caber sob o cabeçalho, sem copiar o título identificado nem as decorações reconhecidas. Confira a legibilidade. | Sem quadro. Usa as imagens presentes nas formas copiadas. |
+
+Nos seis tipos com painel de imagem, os campos opcionais são `imagem` (caminho de arquivo), `prompt_imagem` (uma ou duas frases sobre a cena), `legenda` (texto curto usado como prompt de reserva), `alerta_imagem` (aviso curto de validação) e `estilo_imagem` (`"foto"` para fotografia, `true` ou omitido para ilustração da casa, `false` para omitir o texto de estilo). O caminho de `imagem`, `qr` ou `deck` pode ser absoluto ou relativo à pasta do roteiro.
+
+Quando `imagem` está vazia, ausente ou aponta para um arquivo que não existe, o painel usa o primeiro texto disponível entre `prompt_imagem`, `legenda` e `titulo`, ou "Imagem do slide". O quadro também gera registro nas notas e no arquivo de prompts. Para um slide sem imagem nem quadro, escolha um tipo da tabela sem quadro, como `duas_colunas` ou `frase`. A ausência de `prompt_imagem` mantém o quadro nos tipos com painel. Para `preservado`, mantenha `deck` e `slide` do rascunho de `extrair` com acesso ao PowerPoint original. O exemplo é autônomo e omite esse tipo.
+
+No exemplo, `passos` está vazio em `anatomia` para mostrar as descrições das marcações. Em `alerta`, `itens` está vazio para mostrar as listas de sinais e conduta.
+
 No `texto_imagem` ousado, o gerador reduz o título de 46 até 18 pt e o corpo de 11 até 8 pt, em passos de 1 pt, conforme a largura das palavras e a altura estimada. Se ainda houver excesso no tamanho mínimo, o texto inteiro segue para o `conferir`.
+
+Os tipos `tabela`, `grafico`, `antes_depois`, `artigo`, `caso_clinico`, `referencias`, `custos`, `precificacao`, `parceria` e `continue_evolucao` usam o layout padrão com Morph e aceitam os campos da tabela do repertório. `tabela`, `grafico`, `referencias`, `custos` e `precificacao` ficam sem quadro. `antes_depois`, `artigo` e `caso_clinico` reservam espaços rotulados para as imagens ausentes. `parceria` e `continue_evolucao` reservam espaço rotulado para QR ausente. Esses espaços não são quadros de prompt.
 
 ## Escolha a entrada
 
@@ -81,7 +113,7 @@ No `texto_imagem` ousado, o gerador reduz o título de 46 até 18 pt e o corpo d
 3. **Escolha o tipo pelo conteúdo, não pelo hábito:**
    - números ou evolução no tempo → `grafico`;
    - comparação de 2 ou mais opções em vários critérios → `tabela`;
-   - sequência de ações → `passo_a_passo` (até 5 passos na horizontal; mais que isso ou com foto, vertical);
+   - sequência de ações → `passo_a_passo`. No estilo padrão, até 5 passos ficam na horizontal. Com mais passos ou com foto, ficam na vertical. No ousado, a lista fica à esquerda do painel de imagem;
    - estrutura anatômica ou zonas de risco → `anatomia`;
    - estudo citado → `artigo`, com a conclusão em 1 ou 2 frases e "na prática clínica". Slide de evidência só usa referência verificável (estudo enviado pelo professor ou fonte conferida); sem fonte verificável, `[confirmar]`. Numa aula de projeto com o Editor Científico, as referências dele são a fonte preferida;
    - complicação → `alerta`, sempre com sinais e conduta;
@@ -97,14 +129,14 @@ No `texto_imagem` ousado, o gerador reduz o título de 46 até 18 pt e o corpo d
 
 Você atua como diretor de arte. Para cada espaço de imagem, decida o que ilustra melhor aquele conteúdo e, quando o professor não mandar a imagem, escreva o prompt para ele gerar no ChatGPT. Não é você quem gera a imagem.
 
-- **Como usar:** nos tipos com imagem (`texto_imagem`, `anatomia`, `passo_a_passo`), preencha `prompt_imagem` com a descrição da cena.
+- **Como usar:** preencha `prompt_imagem` com a descrição da cena nos tipos com painel de imagem. Para o estilo ousado, consulte a tabela "Campos no estilo ousado".
   - `estilo_imagem: "foto"` serve para retratos e cenas realistas; o padrão é ilustração médica 3D.
   - `alerta_imagem` traz um aviso que aparece no quadro.
 - **O que o gerador faz sozinho:**
   - desenha o quadro tracejado no lugar da imagem, com o prompt completo;
   - acrescenta o **estilo da casa** (`ESTILO_CASA` ou `ESTILO_FOTO`) e o **formato certo** para o tamanho do espaço (16:9, 3:2, 1:1, 2:3, 9:16);
   - copia o prompt nas notas do apresentador;
-  - salva `<nome> - prompts de imagem.md` com todos os prompts numerados. Se o gerador gravou o arquivo nesta execução, entregue-o junto com o .pptx; senão, diga que nenhum prompt foi gerado (`prompt_imagem` ausente ou vazio não gera arquivo).
+  - salva `<nome> - prompts de imagem.md` com todos os prompts numerados. Se o gerador gravou o arquivo nesta execução, entregue-o junto com o .pptx; senão, diga que nenhum prompt foi gerado.
 - **Como escrever o prompt:** em português, descrevendo a cena concreta: assunto, enquadramento, corte ou ângulo, o que está à esquerda e à direita e qual estrutura fica em vinho. Uma ideia por imagem.
 - **Sem texto na imagem:** rótulos e setas com nome ficam no slide, editáveis.
 - **Quando não usar imagem:** slides de número grande, frase, tabela e gráfico ficam limpos.
@@ -120,6 +152,7 @@ Origem: design system das aulas enviado pela Julie em 19/11/2026 (`docs/fontes/2
 - `scripts/aulas.py`: entrada única para extrair, gerar, conferir e renderizar.
 - `assets/`: logos, foto de fundo, QR codes e ícones das parcerias (`assets/parcerias/`), como arquivos de imagem.
 - `references/exemplo_roteiro.json`: roteiro de exemplo; mostra só o formato, e todo conteúdo clínico nele é marcador `[EXEMPLO: ...]` a substituir.
+- `references/exemplo_ousado.json`: roteiro autônomo com os tipos de layout próprio do estilo ousado que dispensam um deck de origem.
 - `references/modelo_hof_roteiro.json`: roteiro de referência para os tipos do modelo mestre v1. Para cada aula, use o conteúdo recebido no pedido.
 
 Os scripts leem `assets/` pelo caminho relativo à própria pasta, então nada precisa ser montado antes de gerar. Se um asset faltar, peça ao usuário os logos e a foto de fundo da Clinic Cursos.

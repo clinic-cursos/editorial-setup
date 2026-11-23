@@ -88,7 +88,7 @@ Verificação comum (todo cartão): `uv run --locked pytest -q tests/test_aulas.
 
 ## Status
 
-- Feito: verificação dos três arquivos de referência, plano e cartões 1 a 4.
+- Feito: verificação dos três arquivos de referência, plano e cartões 1 a 4. PR #6 mergeado em 23/11/2026 (merge `9c18808`). Versão 0.2.0 publicada como release.
 - Em andamento: nada.
 - Travado: nada.
-- Próximo passo: revisão única do `cross-reviewer`, integração, PR e merge.
+- Próximo passo: achados menores da CLI-647.
