@@ -1,5 +1,13 @@
 # Histórico de versões
 
+## 0.2.3
+
+- Nas listas sem painel de imagem do estilo ousado, passo a passo, alerta, pilares e texto com imagem, a letra cresce até ocupar a área útil; em duas colunas, mantém o tamanho do modelo.
+- No passo a passo, o primeiro passo fica abaixo de um título de duas linhas e o espaço entre passos é uniforme.
+- O comparativo aceita `imagem_modo` e a altura dos itens acompanha o texto.
+- O `preservado` reconhece título com quebra de linha e remove o fio que o acompanha, ignora formas vazias ou invisíveis ao calcular a escala e garante que o texto copiado fique dentro da área de conteúdo.
+- O `conferir` reprova título sobre o primeiro passo e itens sobrepostos no comparativo.
+
 ## 0.2.2
 
 - O tipo `preservado` amplia o conteúdo copiado até a área útil, mantém a imagem de fundo do próprio slide, adiciona painel escuro quando o original tinha fundo escuro e evita duplicar o título.
