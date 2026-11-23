@@ -137,7 +137,13 @@ def bar(s, x, y, w=0.6, color=ROSE, h=0.05):
     return name(rect(s, x, y, w, h, fill=color), "!!barra")
 
 
+def has_image_panel(d):
+    return bool(d.get("imagem") or d.get("prompt_imagem"))
+
+
 def photo(s, d, x, y, w, h, *, dark=False, prompt_height=None, contain=False):
+    if not has_image_panel(d):
+        raise ValueError(f"{d['tipo']} exige imagem ou prompt_imagem no slide {d.get('titulo', '')!r}")
     path = d.get("imagem")
     if contain and path and Path(path).exists():
         with Image.open(path) as source:
@@ -255,23 +261,32 @@ def s_quote(prs, s, d):
 def s_pillars(prs, s, d):
     an = Anim(s)
     bg(s, NOITE)
-    photo(s, d, 0, 0, 4.3, H, dark=True, prompt_height=H - 1)
-    r = rect(s, 0, H - 1.0, 4.3, 1.0, fill=NOITE); _alpha(r, 0.6)
-    text(s, M, H - 0.85, 3.6, 0.7, [accent_runs(row, ROSE) for row in d.get("info", "").splitlines()],
-         size=9, color=BRANCO)
+    panel = has_image_panel(d)
+    x = 4.75 if panel else M
+    full_width = W - 2 * M
+    info = [accent_runs(row, ROSE) for row in d.get("info", "").splitlines()]
+    if panel:
+        photo(s, d, 0, 0, 4.3, H, dark=True, prompt_height=H - 1)
+        r = rect(s, 0, H - 1.0, 4.3, 1.0, fill=NOITE)
+        _alpha(r, 0.6)
+        text(s, M, H - 0.85, 3.6, 0.7, info, size=9, color=BRANCO)
+    elif info:
+        text(s, M, H - 0.85, full_width, 0.45, info, size=9, color=BRANCO)
     small_arc(s, 3.55, -0.9, 1.8, VINHO, 0.2, 90, 180)
     logo(s, True)
-    kicker(s, d.get("kicker", ""), 4.75, 0.55)
-    an.add(title(s, d.get("titulo", ""), 4.75, 0.8, 4.6, 1.0, size=24, hl=d.get("destaque_titulo")), eff="up")
+    kicker(s, d.get("kicker", ""), x, 0.55)
+    an.add(title(s, d.get("titulo", ""), x, 0.8, 4.6 if panel else full_width,
+                 1.0, size=24, hl=d.get("destaque_titulo")), eff="up")
+    body_width = 3.7 if panel else full_width - 1.0
     for i, pillar in enumerate(d.get("pilares", [])):
         h, t = pillar.get("titulo", ""), pillar.get("texto", "")
         y = 2.0 + i * 0.95
-        n = text(s, 4.75, y - 0.1, 1.0, 0.9, f"{i+1:02d}", size=36, color=VINHO, font=FONTE_FORTE, bold=True)
-        a = text(s, 5.75, y, 3.7, 0.3, h, size=13, color=BRANCO, bold=True, caps=True)
-        b = text(s, 5.75, y + 0.32, 3.7, 0.5, t, size=9.5, color=CINZA_CLARO)
-        line(s, 4.8, y + 0.85, W - M, y + 0.85, color=NOITE2, w=0.75)
+        n = text(s, x, y - 0.1, 1.0, 0.9, f"{i+1:02d}", size=36, color=VINHO, font=FONTE_FORTE, bold=True)
+        a = text(s, x + 1.0, y, body_width, 0.3, h, size=13, color=BRANCO, bold=True, caps=True)
+        b = text(s, x + 1.0, y + 0.32, body_width, 0.5, t, size=9.5, color=CINZA_CLARO)
+        line(s, x + 0.05, y + 0.85, W - M, y + 0.85, color=NOITE2, w=0.75)
         an.add(n, gap=0, eff="up"); an.add(a, gap=60); an.add(b, gap=200)
-    text(s, 4.75, H - 0.4, 4.8, 0.25, d.get("referencia", ""), size=6.5, color=CINZA)
+    text(s, x, H - 0.4, 4.8 if panel else full_width, 0.25, d.get("referencia", ""), size=6.5, color=CINZA)
     morph(s); an.build()
 
 
@@ -362,14 +377,17 @@ def s_text_image(prs, s, d):
 
     an = Anim(s)
     bg(s, CREME)
-    photo(s, d, W - 3, 0, 3, H, contain=image_mode == "conter")
+    panel = has_image_panel(d)
+    if panel:
+        photo(s, d, W - 3, 0, 3, H, contain=image_mode == "conter")
     logo(s, False, M, 0.4)
     kicker(s, d.get("kicker", ""), M, 1.3, VINHO)
     heading = d.get("titulo", "")
-    title_size = text_image_font_size([heading], 5.4, 1.8, 46, 18, spacing=0.9)
-    an.add(title(s, heading, M, 1.6, 5.4, 1.8, color=PRETO, size=title_size,
+    title_width = 5.4 if panel else W - 2 * M
+    title_size = text_image_font_size([heading], title_width, 1.8, 46, 18, spacing=0.9)
+    an.add(title(s, heading, M, 1.6, title_width, 1.8, color=PRETO, size=title_size,
                  hl=d.get("destaque_titulo"), hlc=VINHO), eff="up", dur=700, gap=400)
-    if d.get("seta"):
+    if panel and d.get("seta"):
         ln = line(s, 5.75, 1.0, 5.75, 4.6, color=VINHO, w=2.5)
         tri = rect(s, 5.62, 4.55, 0.26, 0.22, fill=VINHO, shape=MSO_SHAPE.ISOSCELES_TRIANGLE)
         tri.rotation = 180
@@ -383,9 +401,10 @@ def s_text_image(prs, s, d):
             body.append(topic)
     body.append(d.get("destaque", ""))
     body = [row for row in body if row]
-    body_size = text_image_font_size([plain_text(row) for row in body], 5.0, 1.2,
+    body_width = 5.0 if panel else title_width
+    body_size = text_image_font_size([plain_text(row) for row in body], body_width, 1.2,
                                      11, 8, spacing=1.1)
-    an.add(text(s, M, 3.55, 5.0, 1.2, body, size=body_size, color=TEXTO), eff="up")
+    an.add(text(s, M, 3.55, body_width, 1.2, body, size=body_size, color=TEXTO), eff="up")
     morph(s); an.build()
 
 
@@ -395,24 +414,31 @@ def s_steps(prs, s, d):
     name(rect(s, 0, 0, W, 0.08, fill=VINHO), "!!painel")
     logo(s, False)
     kicker(s, d.get("kicker", ""), M, 0.42, VINHO)
-    title(s, d.get("titulo", ""), M, 0.62, 6, 0.6, color=PRETO, size=26, hl=d.get("destaque_titulo"), hlc=VINHO)
-    rect(s, 4.35, 1.35, 5.2, 3.0, fill=BRANCO)
-    p = photo(s, d, 4.45, 1.45, 5.0, 2.8)
-    an.add(p, gap=300, dur=700)
+    panel = has_image_panel(d)
+    full_width = W - 2 * M
+    heading = title(s, d.get("titulo", ""), M, 0.62, 6 if panel else full_width, 0.6,
+                    color=PRETO, size=26, hl=d.get("destaque_titulo"), hlc=VINHO)
+    if panel:
+        rect(s, 4.35, 1.35, 5.2, 3.0, fill=BRANCO)
+        an.add(photo(s, d, 4.45, 1.45, 5.0, 2.8), gap=300, dur=700)
     steps = d.get("passos", [])
     stride = max(0.31, min(0.68, 3.4 / max(len(steps), 1)))
     tops = [1.38 + i * stride for i in range(len(steps))]
     rows = [(str(step.get("titulo", "")), step.get("texto", "")) for step in steps]
+    body_width = 3.4 if panel else full_width - 0.45
     size, boxes = fit_list([[(h, 10.5), (plain_text(t), None)] for h, t in rows],
-                           width=3.4, tops=tops, bottom=4.78, base_height=min(0.6, stride), body_size=8.5)
+                           width=body_width, tops=tops, bottom=4.78, base_height=min(0.6, stride), body_size=8.5)
     if len(steps) > 1:
         line(s, M + 0.14, 1.55, M + 0.14, boxes[-1][0] + 0.17, color=ROSE, w=1.5)
     for (h, t), (y, height) in zip(rows, boxes):
         c = rect(s, M, y + 0.03, 0.28, 0.28, fill=VINHO, line=CREME, shape=MSO_SHAPE.OVAL, lw=2)
-        a = text(s, M + 0.45, y, 3.4, height,
+        a = text(s, M + 0.45, y, body_width, height,
                  [[(h, {"bold": True, "color": PRETO, "size": 10.5})], _parse_bold(t)], size=size)
         an.add(c, gap=0); an.add(a, gap=220, eff="left")
-    text(s, 4.35, 4.45, 5.2, 0.4, d.get("dica", ""), size=8.5, color=CINZA, italic=True)
+    tip_x, tip_y, tip_width = (4.35, 4.45, 5.2) if panel else (M, 4.85, full_width)
+    text(s, tip_x, tip_y, tip_width, 0.4, d.get("dica", ""), size=8.5, color=CINZA, italic=True)
+    if not an.items:
+        an.add(heading)
     morph(s); an.build()
 
 
@@ -527,25 +553,30 @@ def s_alert(prs, s, d):
     an = Anim(s)
     bg(s, NOITE)
     name(rect(s, 0, 0, 0.12, H, fill=ALERTA), "!!painel")
-    photo(s, d, 6.9, 0.55, 2.65, 4.5, dark=True)
+    panel = has_image_panel(d)
+    if panel:
+        photo(s, d, 6.9, 0.55, 2.65, 4.5, dark=True)
+    full_width = W - 2 * M
     logo(s, True, M + 0.1)
     an.add(text(s, M + 0.1, 1.05, 5, 0.3, f"⚠  {d.get('intercorrencia', '')}", size=10, color=ALERTA, bold=True, caps=True))
-    title(s, d.get("titulo", ""), M + 0.1, 1.35, 5.8, 1.0, size=24)
+    title(s, d.get("titulo", ""), M + 0.1, 1.35, 5.8 if panel else full_width - 0.1, 1.0, size=24)
     items = d.get("itens", [])
     if not items:
         items = [{"titulo": label, "texto": " · ".join(d[key])}
                  for key, label in (("sinais", "Sinais de alerta"), ("conduta", "Conduta")) if d.get(key)]
     rows = [(item.get("titulo", "").upper(), item.get("texto", "")) for item in items]
     tops = [2.55 + i * 0.75 for i in range(len(rows))]
-    size, boxes = fit_list([[(h, 12), (t, None)] for h, t in rows], width=5.5, tops=tops,
+    body_width = 5.5 if panel else full_width - 0.35
+    size, boxes = fit_list([[(h, 12), (t, None)] for h, t in rows], width=body_width, tops=tops,
                            bottom=H - 0.6, base_height=0.7, body_size=9.5)
     for i, ((h, t), (y, height)) in enumerate(zip(rows, boxes)):
         n = rect(s, M + 0.1, y + 0.05, 0.08, 0.55, fill=ALERTA if i < 2 else ROSE)
-        a = text(s, M + 0.35, y, 5.5, height,
+        a = text(s, M + 0.35, y, body_width, height,
                  [[(h, {"bold": True, "color": BRANCO, "size": 12})], [(t, {"color": CINZA_CLARO})]], size=size)
         an.add(n, gap=0); an.add(a, gap=250, eff="left")
     if d.get("urgente"):
-        an.add(text(s, M + 0.35, H - 0.6, 5.5, 0.45, d["urgente"], size=9, color=ROSE_CLARO, bold=True))
+        an.add(text(s, M + 0.35, H - 0.6, body_width, 0.45,
+                    d["urgente"], size=9, color=ROSE_CLARO, bold=True))
     morph(s); an.build()
 
 

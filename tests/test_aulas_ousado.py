@@ -175,7 +175,7 @@ def test_model_matches_reference(tmp_path):
 
 @pytest.mark.parametrize("slide,model_size", [
     ({"tipo": "numero"}, 130),
-    ({"tipo": "anatomia"}, 40),
+    ({"tipo": "anatomia", "prompt_imagem": "Cena de teste"}, 40),
 ])
 def test_bold_number_size_respects_text_width(tmp_path, slide, model_size):
     values = ["123", "123456789012345"]
@@ -219,12 +219,62 @@ def test_bold_uses_relative_image_and_slide_text(tmp_path):
     assert not out.with_name("aula - prompts de imagem.md").exists()
 
 
+@pytest.mark.parametrize("kind,fields", [
+    ("pilares", {"pilares": [{"titulo": "Entrada", "texto": "Texto principal"}]}),
+    ("passo_a_passo", {"passos": [{"titulo": "Entrada", "texto": "Texto principal"}]}),
+    ("alerta", {"itens": [{"titulo": "Entrada", "texto": "Texto principal"}]}),
+    ("texto_imagem", {"texto": "Texto principal"}),
+])
+def test_bold_optional_image_panel_uses_full_text_width_when_omitted(tmp_path, kind, fields):
+    Image.new("RGB", (60, 40)).save(tmp_path / "foto.png")
+    slide = {"tipo": kind, "titulo": "Título de teste", "legenda": "Legenda de reserva", **fields}
+    path = write_script(tmp_path, [
+        slide, {**slide, "imagem": "foto.png"}, {**slide, "prompt_imagem": "Cena de teste"},
+    ], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    deck = Presentation(out)
+    text_only, with_photo, with_prompt = deck.slides
+    assert not any(shape.name == "!!foto" or shape.name.startswith("Texto do prompt ")
+                   for shape in text_only.shapes)
+    assert any(shape.name == "!!foto" and shape.shape_type == MSO_SHAPE_TYPE.PICTURE
+               for shape in with_photo.shapes)
+    assert any(shape.name == "!!foto" and shape.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE
+               for shape in with_prompt.shapes)
+    assert any(shape.name.startswith("Texto do prompt ") and "Cena de teste" in shape.text
+               for shape in with_prompt.shapes)
+    if kind == "passo_a_passo":
+        assert not any(shape.width == Inches(5.2) and shape.height == Inches(3)
+                       for shape in text_only.shapes)
+
+    full, narrow, prompt = (
+        next(shape for shape in generated.shapes if shape.has_text_frame and "Texto principal" in shape.text)
+        for generated in deck.slides
+    )
+    assert full.width > narrow.width == prompt.width
+    assert full.left + full.width == pytest.approx(deck.slide_width - Inches(0.45), abs=1)
+
+
+@pytest.mark.parametrize("kind", ["anatomia", "comparativo"])
+def test_bold_required_image_panel_needs_image_or_prompt(tmp_path, kind):
+    path = write_script(tmp_path, [{"tipo": kind, "titulo": "Título de teste"}], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode != 0
+    assert f"{kind} exige imagem ou prompt_imagem" in result.stderr
+    assert not out.exists()
+
+
 @pytest.mark.parametrize("heading", [
     "Envelhecimento",
     "TECNOLOGIA DE FABRICAÇÃO DOS NEUROMODULADORES",
 ])
 def test_bold_text_image_title_fits_without_splitting_words(tmp_path, heading):
-    path = write_script(tmp_path, [{"tipo": "texto_imagem", "titulo": heading, "texto": "Corpo do slide"}])
+    path = write_script(tmp_path, [{
+        "tipo": "texto_imagem", "titulo": heading, "texto": "Corpo do slide", "prompt_imagem": "Cena de teste",
+    }])
     out = tmp_path / "aula.pptx"
     result = generate(path, out)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -249,7 +299,9 @@ def test_bold_text_image_title_fits_without_splitting_words(tmp_path, heading):
 @pytest.mark.parametrize("repetitions,exit_code", [(30, 0), (100, 1)])
 def test_bold_text_image_body_fits_or_keeps_overflow_for_review(tmp_path, repetitions, exit_code):
     content = "Texto de apoio " * repetitions + "Fim do texto."
-    path = write_script(tmp_path, [{"tipo": "texto_imagem", "titulo": "Título", "texto": content}])
+    path = write_script(tmp_path, [{
+        "tipo": "texto_imagem", "titulo": "Título", "texto": content, "prompt_imagem": "Cena de teste",
+    }])
     out = tmp_path / "aula.pptx"
     result = generate(path, out)
     assert result.returncode == exit_code, result.stdout + result.stderr
@@ -282,9 +334,9 @@ def test_bold_list_fits_items_or_keeps_overflow_for_review(tmp_path, kind, botto
     blocks = [{"titulo": item_title, "texto": body},
               {"titulo": "Continuação", "texto": next_item}]
     fields = {
-        "passo_a_passo": {"passos": blocks},
+        "passo_a_passo": {"passos": blocks, "prompt_imagem": "Cena de teste"},
         "duas_colunas": {"colunas": [{"titulo": heading, "itens": [body, next_item]}], "nota": "Rodapé"},
-        "alerta": {"itens": blocks, "urgente": "Rodapé"},
+        "alerta": {"itens": blocks, "urgente": "Rodapé", "prompt_imagem": "Cena de teste"},
         "sumario": {"itens": [body, next_item]},
     }
     path = write_script(tmp_path, [{"tipo": kind, **fields[kind]}], avulso=True)
@@ -350,11 +402,12 @@ def test_bold_animates_standard_layouts(tmp_path):
 def test_switching_to_bold_keeps_shared_content_fields(tmp_path):
     path = write_script(tmp_path, [
         {"tipo": "modulo", "titulo": "Módulo", "selo": "Material de apoio"},
-        {"tipo": "anatomia", "titulo": "Estruturas", "marcacoes": [{"nome": "A", "desc": "Descrição A"}]},
+        {"tipo": "anatomia", "titulo": "Estruturas", "marcacoes": [{"nome": "A", "desc": "Descrição A"}],
+         "prompt_imagem": "Cena de teste"},
         {"tipo": "alerta", "titulo": "Alerta", "sinais": ["Sinal A"], "conduta": ["Conduta A"],
          "urgente": "Aviso A"},
         {"tipo": "encerramento", "titulo": "Fim", "contatos": ["Site A"]},
-        {"tipo": "comparativo", "titulo": "Comparativo"},
+        {"tipo": "comparativo", "titulo": "Comparativo", "prompt_imagem": "Cena de teste"},
         {"tipo": "duas_colunas", "titulo": "Duas colunas"},
     ])
     out = tmp_path / "aula.pptx"
