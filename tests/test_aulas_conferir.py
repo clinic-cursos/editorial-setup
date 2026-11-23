@@ -6,6 +6,7 @@ import sys
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.util import Inches, Pt
 import pytest
@@ -293,6 +294,16 @@ def test_preserved_warnings_are_grouped_by_slide_and_rule(tmp_path):
 
     presentation = Presentation(deck)
     slide = presentation.slides[0]
+    for slide_with_group in presentation.slides:
+        group = next(shape for shape in slide_with_group.shapes if shape.shape_type == MSO_SHAPE_TYPE.GROUP)
+        for child in group.shapes:
+            paragraph = child.text_frame.paragraphs[0]
+            paragraph.runs[0].font.name = "Montserrat"
+            paragraph.runs[0].font.color.rgb = RGBColor.from_string("FFDD00")
+            duplicate = paragraph.add_run()
+            duplicate.text = "M"
+            duplicate.font.name = "Montserrat"
+            duplicate.font.color.rgb = RGBColor.from_string("FFFF00")
     box = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(4), Inches(1))
     box.name = "Nota editorial"
     run = box.text_frame.paragraphs[0].add_run()
@@ -304,23 +315,23 @@ def test_preserved_warnings_are_grouped_by_slide_and_rule(tmp_path):
     result = run_cli("conferir", deck)
     assert result.returncode == 0, result.stderr or result.stdout
     lines = result.stdout.splitlines()
-    assert "1 aviso(s), 12 aviso(s) em conteúdo preservado" in lines[0]
-    assert len(lines[1:]) == 7
     assert "Slide 1 (Nota editorial) | Aviso: Marcador editorial pendente." in lines
     for number in (1, 2):
-        for label in ("fontes fora da família", "cores de texto fora da paleta", "estouros de texto"):
+        for label in ("textos de baixo contraste", "estouros de texto"):
             assert lines.count(f"Slide {number} | Aviso: conteúdo preservado com 2 {label}.") == 1
+    assert "1 aviso(s), 16 aviso(s) em conteúdo preservado" in lines[0]
+    assert len(lines[1:]) == 7
 
     result = run_cli("conferir", deck, "--json")
     assert result.returncode == 0, result.stderr or result.stdout
     report = json.loads(result.stdout)
-    assert (report["errors"], report["warnings"], report["preserved_warnings"]) == (0, 1, 12)
+    assert (report["errors"], report["warnings"], report["preserved_warnings"]) == (0, 1, 16)
     assert [(item["shape"], item["rule"]) for item in report["findings"]] == [("Nota editorial", "marker")]
     details = report["preserved_findings"]
-    assert len(details) == 12
+    assert len(details) == 16
     assert {(item["slide"], item["shape"], item["rule"], item["severity"]) for item in details} == {
         (slide, f"Conteúdo original {shape}", rule, "warning")
-        for slide in (1, 2) for shape in (1, 2) for rule in ("font", "text_color", "overflow")
+        for slide in (1, 2) for shape in (1, 2) for rule in ("contrast", "text_color", "overflow")
     }
     assert all(item["message"] for item in details)
 

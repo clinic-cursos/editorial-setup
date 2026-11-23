@@ -1,3 +1,4 @@
+from colorsys import rgb_to_hls
 import json
 from pathlib import Path
 import subprocess
@@ -37,6 +38,70 @@ def restyle_one(tmp_path, original, style, title="Novo título"):
     result = run_cli("gerar", script, out)
     assert result.returncode == 0, result.stderr
     return list(Presentation(out).slides[0].shapes)
+
+
+def contrast_ratio(first, second):
+    def luminance(color):
+        channels = [channel / 255 for channel in color]
+        linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+                  for value in channels]
+        return sum(value * weight for value, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
+
+    low, high = sorted(map(luminance, (first, second)))
+    return (high + 0.05) / (low + 0.05)
+
+
+@pytest.mark.parametrize("case", ["yellow", "office-rgb", "office-theme", "white-on-wine", "white-over-wine", "title"])
+def test_preserved_normalizes_text_on_its_surface(tmp_path, case):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[1 if case == "title" else 6])
+    geometry = (Inches(2), Inches(3), Inches(4), Inches(1))
+    wine = RGBColor.from_string("6E2F2C")
+    if case.startswith("white"):
+        rectangle = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, *geometry)
+        rectangle.fill.solid()
+        rectangle.fill.fore_color.rgb = wine
+        shape = rectangle if case == "white-on-wine" else slide.shapes.add_textbox(*geometry)
+    elif case == "title":
+        slide.shapes.title.text = "Título original"
+        shape = slide.placeholders[1]
+        shape._element.ph.set("type", "title")
+        shape.left, shape.top, shape.width, shape.height = geometry
+    else:
+        shape = slide.shapes.add_textbox(*geometry)
+    frame = shape.text_frame
+    frame.auto_size = MSO_AUTO_SIZE.NONE
+    paragraph = frame.paragraphs[0]
+    paragraph.font.bold = True
+    paragraph.font.italic = True
+    run = paragraph.add_run()
+    run.text = "Projeção"
+    run.font.name = "Calibri"
+    run.font.size = Pt(20)
+    yellow = RGBColor.from_string("FFF4A3")
+    if case == "office-theme":
+        run.font.color.theme_color = MSO_THEME_COLOR.DARK_2
+        run.font.color.brightness = 0.4
+    else:
+        source_colors = {"yellow": yellow, "office-rgb": RGBColor.from_string("1F497D"),
+                         "title": RGBColor.from_string("666666")}
+        run.font.color.rgb = source_colors.get(case, RGBColor.from_string("FFFFFF"))
+
+    shapes = {item.name: item for item in restyle_one(tmp_path, original, "ousado")}
+    copied = shapes[shape.name]
+    font = copied.text_frame.paragraphs[0].runs[0].font
+    color = font.color.rgb
+    if case == "yellow":
+        assert 4.5 <= contrast_ratio(color, RGBColor.from_string("FAF6F4")) < 4.6
+        assert rgb_to_hls(*color)[0] == pytest.approx(rgb_to_hls(*yellow)[0], abs=0.003)
+    elif case.startswith("white"):
+        assert str(color) == "FFFFFF"
+        assert shapes[rectangle.name].fill.fore_color.rgb == wine
+    else:
+        assert str(color) == "404040"
+    assert font.name == ("Montserrat ExtraBold" if case == "title" else "Montserrat")
+    assert font.bold and font.italic
+    assert font.size.pt == pytest.approx(20 * copied.width / shape.width, abs=0.005)
 
 
 def picture_fill(slide, image):
@@ -111,7 +176,12 @@ def test_preserved_matches_effective_background_contrast(tmp_path, style, panel_
 
     shapes = restyle_one(tmp_path, original, style)
     copied_label = next(shape for shape in shapes if shape.has_text_frame and shape.text == label.text)
-    assert str(copied_label.text_frame.paragraphs[0].runs[0].font.color.rgb) == "FFFFFF"
+    color = copied_label.text_frame.paragraphs[0].runs[0].font.color.rgb
+    if surface != "light":
+        assert str(color) == "FFFFFF"
+    else:
+        background = RGBColor.from_string("FAF6F4" if style == "ousado" else "FFFFFF")
+        assert contrast_ratio(color, background) >= 4.5
     assert all(shape.name != "Retângulo original" for shape in shapes)
     if surface == "layout-image":
         assert all(shape.shape_type != MSO_SHAPE_TYPE.PICTURE or shape.image.blob != image.read_bytes()

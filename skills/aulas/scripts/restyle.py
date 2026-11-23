@@ -25,6 +25,7 @@ from pptx.oxml import parse_xml
 from pptx.oxml.ns import qn
 from pptx.oxml.shapes.picture import CT_Picture
 from pptx.shapes.picture import Picture
+from pptx.text.text import Font
 from pptx.util import Inches, Length, Pt
 
 
@@ -139,8 +140,10 @@ def is_decoration(shape, width, height):
     return corner and y >= height * 0.9 and h <= height * 0.1 and NUMBER.fullmatch(value.strip())
 
 
-def solid_rectangle_color(shape, theme):
-    properties = shape._element.spPr
+def shape_fill(shape, theme):
+    properties = shape._element.find(qn("p:spPr"))
+    if properties is None:
+        return None, None
     fill = properties.eg_fillProperties
     placeholder = None
     if fill is None:
@@ -151,9 +154,14 @@ def solid_rectangle_color(shape, theme):
             if 1 <= index <= len(styles):
                 fill = styles[index - 1]
                 placeholder = next(iter(reference), None)
-    if fill is not None and fill.tag == qn("a:solidFill") and len(fill):
-        return solid_color(fill[0], theme, placeholder)
-    return None
+    return fill, placeholder
+
+
+def solid_fill_color(theme, fill, placeholder=None):
+    if fill is None or fill.tag != qn("a:solidFill") or not len(fill):
+        return None
+    color = solid_color(fill[0], theme, placeholder)
+    return color if rgb_channels(color) is not None else None
 
 
 def slide_content(presentation, slide):
@@ -173,7 +181,8 @@ def slide_content(presentation, slide):
             backdrops.append(shape)
         elif (shape.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE and shape.auto_shape_type == MSO_SHAPE.RECTANGLE
               and not shape.text and covers_slide(shape, width, height)):
-            color = solid_rectangle_color(shape, Theme(slide, presentation))
+            theme = Theme(slide, presentation)
+            color = solid_fill_color(theme, *shape_fill(shape, theme))
             if color is None:
                 content.append(shape)
             else:
@@ -221,12 +230,98 @@ def solid_color(node, theme, placeholder=None):
                    for value in hls_to_rgb(hue, min(1, max(0, lightness)), saturation))
 
 
-def is_dark(color):
+def luminance(color):
     channels = rgb_channels(color)
     if channels is None:
-        return False
+        return None
     linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4 for value in channels]
-    return sum(value * weight for value, weight in zip(linear, (0.2126, 0.7152, 0.0722), strict=True)) < 0.179
+    return sum(value * weight for value, weight in zip(linear, (0.2126, 0.7152, 0.0722), strict=True))
+
+
+def is_dark(color):
+    level = luminance(color)
+    return level is not None and level < 0.179
+
+
+def contrast_ratio(color, background):
+    low, high = sorted((luminance(color), luminance(background)))
+    return (high + 0.05) / (low + 0.05)
+
+
+def readable_color(color, background):
+    if background is None or contrast_ratio(color, background) >= 4.5:
+        return color
+    hue, lightness, saturation = rgb_to_hls(*rgb_channels(color))
+    choices = []
+    for endpoint, extreme in ((0, "000000"), (1, "FFFFFF")):
+        if contrast_ratio(extreme, background) < 4.5:
+            continue
+        fails, passes = lightness, endpoint
+        best = extreme
+        for _ in range(12):
+            middle = (fails + passes) / 2
+            candidate = "".join(f"{round(value * 255):02X}" for value in hls_to_rgb(hue, middle, saturation))
+            if contrast_ratio(candidate, background) >= 4.5:
+                passes, best = middle, candidate
+            else:
+                fails = middle
+        choices.append((abs(passes - lightness), best))
+    return min(choices)[1]
+
+
+def slide_surface(slide, theme):
+    for layer in (slide, theme.layout, theme.master):
+        background = layer._element.cSld.bg
+        if background is None:
+            continue
+        if background.bgPr is not None:
+            return solid_fill_color(theme, background.bgPr.eg_fillProperties)
+        colors = list(theme.referenced_fills(background.bgRef))
+        return colors[0] if len(colors) == 1 and rgb_channels(colors[0]) is not None else None
+    return "FFFFFF"
+
+
+def fill_surface(theme, background, fill, placeholder=None):
+    if fill is None or fill.tag in {qn("a:noFill"), qn("a:grpFill")}:
+        return background
+    color = solid_fill_color(theme, fill, placeholder)
+    return visible_color(color, fill[0], background) if color is not None else None
+
+
+def visible_color(color, node, background):
+    alpha = node.find(qn("a:alpha")) if node is not None else None
+    if alpha is None or alpha.get("val") == "100000":
+        return color
+    if background is None:
+        return None
+    opacity = int(alpha.get("val")) / 100000
+    return "".join(f"{round(255 * (front * opacity + back * (1 - opacity))):02X}"
+                   for front, back in zip(rgb_channels(color), rgb_channels(background), strict=True))
+
+
+def cell_surface(cell, theme, background):
+    fill = cell._tc.tcPr.eg_fillProperties if cell._tc.tcPr is not None else None
+    return fill_surface(theme, background, fill)
+
+
+def shape_surfaces(shapes, theme, background):
+    layers = []
+    for shape in shapes:
+        if shape._element._nvXxPr.cNvPr.get("hidden") in {"1", "true"}:
+            yield background
+            continue
+        left, top, width, height = shape_frame(shape)
+        x, y = left + width / 2, top + height / 2
+        behind = next((color for box, color in reversed(layers)
+                       if box[0] <= x <= box[2] and box[1] <= y <= box[3]), background)
+        fill, placeholder = shape_fill(shape, theme)
+        surface = fill_surface(theme, behind, fill, placeholder)
+        if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+            layers.append((bounds(shape), None))
+        elif (shape.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE and shape.auto_shape_type == MSO_SHAPE.RECTANGLE
+              and not shape.rotation and fill is not None and fill.tag != qn("a:noFill")):
+            layers.append((bounds(shape), surface))
+        yield surface
 
 
 def dark_image_fill(fill, part):
@@ -755,15 +850,21 @@ class PreservedSlides:
             scale = 1
         target_deck = target.part.package.presentation_part.presentation
         target_theme = Theme(target, target_deck)
+        existing = list(target.shapes)
+        background = slide_surface(target, target_theme)
         # Fontes herdadas e novas quebras podem mudar a altura após a escala.
         for _ in range(64):
             dx = x + (w - width * scale) / 2 - left * scale
             dy = y + (h - height * scale) / 2 - top * scale
             positioned = [position_copy(shape, element, frame, scale, dx, dy, target.shapes, target_theme)
                           for shape, element, frame in copies]
-            bottom = max((rect[3] for element in positioned
-                          if (rect := text_bounds(target.shapes._shape_factory(element), target_theme,
-                                                  target_deck.slide_height)) is not None), default=y)
+            targets = [target.shapes._shape_factory(element) for element in positioned]
+            surfaces = list(shape_surfaces(existing + targets, target_theme, background))[len(existing):]
+            for (shape, _, _), copied, surface in zip(copies, targets, surfaces, strict=True):
+                normalize_shape_text(shape, copied, theme, target_theme, surface)
+            bottom = max((rect[3] for copied in targets
+                          if (rect := text_bounds(copied, target_theme, target_deck.slide_height)) is not None),
+                         default=y)
             if bottom <= y + h + 1:  # Tolerância de 1 EMU pelo arredondamento do XML.
                 break
             scale *= max(0.5, min(0.98, (h / 2) / (bottom - y - h / 2 + 2)))
@@ -860,6 +961,55 @@ def set_inherited_text_sizes(shape, theme):
                 sizes = (style.get("sz") for style in theme.defaults(shape, frame, paragraph.level)
                          if style is not None and "sz" in style.attrib)
                 default.set("sz", next(sizes, "1800"))
+
+
+def normalize_shape_text(source, target, source_theme, target_theme, surface):
+    if target.shape_type == GROUP:
+        originals = {shape.shape_id: shape for shape in source.shapes}
+        for child, background in zip(target.shapes, shape_surfaces(target.shapes, target_theme, surface), strict=True):
+            normalize_shape_text(originals[child.shape_id], child, source_theme, target_theme, background)
+    elif target.has_table:
+        for original, cell in zip(source.table.iter_cells(), target.table.iter_cells(), strict=True):
+            if not cell.is_spanned:
+                background = cell_surface(cell, target_theme, surface)
+                normalize_text(source, original.text_frame, cell.text_frame, source_theme, background)
+    elif target.has_text_frame:
+        normalize_text(source, source.text_frame, target.text_frame, source_theme, surface)
+
+
+def normalize_text(shape, source, target, theme, background):
+    from clinic_deck import CINZA_CLARO, FONTE, FONTE_FORTE, TEXTO
+    from conferir import text_color_node, text_defaults
+
+    title = shape.is_placeholder and shape.placeholder_format.type in {
+        PP_PLACEHOLDER.TITLE, PP_PLACEHOLDER.CENTER_TITLE, PP_PLACEHOLDER.VERTICAL_TITLE,
+    }
+    style_color = str(CINZA_CLARO if background is not None and is_dark(background) else TEXTO)
+    for original, paragraph in zip(source.paragraphs, target.paragraphs, strict=True):
+        defaults = text_defaults(original, shape, source, theme)
+        original_runs = (node for node in original._p if node.findtext(qn("a:t"), ""))
+        copied_runs = (node for node in paragraph._p if node.findtext(qn("a:t"), ""))
+        for source_node, node in zip(original_runs, copied_runs, strict=True):
+            styles = [style for style in (source_node.find(qn("a:rPr")), *defaults) if style is not None]
+            bold, italic = (next((style.get(key) in {"1", "true"} for style in styles if key in style.attrib), False)
+                            for key in ("b", "i"))
+            color_node = text_color_node(styles, shape)
+            base = theme.color(color_node) if color_node is not None else "000000"
+            color = solid_color(color_node, theme) if color_node is not None else base
+            neutral = color != "FFFFFF" and color[0:2] == color[2:4] == color[4:6]
+            if rgb_channels(color) is None or base == "1F497D" or neutral:
+                color = style_color
+            font = Font(node.get_or_add_rPr())
+            font.name = FONTE_FORTE if title and bold else FONTE
+            font.bold, font.italic = bold, italic
+            for script in ("ea", "cs"):
+                existing = font._rPr.find(qn(f"a:{script}"))
+                if existing is not None:
+                    existing.set("typeface", font.name)
+            fill = font._rPr.eg_fillProperties
+            if fill is not None:
+                font._rPr.remove(fill)
+            font.color.rgb = RGBColor.from_string(readable_color(color, background))
 
 
 def scale_details(element, scale):
