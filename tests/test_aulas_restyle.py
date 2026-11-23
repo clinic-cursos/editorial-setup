@@ -615,7 +615,11 @@ def test_preserved_fits_centered_content(tmp_path, style, content_top, content_b
 
 
 @pytest.mark.parametrize("frame_height", [0.48, 5])
-def test_preserved_fits_autofit_text_and_keeps_visible_shapes(tmp_path, frame_height):
+def test_preserved_fits_autofit_text_and_keeps_visible_shapes(tmp_path, frame_height, monkeypatch):
+    monkeypatch.syspath_prepend(str(CLI.parent))
+    from conferir import Theme
+    from restyle import text_bounds
+
     original = Presentation()
     slide = original.slides.add_slide(original.slide_layouts[1])
     slide.shapes.title.text = "Título original"
@@ -642,6 +646,12 @@ def test_preserved_fits_autofit_text_and_keeps_visible_shapes(tmp_path, frame_he
     assert label.top + label.height <= Inches(5.375) + 1
     assert label.height < 0.99 * oversized.height * (copied[filled.name].height / filled.height)
     assert label.text_frame.paragraphs[0].runs[0].font.size > Pt(18)
+
+    target_deck = label.part.package.presentation_part.presentation
+    target_theme = Theme(label.part.slide, target_deck)
+    for shape in (copied[placeholder.name], label):
+        _, _, _, text_bottom = text_bounds(shape, target_theme, target_deck.slide_height)
+        assert text_bottom <= Inches(5.375) + 1, shape.name
 
 
 def test_preserved_excludes_empty_textbox_inside_group(tmp_path):
