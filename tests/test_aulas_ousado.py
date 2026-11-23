@@ -257,6 +257,91 @@ def test_bold_optional_image_panel_uses_full_text_width_when_omitted(tmp_path, k
     assert full.left + full.width == pytest.approx(deck.slide_width - Inches(0.45), abs=1)
 
 
+@pytest.mark.parametrize("kind,field,expected_size", [
+    ("passo_a_passo", "passos", 18),
+    ("alerta", "itens", 18),
+    ("pilares", "pilares", 18),
+    ("texto_imagem", "topicos", 15),
+])
+def test_bold_text_only_enlarges_five_short_items(tmp_path, kind, field, expected_size):
+    items = [f"Item {i}" for i in range(1, 6)]
+    values = items if kind == "texto_imagem" else [{"texto": item} for item in items]
+    path = write_script(tmp_path, [{"tipo": kind, "titulo": "Roteiro", field: values}], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    runs = run_styles(fingerprint(Presentation(out).slides[0])["runs"])
+    assert [runs[item][0][0] for item in items] == [expected_size] * len(items)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("kind,field,count", [
+    ("passo_a_passo", "passos", 6),
+    ("alerta", "itens", 4),
+    ("pilares", "pilares", 5),
+    ("texto_imagem", "topicos", 5),
+])
+def test_bold_text_only_fits_dense_items_at_the_floor(tmp_path, kind, field, count):
+    content = "Planeje as etapas e revise o material. " * 5 + "Fim."
+    items = [f"{i}. {content}" for i in range(1, count + 1)]
+    values = items if kind == "texto_imagem" else [{"titulo": f"Etapa {i}", "texto": item}
+                                                   for i, item in enumerate(items, 1)]
+    path = write_script(tmp_path, [{"tipo": kind, "titulo": "Roteiro", field: values}], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    deck = Presentation(out)
+    slide = deck.slides[0]
+    runs = run_styles(fingerprint(slide)["runs"])
+    for item in items:
+        assert runs[item][0][0] == 8
+    if kind != "texto_imagem":
+        assert 8 < runs["ETAPA 1" if kind != "passo_a_passo" else "Etapa 1"][0][0] <= 10
+    boxes = [shape for shape in slide.shapes if shape.has_text_frame
+             and any(item in shape.text for item in items)]
+    assert all(first.top + first.height <= second.top for first, second in zip(boxes, boxes[1:]))
+    assert boxes[-1].top + boxes[-1].height <= deck.slide_height
+    if kind == "texto_imagem":
+        for box in boxes:
+            frame = box.text_frame
+            width = box.width.pt - frame.margin_left.pt - frame.margin_right.pt
+            line_count = sum(len(wrap(line, width=int(width / (8 * 0.6)))) for line in box.text.splitlines())
+            assert line_count * 8 * 1.2 + frame.margin_top.pt + frame.margin_bottom.pt <= box.height.pt
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("heading", [
+    "Planejamento",
+    "Um roteiro claro ajuda a organizar as atividades da oficina e preparar o material de apoio",
+])
+def test_bold_text_only_title_has_a_two_line_limit(tmp_path, heading):
+    path = write_script(tmp_path, [{
+        "tipo": "texto_imagem", "titulo": heading, "texto": "Confira o roteiro.",
+    }], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+    slide = Presentation(out).slides[0]
+    title, body = [next(shape for shape in slide.shapes if shape.has_text_frame and shape.text == value)
+                   for value in (heading, "Confira o roteiro.")]
+    frame = title.text_frame
+    size = frame.paragraphs[0].runs[0].font.size.pt
+    width = title.width.pt - frame.margin_left.pt - frame.margin_right.pt
+    assert 18 <= size <= 40
+    assert len(wrap(heading, width=int(width / (size * 0.7)), break_long_words=False)) <= 2
+    assert title.top + title.height <= body.top
+
+
+def test_bold_text_only_topic_heading_scales_with_body(tmp_path):
+    path = write_script(tmp_path, [{
+        "tipo": "texto_imagem", "titulo": "Roteiro",
+        "topicos": [{"titulo": "Planejamento", "texto": "Confira o roteiro."}],
+    }], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    runs = run_styles(fingerprint(Presentation(out).slides[0])["runs"])
+    assert runs["Planejamento"][0][0] == pytest.approx(runs["Confira o roteiro."][0][0] * 1.2)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 @pytest.mark.parametrize("panel", [{}, {"prompt_imagem": "Cena de teste"}], ids=["text-only", "with-panel"])
 def test_bold_pillars_badge_matches_module_without_covering_text(tmp_path, panel):
     label = "Conheça nosso curso online de planejamento de aulas"
