@@ -257,6 +257,53 @@ def test_bold_optional_image_panel_uses_full_text_width_when_omitted(tmp_path, k
     assert full.left + full.width == pytest.approx(deck.slide_width - Inches(0.45), abs=1)
 
 
+@pytest.mark.parametrize("panel", [{}, {"prompt_imagem": "Cena de teste"}], ids=["text-only", "with-panel"])
+def test_bold_pillars_badge_matches_module_without_covering_text(tmp_path, panel):
+    label = "Conheça nosso curso online de planejamento de aulas"
+    path = write_script(tmp_path, [
+        {"tipo": "modulo", "numero": 1, "titulo": "Planejamento", "selo": label},
+        {"tipo": "pilares", "titulo": "Planejamento", "selo": label,
+         "pilares": [{"titulo": f"Etapa {i}", "texto": f"Descrição da etapa {i}"} for i in range(1, 4)],
+         "info": "Atividade em grupo\nOficina de aulas", "referencia": "Roteiro da oficina", **panel},
+    ], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    module, pillars = Presentation(out).slides
+    module_label, pillars_label = [
+        next((shape for shape in slide.shapes if shape.has_text_frame and shape.text == label), None)
+        for slide in (module, pillars)
+    ]
+    assert module_label is not None
+    assert pillars_label is not None, "O selo deve aparecer no slide de pilares"
+
+    def badge_background(slide, box):
+        return next(shape for shape in slide.shapes if shape.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE
+                    and (shape.left, shape.top, shape.width, shape.height)
+                    == (box.left, box.top, box.width, box.height))
+
+    module_badge = badge_background(module, module_label)
+    pillars_badge = badge_background(pillars, pillars_label)
+    assert pillars_badge.auto_shape_type == module_badge.auto_shape_type
+    assert pillars_badge.fill.fore_color.rgb == module_badge.fill.fore_color.rgb
+    assert pillars_badge.height == module_badge.height
+    assert run_fingerprint(pillars_label.text_frame.paragraphs[0].runs[0]) == run_fingerprint(
+        module_label.text_frame.paragraphs[0].runs[0],
+    )
+
+    content = {shape.text: shape for shape in pillars.shapes
+               if shape.has_text_frame and shape.text and shape.shape_id != pillars_label.shape_id}
+    assert {"Descrição da etapa 3", "Atividade em grupo\nOficina de aulas", "Roteiro da oficina"} <= content.keys()
+    for caption, shape in content.items():
+        assert (
+            shape.left + shape.width <= pillars_badge.left
+            or pillars_badge.left + pillars_badge.width <= shape.left
+            or shape.top + shape.height <= pillars_badge.top
+            or pillars_badge.top + pillars_badge.height <= shape.top
+        ), caption
+
+
 @pytest.mark.parametrize("kind", ["anatomia", "comparativo"])
 def test_bold_required_image_panel_needs_image_or_prompt(tmp_path, kind):
     path = write_script(tmp_path, [{"tipo": kind, "titulo": "Título de teste"}], avulso=True)

@@ -264,6 +264,9 @@ def s_pillars(prs, s, d):
     panel = has_image_panel(d)
     x = 4.75 if panel else M
     full_width = W - 2 * M
+    badge_text = d.get("selo")
+    badge_width = 2.9
+    badge_left = W - M - badge_width
     info = [accent_runs(row, ROSE) for row in d.get("info", "").splitlines()]
     if panel:
         photo(s, d, 0, 0, 4.3, H, dark=True, prompt_height=H - 1)
@@ -271,7 +274,8 @@ def s_pillars(prs, s, d):
         _alpha(r, 0.6)
         text(s, M, H - 0.85, 3.6, 0.7, info, size=9, color=BRANCO)
     elif info:
-        text(s, M, H - 0.85, full_width, 0.45, info, size=9, color=BRANCO)
+        info_width = badge_left - M - 0.15 if badge_text else full_width
+        text(s, M, H - 0.85, info_width, 0.45, info, size=9, color=BRANCO)
     small_arc(s, 3.55, -0.9, 1.8, VINHO, 0.2, 90, 180)
     logo(s, True)
     kicker(s, d.get("kicker", ""), x, 0.55)
@@ -286,6 +290,8 @@ def s_pillars(prs, s, d):
         b = text(s, x + 1.0, y + 0.32, body_width, 0.5, t, size=9.5, color=CINZA_CLARO)
         line(s, x + 0.05, y + 0.85, W - M, y + 0.85, color=NOITE2, w=0.75)
         an.add(n, gap=0, eff="up"); an.add(a, gap=60); an.add(b, gap=200)
+    if badge_text:
+        badge(s, badge_text, badge_left, H - 0.7, w=badge_width, color=VINHO_ESC)
     text(s, x, H - 0.4, 4.8 if panel else full_width, 0.25, d.get("referencia", ""), size=6.5, color=CINZA)
     morph(s); an.build()
 

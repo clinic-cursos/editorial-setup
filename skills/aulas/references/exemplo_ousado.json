@@ -44,6 +44,7 @@
         {"titulo": "Revisão", "texto": "Confira a resposta."}
       ],
       "info": "**Oficina**\nAtividade em grupo",
+      "selo": "Conheça a oficina de aulas",
       "referencia": "Roteiro da oficina",
       "prompt_imagem": "Caderno aberto sobre uma mesa.",
       "estilo_imagem": "foto"
