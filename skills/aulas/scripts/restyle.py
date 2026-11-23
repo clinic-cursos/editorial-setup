@@ -1,13 +1,18 @@
 """Extrai um roteiro e reaproveita objetos editáveis de slides PowerPoint."""
 
+from colorsys import hls_to_rgb, rgb_to_hls
 from copy import deepcopy
+from io import BytesIO
 import json
 import math
 from pathlib import Path
 import re
+from typing import NamedTuple
 from zipfile import BadZipFile
 
+from PIL import Image, ImageStat
 from pptx import Presentation
+from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE, PP_PLACEHOLDER
 from pptx.exc import PackageNotFoundError
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
@@ -15,6 +20,9 @@ from pptx.opc.oxml import serialize_part_xml
 from pptx.opc.packuri import PackURI
 from pptx.oxml import parse_xml
 from pptx.oxml.ns import qn
+from pptx.oxml.shapes.picture import CT_Picture
+from pptx.shapes.picture import Picture
+from pptx.util import Length
 
 
 REL_PREFIX = qn("r:id").split("}")[0] + "}"
@@ -84,9 +92,38 @@ def image_parts(shape):
             yield rel.target_part
 
 
-def is_decoration(shape, first, width, height):
+def covers_slide(shape, width, height):
+    left, top = shape.left or 0, shape.top or 0
+    return (shape.rotation == 0 and left <= width * 0.01 and top <= height * 0.01
+            and left + (shape.width or 0) >= width * 0.99
+            and top + (shape.height or 0) >= height * 0.99)
+
+
+def is_full_slide_picture(shape, width, height):
+    return (
+        shape._element.tag == qn("p:pic")
+        or shape._element.find(f"{qn('p:spPr')}/{qn('a:blipFill')}") is not None
+    ) and covers_slide(shape, width, height)
+
+
+def background_picture(slide, width, height):
+    fill = slide._element.find(f"{qn('p:cSld')}/{qn('p:bg')}/{qn('p:bgPr')}/{qn('a:blipFill')}")
+    if fill is None or fill.blip is None:
+        return None
+    blip = fill.blip
+    rid = blip.get(qn("r:embed")) or blip.get(qn("r:link"))
+    if not rid:
+        return None
+    element = CT_Picture.new_pic(0, "Original slide background image", "", rid, 0, 0, width, height)
+    copied_fill = deepcopy(fill)
+    copied_fill.tag = qn("p:blipFill")
+    element.replace(element.blipFill, copied_fill)
+    return Picture(element, slide.shapes)
+
+
+def is_decoration(shape, width, height):
     label = shape.name.casefold().lstrip("!").replace("_", " ")
-    if re.match(r"(?:logo(?:tipo)?|fundo|background|slide number|page number|número (?:de|do) (?:slide|página))\b", label):
+    if re.match(r"(?:logo(?:tipo)?|slide number|page number|número (?:de|do) (?:slide|página))\b", label):
         return True
     if shape.is_placeholder and shape.placeholder_format.type == PP_PLACEHOLDER.SLIDE_NUMBER:
         return True
@@ -96,27 +133,125 @@ def is_decoration(shape, first, width, height):
     picture = shape._element.tag == qn("p:pic")
     if picture and corner and w <= width * 0.12 and h <= height * 0.16:
         return y <= height * 0.05 or y + h >= height * 0.95
-    if corner and y >= height * 0.9 and h <= height * 0.1 and NUMBER.fullmatch(value.strip()):
-        return True
-    rectangle = shape.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE and shape.auto_shape_type == MSO_SHAPE.RECTANGLE
-    return (shape is first and (picture or rectangle) and not value
-            and x <= width * 0.01 and y <= height * 0.01
-            and x + w >= width * 0.99 and y + h >= height * 0.99)
+    return corner and y >= height * 0.9 and h <= height * 0.1 and NUMBER.fullmatch(value.strip())
+
+
+def solid_rectangle_color(shape, theme):
+    properties = shape._element.spPr
+    fill = properties.eg_fillProperties
+    placeholder = None
+    if fill is None:
+        reference = shape._element.find(f"{qn('p:style')}/{qn('a:fillRef')}")
+        styles = theme.theme.find(f".//{qn('a:fillStyleLst')}")
+        if reference is not None and styles is not None:
+            index = int(reference.get("idx", 0))
+            if 1 <= index <= len(styles):
+                fill = styles[index - 1]
+                placeholder = next(iter(reference), None)
+    if fill is not None and fill.tag == qn("a:solidFill") and len(fill):
+        return solid_color(fill[0], theme, placeholder)
+    return None
 
 
 def slide_content(presentation, slide):
+    from conferir import Theme
+
     shapes = list(slide.shapes)
     width, height = presentation.slide_width, presentation.slide_height
+    picture = background_picture(slide, width, height)
+    if picture is not None:
+        shapes.insert(0, picture)
     title = slide.shapes.title
-    first = next((shape for shape in shapes if title is None or shape.shape_id != title.shape_id), None)
-    content = [shape for shape in shapes if not is_decoration(shape, first, width, height)]
+    content = []
+    backdrops = []
+    rectangle_color = None
+    for shape in shapes:
+        if is_full_slide_picture(shape, width, height):
+            backdrops.append(shape)
+        elif (shape.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE and shape.auto_shape_type == MSO_SHAPE.RECTANGLE
+              and not shape.text and covers_slide(shape, width, height)):
+            color = solid_rectangle_color(shape, Theme(slide, presentation))
+            if color is None:
+                content.append(shape)
+            else:
+                rectangle_color = color
+        elif not is_decoration(shape, width, height):
+            content.append(shape)
     if title is None or not title.text.strip():
         # Sem placeholder, o primeiro texto curto na faixa superior é o candidato a título.
         title = next((shape for shape in reading_order(content)
                       if shape.has_text_frame and 0 < len(shape.text.strip()) <= 150
                       and (shape.top or 0) <= height * 0.22
                       and "\n" not in shape.text and "\v" not in shape.text), None)
-    return shapes, title, [shape for shape in content if title is None or shape.shape_id != title.shape_id]
+    return shapes, title, backdrops, [
+        shape for shape in content if title is None or shape.shape_id != title.shape_id
+    ], rectangle_color
+
+
+def rgb_channels(color):
+    if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
+        return None
+    return tuple(int(color[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+
+def solid_color(node, theme, placeholder=None):
+    color = theme.color(node, placeholder)
+    channels = rgb_channels(color)
+    if channels is None:
+        return color
+    hue, lightness, saturation = rgb_to_hls(*channels)
+    for change in node:
+        if change.tag == qn("a:lumMod"):
+            lightness *= int(change.get("val")) / 100000
+        elif change.tag == qn("a:lumOff"):
+            lightness += int(change.get("val")) / 100000
+    return "".join(f"{round(value * 255):02X}"
+                   for value in hls_to_rgb(hue, min(1, max(0, lightness)), saturation))
+
+
+def is_dark(color):
+    channels = rgb_channels(color)
+    if channels is None:
+        return False
+    linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4 for value in channels]
+    return sum(value * weight for value, weight in zip(linear, (0.2126, 0.7152, 0.0722), strict=True)) < 0.179
+
+
+def dark_image_fill(fill, part):
+    blip = fill.blip
+    relationship = part.rels.get(blip.get(qn("r:embed"))) if blip is not None else None
+    if relationship is None or relationship.is_external or relationship.reltype != RT.IMAGE:
+        return False
+    try:
+        with Image.open(BytesIO(relationship.target_part.blob)) as image:
+            image.thumbnail((64, 64), Image.Resampling.BOX)
+            channels = ImageStat.Stat(image.convert("RGB")).mean
+    except (OSError, Image.DecompressionBombError):
+        return False
+    return is_dark("".join(f"{round(channel):02X}" for channel in channels))
+
+
+def has_dark_background(presentation, slide):
+    from conferir import Theme, fill_colors
+
+    layout = slide.slide_layout
+    for owner in (slide, layout, layout.slide_master):
+        background = owner._element.cSld.bg
+        if background is None:
+            continue
+        properties = background.bgPr
+        if properties is not None:
+            fill = properties.eg_fillProperties
+            if fill is not None and fill.tag == qn("a:blipFill"):
+                return dark_image_fill(fill, owner.part)
+            theme = Theme(slide, presentation)
+            if fill is not None and fill.tag == qn("a:solidFill") and len(fill):
+                return is_dark(solid_color(fill[0], theme))
+            colors = list(fill_colors(properties, theme))
+        else:
+            colors = list(Theme(slide, presentation).referenced_fills(background.bgRef))
+        return bool(colors) and all(is_dark(color) for color in colors)
+    return False
 
 
 def is_drawing(shape):
@@ -173,7 +308,8 @@ def extract(deck, folder, selection):
     source = str(deck.resolve())
     for number in numbers:
         slide = presentation.slides[number - 1]
-        shapes, title, content = slide_content(presentation, slide)
+        shapes, title, backdrops, content, _ = slide_content(presentation, slide)
+        content = backdrops + content
         ordered = reading_order(shapes)
         images = []
         content_images = []
@@ -229,6 +365,14 @@ def extract(deck, folder, selection):
     return path
 
 
+class PreservedFrame(NamedTuple):
+    x: Length
+    y: Length
+    width: Length
+    height: Length
+    panel_color: RGBColor
+
+
 class PreservedSlides:
     """Reusa cada deck de origem e importa partes OPC uma vez por geração."""
 
@@ -264,16 +408,27 @@ class PreservedSlides:
 
     def copy(self, target, script, box):
         deck, source = self.source(script.get("deck"), script.get("slide"))
-        _, _, shapes = slide_content(deck, source)
+        _, _, backdrops, content, rectangle_color = slide_content(deck, source)
+        shapes = backdrops + content
         if not shapes:
             return []
+        x, y, w, h, panel_color = box
+        dark = not backdrops and (is_dark(rectangle_color) if rectangle_color is not None
+                                  else has_dark_background(deck, source))
+        if dark:
+            panel = target.shapes.add_shape(MSO_SHAPE.RECTANGLE, x, y, w, h)
+            panel.name = "Preserved content background"
+            panel.shadow.inherit = False
+            panel.fill.solid()
+            panel.fill.fore_color.rgb = panel_color
+            panel.line.fill.background()
+
         sizes = [shape_size(shape) for shape in shapes]
         geometry = [bounds(shape, size) for shape, size in zip(shapes, sizes, strict=True)]
         left = min(rect[0] for rect in geometry)
         top = min(rect[1] for rect in geometry)
         width = max(rect[2] for rect in geometry) - left
         height = max(rect[3] for rect in geometry) - top
-        x, y, w, h = box
         scale = min(w / width if width else math.inf, h / height if height else math.inf)
         if not math.isfinite(scale):
             scale = 1

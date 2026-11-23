@@ -5,6 +5,8 @@ import sys
 
 from PIL import Image
 from pptx import Presentation
+from pptx.dml.color import RGBColor
+from pptx.enum.dml import MSO_FILL, MSO_THEME_COLOR
 from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE, MSO_SHAPE_TYPE
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.opc.oxml import serialize_part_xml
@@ -22,12 +24,117 @@ def run_cli(*args):
     return subprocess.run([sys.executable, str(CLI), *map(str, args)], capture_output=True, text=True)
 
 
+def restyle_one(tmp_path, original, style):
+    source = tmp_path / "original.pptx"
+    original.save(source)
+    script = tmp_path / "roteiro.json"
+    script.write_text(json.dumps({
+        "estilo": style, "avulso": True,
+        "slides": [{"tipo": "preservado", "deck": source.name, "slide": 1, "titulo": "Novo título"}],
+    }), encoding="utf-8")
+    out = tmp_path / "restyle.pptx"
+    result = run_cli("gerar", script, out)
+    assert result.returncode == 0, result.stderr
+    return list(Presentation(out).slides[0].shapes)
+
+
+def picture_fill(slide, image):
+    _, rid = slide.part.get_or_add_image_part(str(image))
+    slide._element.cSld.insert(0, parse_xml(
+        f'<p:bg {nsdecls("p", "a", "r")}><p:bgPr><a:blipFill><a:blip r:embed="{rid}"/>'
+        '<a:stretch><a:fillRect/></a:stretch></a:blipFill></p:bgPr></p:bg>'
+    ))
+
+
+@pytest.mark.parametrize("picture_kind", ["shape", "fill"])
+def test_preserved_copies_full_slide_picture_behind_labels(tmp_path, picture_kind):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    image = tmp_path / "photo.png"
+    Image.new("RGB", (32, 24), "#9C4C48").save(image)
+    label = slide.shapes.add_textbox(Inches(2), Inches(3), Inches(1), Inches(0.5))
+    label.text = "Rótulo"
+    if picture_kind == "shape":
+        slide.background.fill.solid()
+        slide.background.fill.fore_color.rgb = RGBColor.from_string("101010")
+        picture = slide.shapes.add_picture(str(image), 0, 0, original.slide_width, original.slide_height)
+        picture.name = "Fundo foto"
+    else:
+        picture_fill(slide, image)
+
+    shapes = restyle_one(tmp_path, original, "ousado")
+    pictures = [shape for shape in shapes
+                if shape.shape_type == MSO_SHAPE_TYPE.PICTURE and shape.image.blob == image.read_bytes()]
+    assert len(pictures) == 1
+    picture = pictures[0]
+    copied_label = next(shape for shape in shapes if shape.has_text_frame and shape.text == label.text)
+    assert shapes.index(picture) < shapes.index(copied_label)
+    assert picture.top == pytest.approx(Inches(1.79), abs=1)
+    assert picture.height == pytest.approx(Inches(5.375 - 1.79), abs=1)
+    scale = picture.height / original.slide_height
+    assert copied_label.left - picture.left == pytest.approx(label.left * scale, abs=2)
+    assert copied_label.top - picture.top == pytest.approx(label.top * scale, abs=2)
+    assert all(shape.name != "Preserved content background" for shape in shapes)
+
+
+@pytest.mark.parametrize("style, panel_color", [("padrao", "141211"), ("ousado", "1C1212")])
+@pytest.mark.parametrize("surface", ["slide", "layout", "master", "rectangle", "layout-image", "shaded", "light"])
+def test_preserved_matches_effective_background_contrast(tmp_path, style, panel_color, surface):
+    original = Presentation()
+    layout = original.slide_layouts[6]
+    slide = original.slides.add_slide(layout)
+    if surface == "layout-image":
+        image = tmp_path / "dark.png"
+        Image.new("RGB", (32, 24), "#151515").save(image)
+        picture_fill(layout, image)
+    elif surface == "rectangle":
+        rectangle = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, original.slide_width, original.slide_height)
+        rectangle.name = "Retângulo original"
+        rectangle.fill.solid()
+        rectangle.fill.fore_color.rgb = RGBColor.from_string("303030")
+    else:
+        fill = {"slide": slide, "layout": layout, "master": layout.slide_master, "shaded": slide,
+                "light": layout.slide_master}[surface].background.fill
+        fill.solid()
+        fill.fore_color.theme_color = MSO_THEME_COLOR.DARK_1
+        if surface == "shaded":
+            fill.fore_color.theme_color = MSO_THEME_COLOR.LIGHT_1
+            fill.fore_color.brightness = -0.8
+        if surface == "light":
+            slide.background.fill.solid()
+            slide.background.fill.fore_color.rgb = RGBColor.from_string("F0F0F0")
+    label = slide.shapes.add_textbox(Inches(2), Inches(3), Inches(3), Inches(1))
+    run = label.text_frame.paragraphs[0].add_run()
+    run.text = "Texto branco"
+    run.font.color.rgb = RGBColor.from_string("FFFFFF")
+
+    shapes = restyle_one(tmp_path, original, style)
+    copied_label = next(shape for shape in shapes if shape.has_text_frame and shape.text == label.text)
+    assert str(copied_label.text_frame.paragraphs[0].runs[0].font.color.rgb) == "FFFFFF"
+    assert all(shape.name != "Retângulo original" for shape in shapes)
+    if surface == "layout-image":
+        assert all(shape.shape_type != MSO_SHAPE_TYPE.PICTURE or shape.image.blob != image.read_bytes()
+                   for shape in shapes)
+    panels = [shape for shape in shapes if shape.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE
+              and shape.fill.type == MSO_FILL.SOLID and str(shape.fill.fore_color.rgb) == panel_color]
+    if surface == "light":
+        assert panels == []
+        return
+    assert len(panels) == 1
+    panel = panels[0]
+    assert shapes.index(panel) < shapes.index(copied_label)
+    assert panel.left <= copied_label.left <= copied_label.left + copied_label.width <= panel.left + panel.width
+    assert panel.top <= copied_label.top <= copied_label.top + copied_label.height <= panel.top + panel.height
+
+
 @pytest.fixture
 def source_deck(tmp_path):
     prs = Presentation()
     slide = prs.slides.add_slide(prs.slide_layouts[5])
     background = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, prs.slide_width, prs.slide_height)
     background.name = "Fundo"
+    background.fill.solid()
+    background.fill.fore_color.rgb = RGBColor.from_string("FFFFFF")
     slide.shapes.title.text = "Título de teste"
     image = tmp_path / "foto.png"
     Image.new("RGB", (32, 16), "#9C4C48").save(image)
@@ -238,7 +345,9 @@ def test_preserved_fits_centered_content(tmp_path, style, content_top, content_b
     slide = original.slides.add_slide(original.slide_layouts[5])
     slide.shapes.title.text = "Título original"
     if extra_extent == "background":
-        slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, original.slide_width, original.slide_height)
+        background = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, original.slide_width, original.slide_height)
+        background.fill.solid()
+        background.fill.fore_color.rgb = RGBColor.from_string("FFFFFF")
     label = slide.shapes.add_textbox(Inches(3), Inches(3), Inches(4), Inches(1))
     label.name = "Rótulo central"
     label.text_frame.margin_left = Inches(0.2)

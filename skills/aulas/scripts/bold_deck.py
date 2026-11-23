@@ -18,6 +18,7 @@ from clinic_deck import (
     PRETO, ROSE, ROSE_CLARO, TEXTO, VINHO, VINHO_ESC, W, _alpha, _parse_bold,
     arc, badge, image, line, rect, text,
 )
+from restyle import PreservedFrame
 
 NOITE = RGBColor(0x1C, 0x12, 0x12)      # fundo escuro quente (vinho quase preto)
 NOITE2 = RGBColor(0x2A, 0x1A, 0x19)
@@ -532,7 +533,8 @@ def s_preserved(prs, s, d, preserved):
     divider_top = title_top + title_height + 0.05
     bar(s, M, divider_top, color=VINHO)
     content_top = divider_top + 0.20
-    objects = preserved.copy(s, d, (Inches(M), Inches(content_top), Inches(W - 2 * M), Inches(H - 0.25 - content_top)))
+    frame = PreservedFrame(Inches(M), Inches(content_top), Inches(W - 2 * M), Inches(H - 0.25 - content_top), NOITE)
+    objects = preserved.copy(s, d, frame)
     animation = Anim(s)
     for shape in [heading, *objects]:
         animation.add(shape, gap=0 if shape is not heading else 250)

@@ -25,7 +25,7 @@ from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION, XL_LABEL_POSITION
 from pptx.oxml.ns import qn
 from lxml import etree
 
-from restyle import PreservedSlides
+from restyle import PreservedFrame, PreservedSlides
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(HERE, "..", "assets")
@@ -960,7 +960,8 @@ def layout_preservado(prs, s, d, preserved):
     title_lines = d.get("titulo", "").rstrip().splitlines()
     divider_top = header_editorial(s, title_lines, d.get("kicker"), title_height=0.8)
     content_top = divider_top + 0.19
-    preserved.copy(s, d, (Inches(M), Inches(content_top), Inches(W - 2 * M), Inches(H - 0.35 - content_top)))
+    frame = PreservedFrame(Inches(M), Inches(content_top), Inches(W - 2 * M), Inches(H - 0.35 - content_top), PRETO)
+    preserved.copy(s, d, frame)
 
 
 LAYOUTS = {k[7:]: v for k, v in globals().items() if k.startswith("layout_")}
