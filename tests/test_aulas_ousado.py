@@ -3,7 +3,7 @@
 uv run --locked python tests/test_aulas_ousado.py /var/tmp/aulas-render/in/modelo.pptx > tests/fixtures/aulas/modelo-v1.json
 """
 
-from collections import Counter
+from collections import Counter, defaultdict
 import json
 from pathlib import Path
 import subprocess
@@ -11,6 +11,7 @@ import sys
 from zipfile import ZipFile
 
 from pptx import Presentation
+from pptx.enum.dml import MSO_COLOR_TYPE
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.oxml.ns import qn
 import pytest
@@ -35,6 +36,8 @@ def fingerprint(slide, *, omit_text=()):
     morph_shapes = [shape for shape in slide.shapes if shape.name.startswith("!!")]
     assert len(morph_shapes) == len({shape.name for shape in morph_shapes})
     background = next(shape for shape in morph_shapes if shape.name == "!!fundo")
+    text_shapes = [shape for shape in slide.shapes
+                   if shape.has_text_frame and shape.text and shape.name not in omit_text]
     return {
         "background": str(background.fill.fore_color.rgb),
         "shapes": {
@@ -42,9 +45,29 @@ def fingerprint(slide, *, omit_text=()):
                          for dimension in ("left", "top", "width", "height")]
             for shape in morph_shapes
         },
-        "texts": [shape.text for shape in slide.shapes
-                  if shape.has_text_frame and shape.text and shape.name not in omit_text],
+        "texts": [shape.text for shape in text_shapes],
+        "runs": [run_fingerprint(run)
+                 for shape in text_shapes for paragraph in shape.text_frame.paragraphs
+                 for run in paragraph.runs if run.text],
     }
+
+
+def run_fingerprint(run):
+    font = run.font
+    return {
+        "text": run.text,
+        "size_pt": font.size.pt if font.size is not None else None,
+        "font": font.name,
+        "bold": font.bold,
+        "color": str(font.color.rgb) if font.color.type == MSO_COLOR_TYPE.RGB else None,
+    }
+
+
+def run_styles(runs):
+    styles = defaultdict(list)
+    for run in runs:
+        styles[run["text"]].append((run["size_pt"], run["font"], run["bold"], run["color"]))
+    return styles
 
 
 def generate(path, out):
@@ -76,6 +99,7 @@ def test_model_matches_reference(tmp_path):
     reference = json.loads(FIXTURE.read_text(encoding="utf-8"))
     slides = Presentation(out).slides
     assert len(slides) == len(reference) == 16
+    style_mismatches = []
     for number, (slide, expected) in enumerate(zip(slides, reference, strict=True), 1):
         prompts = [shape for shape in slide.shapes if shape.name.startswith("Texto do prompt ")]
         omitted = ()
@@ -95,7 +119,46 @@ def test_model_matches_reference(tmp_path):
         for name, geometry in expected["shapes"].items():
             assert actual["shapes"][name] == pytest.approx(geometry, abs=0.02), (number, name)
         assert Counter(actual["texts"]) == Counter(expected["texts"]), number
+        actual_texts = Counter(run["text"] for run in actual["runs"])
+        expected_texts = Counter(run["text"] for run in expected["runs"])
+        # No slide 13, dois runs do modelo formam um run no roteiro.
+        unmatched = (sum((expected_texts - actual_texts).values()),
+                     sum((actual_texts - expected_texts).values()))
+        assert unmatched == ((2, 1) if number == 13 else (0, 0)), number
+        actual_styles = run_styles(actual["runs"])
+        expected_styles = run_styles(expected["runs"])
+        for text in expected_styles:
+            if text in actual_styles and actual_styles[text] != expected_styles[text]:
+                style_mismatches.append((number, text, expected_styles[text], actual_styles[text]))
         assert_motion(slide)
+    assert not style_mismatches, f"Tipografia (slide, texto, modelo, gerado): {style_mismatches}"
+
+
+@pytest.mark.parametrize("slide,model_size", [
+    ({"tipo": "numero"}, 130),
+    ({"tipo": "anatomia"}, 40),
+])
+def test_bold_number_size_respects_text_width(tmp_path, slide, model_size):
+    values = ["123", "123456789012345"]
+    path = write_script(tmp_path, [
+        {**slide, "valor": value, "indicador": {"valor": value}}
+        for value in values
+    ])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stderr
+    presentation = Presentation(out)
+    for generated, value in zip(presentation.slides, values, strict=True):
+        shape = next(shape for shape in generated.shapes
+                     if shape.has_text_frame and shape.text == value)
+        size = shape.text_frame.paragraphs[0].runs[0].font.size.pt
+        available_pt = shape.width.pt - shape.text_frame.margin_left.pt - shape.text_frame.margin_right.pt
+        assert shape.left + shape.width <= presentation.slide_width
+        assert size * len(value) <= available_pt
+        if value == values[0]:
+            assert size == model_size
+        else:
+            assert 0 < size < model_size
 
 
 def test_bold_uses_relative_image_and_slide_text(tmp_path):

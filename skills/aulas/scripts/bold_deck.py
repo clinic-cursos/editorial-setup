@@ -299,13 +299,22 @@ def s_steps(prs, s, d):
     morph(s); an.build()
 
 
+def number_font_size(value, width, model_size):
+    # Reserve one em per character and account for the 0.02-inch margins from text().
+    available_pt = Inches(width - 0.04).pt
+    return max(1, min(model_size, int(available_pt / max(1, len(value)))))
+
+
 def s_number(prs, s, d):
     an = Anim(s)
     bg(s, NOITE)
     big_arc(s, 2.2, -0.7, 7.0, VINHO, 0.55, 180, 360)
     logo(s, True)
     kicker(s, d.get("kicker", ""), M, 0.55)
-    an.add(text(s, 0, 1.55, W, 1.8, str(d.get("valor", "")), size=60, color=BRANCO, font=FONTE_FORTE, bold=True, align=PP_ALIGN.CENTER, spacing=0.8), eff="up", dur=800, gap=300)
+    value = str(d.get("valor", ""))
+    an.add(text(s, 0, 1.55, W, 1.8, value, size=number_font_size(value, W, 130),
+                color=BRANCO, font=FONTE_FORTE, bold=True, align=PP_ALIGN.CENTER, spacing=0.8),
+           eff="up", dur=800, gap=300)
     an.add(text(s, 0, 3.25, W, 0.5, d.get("legenda", ""), size=16, color=ROSE, bold=True, align=PP_ALIGN.CENTER), gap=400)
     an.add(text(s, 2.0, 3.9, 6, 0.8, d.get("texto", ""),
                 size=10, color=CINZA_CLARO, align=PP_ALIGN.CENTER))
@@ -354,8 +363,10 @@ def s_anatomy(prs, s, d):
         b = text(s, 4.45, y + 0.06, width, 0.45, t, size=10, color=TEXTO)
         an.add(n, gap=0); an.add(b, gap=160, eff="left")
     if kpi := d.get("indicador"):
-        k = name(rect(s, 7.65, 1.8, 1.9, 2.0, fill=VINHO), "!!kpi")
-        a = text(s, 7.65, 2.0, 1.9, 0.9, str(kpi.get("valor", "")), size=24, color=BRANCO,
+        kpi_width = 1.9
+        value = str(kpi.get("valor", ""))
+        k = name(rect(s, 7.65, 1.8, kpi_width, 2.0, fill=VINHO), "!!kpi")
+        a = text(s, 7.65, 2.0, kpi_width, 0.9, value, size=number_font_size(value, kpi_width, 40), color=BRANCO,
                  font=FONTE_FORTE, bold=True, align=PP_ALIGN.CENTER)
         b = text(s, 7.75, 2.9, 1.7, 0.7, kpi.get("texto", ""), size=9.5, color=ROSE_CLARO, align=PP_ALIGN.CENTER)
         an.add(k, gap=0, eff="up"); an.add(a, gap=0, eff="up"); an.add(b, gap=200)
