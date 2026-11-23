@@ -13,6 +13,7 @@ Imagens: qualquer campo "imagem" aceita um caminho de arquivo. Se faltar ou o
 arquivo não existir, entra um espaço reservado cinza com a descrição, para o
 professor trocar depois.
 """
+import copy
 import json, os, sys
 from pptx import Presentation
 from pptx.util import Inches, Pt, Emu
@@ -23,6 +24,8 @@ from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION, XL_LABEL_POSITION
 from pptx.oxml.ns import qn
 from lxml import etree
+
+from restyle import PreservedSlides
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(HERE, "..", "assets")
@@ -278,16 +281,19 @@ def header(s, title, dark_logo=False):
     s.shapes.add_picture(A("logo_branco.png"), Inches(W - M - 0.62), Inches(0.12), height=Inches(0.42))
 
 
-def header_editorial(s, title, kicker=None):
+def header_editorial(s, title, kicker=None, *, title_height=0.45):
     """Variação refinada (estilo dos slides novos do HOF): fundo claro,
     título vinho, grade de pontinhos e fio fino."""
     dots(s, M, 0.36)
     if kicker:
         text(s, M + 0.36, 0.18, 6, 0.22, kicker, size=8, color=ROSE, bold=True, caps=True)
-    text(s, M + 0.36, 0.3, W - 2 * M - 1.2, 0.45, title, size=20, color=VINHO,
+    title_top = 0.3
+    text(s, M + 0.36, title_top, W - 2 * M - 1.2, title_height, title, size=20, color=VINHO,
          font=FONTE_FORTE, bold=True, caps=True, anchor=MSO_ANCHOR.MIDDLE)
-    line(s, M, 0.86, W - M, 0.86, color=VINHO, w=0.75)
+    divider_top = title_top + title_height + 0.11
+    line(s, M, divider_top, W - M, divider_top, color=VINHO, w=0.75)
     s.shapes.add_picture(A("logo_cor.png"), Inches(W - M - 0.62), Inches(0.24), height=Inches(0.44))
+    return divider_top
 
 
 def footer(s, n, total, label=""):
@@ -950,17 +956,28 @@ PARCERIAS_PADRAO = [
 ]
 
 
+def layout_preservado(prs, s, d, preserved):
+    title_lines = d.get("titulo", "").rstrip().splitlines()
+    divider_top = header_editorial(s, title_lines, d.get("kicker"), title_height=0.8)
+    content_top = divider_top + 0.19
+    preserved.copy(s, d, (Inches(M), Inches(content_top), Inches(W - 2 * M), Inches(H - 0.35 - content_top)))
+
+
 LAYOUTS = {k[7:]: v for k, v in globals().items() if k.startswith("layout_")}
 
 
-def build(spec, out, base_dir="."):
+def build(spec, out, base_dir=".", *, layouts=LAYOUTS):
+    PROMPTS.clear()
     prs = Presentation()
     prs.slide_width = Inches(W); prs.slide_height = Inches(H)
     blank = prs.slide_layouts[6]
-    slides = list(spec["slides"])
+    slides = copy.deepcopy(spec["slides"])
+    avulso = spec.get("avulso", False)
     tipos = [x.get("tipo") for x in slides]
-    if spec.get("parcerias", True) and "parceria" not in tipos and "continue_evolucao" not in tipos:
-        import copy
+    for tipo in tipos:
+        if not isinstance(tipo, str) or tipo not in layouts:
+            raise SystemExit(f"tipo desconhecido: {tipo}. Disponíveis: {', '.join(layouts)}")
+    if not avulso and spec.get("parcerias", True) and "parceria" not in tipos and "continue_evolucao" not in tipos:
         pos = tipos.index("encerramento") if "encerramento" in tipos else len(slides)
         extra = copy.deepcopy(PARCERIAS_PADRAO)
         for e in extra:  # assets padrão
@@ -970,11 +987,11 @@ def build(spec, out, base_dir="."):
                 c["icone"] = A(c["icone"]); c["qr"] = A(c["qr"])
         slides[pos:pos] = extra
     tipos = [x.get("tipo") for x in slides]
-    if spec.get("precificacao", True) and "precificacao" not in tipos:
-        import copy
+    if not avulso and spec.get("precificacao", True) and "precificacao" not in tipos:
         pos = tipos.index("parceria") if "parceria" in tipos else (tipos.index("encerramento") if "encerramento" in tipos else len(slides))
         slides[pos:pos] = [x for x in copy.deepcopy(PRECIFICACAO_PADRAO) if x["tipo"] not in tipos]
     total = len(slides)
+    preserved = PreservedSlides()
     for n, d in enumerate(slides, 1):
         # resolve caminhos relativos
         for k in ("imagem", "antes", "depois", "qr", "logo"):
@@ -985,10 +1002,13 @@ def build(spec, out, base_dir="."):
                             for i in d["imagens"]]
         s = prs.slides.add_slide(blank)
         tipo = d.get("tipo")
-        if tipo not in LAYOUTS:
-            raise SystemExit(f"tipo desconhecido: {tipo}. Disponíveis: {', '.join(LAYOUTS)}")
-        LAYOUTS[tipo](prs, s, d)
-        if tipo not in ("capa", "modulo", "frase", "encerramento", "parceria", "continue_evolucao", "custos", "precificacao"):
+        if tipo == "preservado":
+            if isinstance(d.get("deck"), str) and d["deck"]:
+                d["deck"] = os.path.join(base_dir, d["deck"])
+            layouts[tipo](prs, s, d, preserved)
+        else:
+            layouts[tipo](prs, s, d)
+        if layouts is LAYOUTS and tipo not in ("capa", "modulo", "frase", "encerramento", "parceria", "continue_evolucao", "custos", "precificacao"):
             footer(s, n, total, spec.get("rodape", ""))
         notes(s, d.get("notas"))
     prs.save(out)

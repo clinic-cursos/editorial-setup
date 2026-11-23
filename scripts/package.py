@@ -172,6 +172,8 @@ def codex_agent(source: Path) -> str:
     }
     if not body.strip():
         raise ValueError(f"{source}: missing agent instructions")
+    if source.stem == "revisor-aulas":
+        fields.update(model="gpt-6.2-sol", sandbox_mode="read-only")
     # JSON string escapes also work in TOML basic strings. Escape DEL for TOML.
     return "".join(
         f"{key} = " + json.dumps(value, ensure_ascii=False).replace("\x7f", r"\u007F") + "\n"

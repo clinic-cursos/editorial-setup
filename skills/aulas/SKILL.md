@@ -1,6 +1,6 @@
 ---
 name: aulas
-description: Monta aulas da Clinic Cursos em PowerPoint (.pptx) na identidade da escola a partir de textos, artigos, apostilas ou dump de ideias, com parcerias e prompts de imagem.
+description: Use quando pedirem uma aula da Clinic Cursos em PowerPoint a partir de conteúdo, a adaptação de um deck ou slide ao design system, ou um slide avulso ou corrigido.
 ---
 
 # Aulas Clinic Cursos: design system de apresentações
@@ -11,7 +11,14 @@ Esta skill é **independente da julie-bae-social**. Não use DM Serif, linho nem
 
 Público: profissionais da estética em formação (biomédicos, dentistas, enfermeiros). Linguagem técnica, didática e direta.
 
-## Identidade (base: template de cursos livres + HOF básico, refinados)
+## Estilos
+
+Declare `estilo` no roteiro. Para roteiros antigos sem esse campo, a ferramenta usa `padrao`. Um pedido para "refazer no design system novo" usa `ousado`. Se a pessoa pedir explicitamente o estilo padrão, use `padrao`.
+
+- **`padrao`**: formato 16:9, tipografia Montserrat, tarja escura ou cabeçalho editorial e a identidade descrita abaixo. Sem transição Morph nem animações de entrada.
+- **`ousado`**: modelo mestre v1. Alterna fundos noite `#1C1212`, creme `#FAF6F4` e vinho `#9C4C48`, com Montserrat em títulos grandes, fotos sangradas e o arco do logo. Os slides têm transição Morph, animação de entrada e elementos nomeados como `!!fundo` e `!!logo`.
+
+## Identidade do estilo padrão
 
 - **Cores do logo:** vinho `#9C4C48` (principal), rosé `#B68B85` (apoio), cinza `#6E6F73` (texto secundário). Apoio: vinho escuro `#6E2F2C`, rosé claro `#F4ECEA` (caixas de destaque), texto `#404040`, preto `#141211`.
 - **Verde `#6AA84F`:** só no selo "Conheça nosso curso…" (herdado do template).
@@ -35,7 +42,7 @@ Público: profissionais da estética em formação (biomédicos, dentistas, enfe
 | `capa` | abertura da aula | titulo, curso, subtitulo (só "Módulo N") |
 | `modulo` | divisória entre módulos | numero, titulo, descricao, selo |
 | `sumario` | tópicos / conteúdo programático | titulo, info (horários), itens[], destaque (índice) |
-| `texto_imagem` | conceito com 2–4 pontos + imagem clínica | kicker, titulo, topicos[] (str ou {titulo, texto}), imagem, legenda, lado (direita/esquerda), destaque |
+| `texto_imagem` | conceito com 2–4 pontos + imagem clínica | kicker, titulo, topicos[] (str ou {titulo, texto}), imagem, legenda, lado (direita/esquerda), destaque. No estilo ousado, foto usa `imagem_modo: "sangrar"` (padrão), enquanto diagrama, print e infográfico usam `imagem_modo: "conter"`. |
 | `anatomia` | imagem anatômica grande com marcações | titulo, imagem, legenda, marcacoes[{nome, x, y, desc}] (x,y de 0 a 1 sobre a imagem), nota |
 | `passo_a_passo` | técnica em etapas | titulo, passos[{titulo, texto}], imagem (opcional → layout vertical), dica |
 | `antes_depois` | resultado comparativo | titulo, antes, depois, rotulo_antes, rotulo_depois, legenda (produto · técnica · tempo) |
@@ -54,13 +61,23 @@ Público: profissionais da estética em formação (biomédicos, dentistas, enfe
 
 Todo slide aceita `notas` (vai para as notas do apresentador). Em qualquer texto, `**trecho**` vira negrito vinho.
 
+No `texto_imagem` ousado, o gerador reduz o título de 46 até 18 pt e o corpo de 11 até 8 pt, em passos de 1 pt, conforme a largura das palavras e a altura estimada. Se ainda houver excesso no tamanho mínimo, o texto inteiro segue para o `conferir`.
+
+## Escolha a entrada
+
+1. **Aula do zero com conteúdo.** Leia os materiais e monte o roteiro JSON seguindo a seção abaixo. Rode `gerar`.
+2. **Deck ou slide de referência.** Rode `extrair` no PowerPoint recebido. Use `--slides` para selecionar números ou intervalos. A ferramenta grava `roteiro-rascunho.json` e a pasta `img/`. Dirija o roteiro: confira a ordem e a integridade dos textos, escolha o tipo de cada slide, ajuste o texto sem alterar o sentido e declare o estilo. Use `preservado` para manter composições complexas, como marcações desenhadas sobre uma foto. Rode `gerar` com o roteiro ajustado. O rascunho vem com `"avulso": true` para conservar a seleção sem inserções automáticas.
+3. **Slide avulso ou pontual a corrigir.** Monte um roteiro só com os slides pedidos e use `"avulso": true`. Para correção, parta do roteiro da versão a corrigir ou use `extrair` com a seleção do slide. Se a pessoa pediu o deck inteiro corrigido, mantenha os demais slides no roteiro e gere o deck completo.
+
+`"avulso": true` funciona nos dois estilos e gera só os slides declarados. Inclua capa, encerramento, precificação ou parcerias no roteiro apenas se fizerem parte da seleção pedida.
+
 ## Como transformar o material em aula
 
 1. **Leia tudo** e identifique o tema, os módulos naturais (introdução, anatomia, materiais, mecanismo, indicações, planejamento, técnica, pós, intercorrências, resultados…) e o que for dado, técnica, caso, alerta ou referência.
 2. **Estrutura padrão:** capa → sumário → para cada módulo: `modulo` + slides de conteúdo → frase de impacto (opcional, no máximo 1 ou 2 por aula) → referências → **Como compor seu preço → Precificação → Galderma → Ilikia → Continue sua evolução** → encerramento.
    - **Precificação está em todo esqueleto.** O layout é fixo e os valores mudam por curso. Preencha `procedimentos` com os procedimentos do curso. Ao declarar `precificacao` no roteiro, declare `custos` logo antes: o gerador só insere os dois slides sozinho quando o roteiro não tem `precificacao`, e sem `custos` a aula perde o "Como compor seu preço". O gerador calcula custo financeiro, imposto e lucro (preço − produto − custo fixo − insumos − taxa% − imposto%). Sem valores no material, os slides entram com "R$" e um traço no lugar do valor; nunca invente preços.
-   - Os 3 slides de parceria são **obrigatórios em toda aula**. O gerador já os insere sozinho antes do encerramento, com o conteúdo padrão e os QR codes oficiais. Não os escreva no roteiro, a não ser que precise mudar o conteúdo.
-   - Se uma parceria mudar (validade, desconto, contato, QR), atualize `PARCERIAS_PADRAO` no script e as imagens em `assets/parcerias/` da skill.
+   - Inclua os 3 slides de parceria em aulas completas, salvo pedido explícito para omiti-los. O gerador já os insere sozinho antes do encerramento, com o conteúdo padrão e os QR codes oficiais.
+   - Para personalizar uma parceria nesta aula, declare os slides de parceria e de continuação no roteiro com os dados e recursos aprovados.
 3. **Escolha o tipo pelo conteúdo, não pelo hábito:**
    - números ou evolução no tempo → `grafico`;
    - comparação de 2 ou mais opções em vários critérios → `tabela`;
@@ -73,7 +90,7 @@ Todo slide aceita `notas` (vai para as notas do apresentador). Em qualquer texto
 4. **Densidade:** slide é apoio de aula. No máximo cerca de 40 palavras por slide de conteúdo, tópicos curtos, um conceito por slide. O detalhe vai para `notas`.
 5. **Precisão técnica:** não invente dados, doses, calibres ou referências. Se o material não trouxer um número, deixe genérico ou marque `[confirmar]`. Prefira citar estudos que o professor enviou. Se precisar complementar evidência, busque no PubMed (se conectado) e cite.
 6. **Imagens:** use os arquivos enviados (caminho em `imagem`, `antes`, `depois`, `imagens`). Sem imagem, siga a seção "Direção de imagens": prompt para ilustrações, descrição da foto para casos reais.
-7. Monte o JSON do roteiro, rode o gerador, renderize para conferir (`soffice --headless --convert-to pdf` + `pdftoppm`), corrija texto estourado ou sobreposto e entregue o .pptx.
+7. Monte o JSON do roteiro e siga a seção "Execução". Faça as correções no roteiro e gere uma nova versão.
 
 
 ## Direção de imagens (prompts para o ChatGPT)
@@ -83,7 +100,6 @@ Você atua como diretor de arte. Para cada espaço de imagem, decida o que ilust
 - **Como usar:** nos tipos com imagem (`texto_imagem`, `anatomia`, `passo_a_passo`), preencha `prompt_imagem` com a descrição da cena.
   - `estilo_imagem: "foto"` serve para retratos e cenas realistas; o padrão é ilustração médica 3D.
   - `alerta_imagem` traz um aviso que aparece no quadro.
-  - Em layouts próprios, use `prompt_box(...)`.
 - **O que o gerador faz sozinho:**
   - desenha o quadro tracejado no lugar da imagem, com o prompt completo;
   - acrescenta o **estilo da casa** (`ESTILO_CASA` ou `ESTILO_FOTO`) e o **formato certo** para o tamanho do espaço (16:9, 3:2, 1:1, 2:3, 9:16);
@@ -101,10 +117,10 @@ Você atua como diretor de arte. Para cada espaço de imagem, decida o que ilust
 
 Origem: design system das aulas enviado pela Julie em 19/11/2026 (`docs/fontes/2026-11-19-julie-design-system/`). O visual e as regras são dela; aqui só mudaram os caminhos, que passam a apontar para a pasta da skill.
 
-- `scripts/clinic_deck.py`: o gerador.
-- `scripts/bold_deck.py`: demonstração de estilo "bold" com conteúdo fixo (não lê roteiro). Serve só de referência visual; não use para gerar aula. Os textos clínicos fixos dela são marcadores `[EXEMPLO: ...]`.
+- `scripts/aulas.py`: entrada única para extrair, gerar, conferir e renderizar.
 - `assets/`: logos, foto de fundo, QR codes e ícones das parcerias (`assets/parcerias/`), como arquivos de imagem.
 - `references/exemplo_roteiro.json`: roteiro de exemplo; mostra só o formato, e todo conteúdo clínico nele é marcador `[EXEMPLO: ...]` a substituir.
+- `references/modelo_hof_roteiro.json`: roteiro de referência para os tipos do modelo mestre v1. Para cada aula, use o conteúdo recebido no pedido.
 
 Os scripts leem `assets/` pelo caminho relativo à própria pasta, então nada precisa ser montado antes de gerar. Se um asset faltar, peça ao usuário os logos e a foto de fundo da Clinic Cursos.
 
@@ -113,16 +129,15 @@ Os scripts leem `assets/` pelo caminho relativo à própria pasta, então nada p
 No repositório:
 
 ```
-uv run --locked python skills/aulas/scripts/clinic_deck.py roteiro.json "Aula.pptx"
+uv run --locked python skills/aulas/scripts/aulas.py extrair "Referência.pptx" rascunho/ --slides 3,5-9
+uv run --locked python skills/aulas/scripts/aulas.py gerar roteiro.json "Aula.pptx"
+uv run --locked python skills/aulas/scripts/aulas.py conferir "Aula.pptx" --estilo ousado --json > conferir.json
+uv run --locked python skills/aulas/scripts/aulas.py previa "Aula.pptx" previa/
 ```
 
-Fora dele (skill instalada no ChatGPT, Codex ou Claude), com `python-pptx` instalado (`pip install python-pptx`), na pasta da skill:
+Fora dele (skill instalada no ChatGPT, Codex ou Claude), com `python-pptx` instalado, use `python3 scripts/aulas.py` na pasta da skill, com os mesmos subcomandos.
 
-```
-python3 scripts/clinic_deck.py roteiro.json "Aula.pptx"
-```
-
-`roteiro.json` e `Aula.pptx` são nomes de exemplo: troque pelos do projeto.
+Troque os caminhos de exemplo pelos do projeto. Remova `--slides` para extrair o deck inteiro. Em `conferir`, use o mesmo estilo do roteiro. `gerar` já executa a checagem automática. Se `gerar` ou `conferir` reprovar, corrija o roteiro e gere novamente antes de encaminhar a versão.
 
 Exemplo mínimo de roteiro:
 
@@ -140,4 +155,6 @@ Exemplo mínimo de roteiro:
 
 As parcerias entram sozinhas antes do encerramento. Use `"parcerias": false` só se o usuário pedir uma aula sem elas.
 
-**Pré-visualização:** o .pptx usa Montserrat. Se o ambiente não tiver a fonte, crie um alias no fontconfig para Poppins só para renderizar a prévia. Sempre confira a prévia antes de entregar: texto estourado, sobreposição e QR legível.
+**Pré-visualização:** `previa` usa `soffice` e `pdftoppm` para gerar um PNG por slide. Confira todos os PNGs para identificar texto cortado, sobreposições e QR ilegível. Se encontrar uma falha visual, corrija o roteiro e gere, confira e renderize a nova versão. Se a prévia falhar, registre o impedimento e retome em um ambiente que consiga renderizar com Montserrat.
+
+Produza e inspecione o .pptx só com `aulas.py`. Corrija pelo roteiro em vez de escrever código python-pptx ou abrir e editar o PowerPoint por outro meio. Devolva o .pptx, o roteiro, o relatório do `conferir` e a prévia ao Editor-Chefe para encaminhar ao `revisor-aulas`.

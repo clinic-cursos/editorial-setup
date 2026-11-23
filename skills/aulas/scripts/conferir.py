@@ -1,0 +1,447 @@
+"""Confere a identidade e a geometria do deck e renderiza a prévia."""
+
+import json
+import re
+import shutil
+import subprocess
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unicodedata import combining, normalize
+
+from lxml import etree
+from pptx.dml.color import RGBColor
+from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE
+from pptx.opc.constants import RELATIONSHIP_TYPE as RT
+from pptx.oxml.ns import qn
+from pptx.util import Emu, Inches, Pt
+
+import bold_deck
+import clinic_deck
+from restyle import bounds, open_deck
+
+
+# Tons locais de clinic_deck.image, prompt_box, tabela, precificacao e parcerias.
+STANDARD_COLORS = {"2A2625", "2A1E1D", "F6EFED", "FBF7F6", "F7F7F7",
+                   "FAF6F4", "F5F1F0", "FAF8F7"}
+STANDARD_COLORS.update(str(value) for value in vars(clinic_deck).values() if isinstance(value, RGBColor))
+PALETTES = {
+    "padrao": STANDARD_COLORS,
+    "ousado": STANDARD_COLORS | {str(value) for value in vars(bold_deck).values() if isinstance(value, RGBColor)},
+}
+BLEED_NAMES = {"!!arco", "!!arco2", "!!foto", "!!fundo"}
+# As caixas dos arcos do padrão legado são mantidas para preservar o PPTX original.
+LEGACY_ARCS = ((0, 4.125, 2.4, 6.525), (7.6, -0.1, 10.1, 2.4),
+               (-0.3, -0.3, 1.3, 1.3), (8, 3.425, 10.3, 5.725))
+BOUNDS_TOLERANCE = 10  # EMU, arredondamento de coordenadas de formas livres
+MARKER = re.compile(r"\[exemplo|\[confirmar\]", re.IGNORECASE)
+MARKER_ONLY = re.compile(r"\[(?:exemplo[^\]]*|confirmar)\]", re.IGNORECASE)
+PRESERVED_EXTENSION = "{A046E92C-840E-4D35-9C5C-4A96E281F065}"
+FILL_TAGS = {qn("a:" + name) for name in ("solidFill", "gradFill", "pattFill", "blipFill", "noFill", "grpFill")}
+
+# Avanços hmtx em milésimos de em. Regular e Bold vêm dos TTF do diagramador;
+# ExtraBold vem da Montserrat variável no peso 800. A tabela dispensa fonte instalada.
+WIDTH_CHARS = "".join(map(chr, range(32, 127))) + "\u2013\u2014‘’“”…•→"
+MONTSERRAT_WIDTHS = {
+    "regular": dict(zip(WIDTH_CHARS, (
+        262, 260, 373, 696, 615, 829, 669, 202, 329, 329, 386, 575, 212, 382, 212, 335, 662, 361,
+        568, 564, 661, 566, 609, 589, 638, 609, 212, 212, 575, 575, 575, 567, 1033, 717, 754, 709,
+        826, 669, 633, 773, 813, 302, 501, 711, 589, 955, 813, 839, 718, 839, 723, 615, 574, 792,
+        698, 1111, 656, 635, 651, 318, 335, 318, 576, 500, 600, 590, 678, 563, 678, 604, 339, 686,
+        677, 269, 274, 598, 269, 1061, 677, 627, 678, 678, 401, 489, 406, 673, 542, 879, 534, 542,
+        511, 334, 295, 334, 575, 500, 1000, 212, 212, 382, 382, 647, 295, 600,
+    ), strict=True)),
+    "bold": dict(zip(WIDTH_CHARS, (
+        283, 289, 437, 720, 638, 877, 728, 230, 357, 358, 434, 599, 262, 386, 262, 392, 679, 392,
+        590, 592, 689, 595, 637, 620, 660, 637, 262, 262, 599, 599, 599, 589, 1035, 766, 765, 724,
+        826, 671, 639, 771, 808, 328, 541, 740, 604, 955, 808, 844, 732, 844, 735, 638, 618, 788,
+        746, 1163, 714, 676, 671, 368, 392, 368, 600, 500, 600, 617, 690, 591, 692, 631, 387, 700,
+        691, 301, 307, 655, 301, 1049, 691, 655, 690, 690, 431, 531, 435, 687, 598, 937, 595, 598,
+        543, 391, 309, 391, 599, 500, 1000, 262, 262, 498, 498, 798, 358, 600,
+    ), strict=True)),
+    "extrabold": dict(zip(WIDTH_CHARS, (
+        291, 301, 462, 730, 647, 897, 752, 242, 369, 369, 453, 609, 283, 388, 283, 415, 685, 405,
+        599, 603, 700, 607, 649, 632, 669, 649, 283, 283, 609, 609, 609, 597, 1036, 786, 769, 730,
+        826, 672, 642, 770, 806, 339, 557, 752, 610, 954, 806, 846, 737, 846, 740, 647, 635, 786,
+        766, 1184, 737, 693, 679, 389, 415, 389, 610, 500, 600, 628, 695, 603, 698, 642, 406, 705,
+        696, 313, 320, 677, 313, 1045, 696, 666, 695, 695, 443, 547, 447, 692, 620, 956, 619, 620,
+        556, 414, 314, 414, 609, 500, 1000, 283, 283, 545, 545, 858, 383, 600,
+    ), strict=True)),
+}
+
+
+def glyph_width(char, widths):
+    if char in widths:
+        return widths[char]
+    # Letras acentuadas usam o avanço da base; símbolos ausentes usam 0,6 em.
+    return sum(widths.get(base, 600) for base in normalize("NFKD", char) if not combining(base))
+
+
+def measure_line(line, width, wrap):
+    """Mede palavras que cruzam runs e devolve a maior fonte de cada linha visual."""
+    text = "".join(part for part, _, _ in line)
+    metrics = [(glyph_width(char, widths) * size / 1000, size)
+               for part, size, widths in line for char in part]
+    used = gap = size = 0
+    rows = []
+    wide_word = False
+    # O espaço inseparável pertence à palavra para fins de quebra.
+    for match in re.finditer(r"(?:(?!\u00a0)\s)+|(?:\S|\u00a0)+", text):
+        token = metrics[match.start():match.end()]
+        advance = sum(length for length, _ in token)
+        if match.group().isspace() and "\u00a0" not in match.group():
+            gap += advance
+            continue
+        wide_word |= advance > width
+        if wrap and used and used + gap + advance > width:
+            rows.append(size)
+            used = gap = size = 0
+        used += gap + advance if used else advance
+        size = max(size, max(point_size for _, point_size in token))
+        gap = 0
+    if not wrap and used > width:
+        wide_word = True
+    rows.append(size or max((size for _, size, _ in line), default=0))
+    return rows, wide_word
+
+
+def mark_preserved(shape):
+    if is_preserved(shape):
+        return
+    properties = shape._element._nvXxPr.cNvPr
+    extensions = properties.find(qn("a:extLst"))
+    if extensions is None:
+        extensions = etree.SubElement(properties, qn("a:extLst"))
+    extension = etree.SubElement(extensions, qn("a:ext"), uri=PRESERVED_EXTENSION)
+    etree.SubElement(extension, "{urn:clinic-cursos:aulas}preserved")
+
+
+def is_preserved(shape):
+    return any(extension.get("uri") == PRESERVED_EXTENSION
+               for extension in shape._element._nvXxPr.cNvPr.findall(f"{qn('a:extLst')}/{qn('a:ext')}"))
+
+
+def legacy_arc(shape, box):
+    return (shape.shape_type == MSO_SHAPE_TYPE.FREEFORM
+            and sum(1 for _ in shape._element.iter(qn("a:lnTo"))) == 81
+            and any(all(abs(value - Inches(expected)) <= BOUNDS_TOLERANCE
+                        for value, expected in zip(box, arc, strict=True)) for arc in LEGACY_ARCS))
+
+
+class Theme:
+    def __init__(self, slide, presentation):
+        self.layout = slide.slide_layout
+        master = self.layout.slide_master
+        self.master = master
+        self.text_styles = master._element.find(qn("p:txStyles"))
+        self.default_style = presentation._element.find(qn("p:defaultTextStyle"))
+        self.theme = etree.fromstring(master.part.part_related_by(RT.THEME).blob)
+        self.color_map = dict(master._element.find(qn("p:clrMap")).attrib)
+        for element in (slide.slide_layout._element, slide._element):
+            override = element.find(f"{qn('p:clrMapOvr')}/{qn('a:overrideClrMapping')}")
+            if override is not None:
+                self.color_map.update(override.attrib)
+
+    def font(self, font):
+        if font in ("+mn-lt", "+mj-lt"):
+            family = "minorFont" if font == "+mn-lt" else "majorFont"
+            node = self.theme.find(f".//{qn('a:' + family)}/{qn('a:latin')}")
+            return node.get("typeface")
+        return font
+
+    def color(self, node, placeholder=None):
+        if node.tag == qn("a:srgbClr"):
+            return node.get("val").upper()
+        if node.tag == qn("a:sysClr"):
+            return node.get("lastClr", node.get("val")).upper()
+        if node.tag == qn("a:schemeClr"):
+            value = node.get("val")
+            if value == "phClr" and placeholder is not None:
+                return self.color(placeholder)
+            key = self.color_map.get(value, value)
+            entry = self.theme.find(f".//{qn('a:clrScheme')}/{{{etree.QName(node).namespace}}}{key}")
+            if entry is not None and len(entry):
+                return self.color(entry[0])
+            return value
+        if node.tag == qn("a:scrgbClr"):
+            channels = (max(0, min(1, int(node.get(key)) / 100000)) for key in "rgb")
+            return "".join(f"{round(255 * (v * 12.92 if v <= 0.0031308 else 1.055 * v ** (1 / 2.4) - 0.055)):02X}"
+                           for v in channels)
+        return node.get("val", etree.QName(node).localname)
+
+    def defaults(self, shape, frame, level):
+        path = f"{qn(f'a:lvl{level + 1}pPr')}/{qn('a:defRPr')}"
+        style = frame._txBody.find(qn("a:lstStyle"))
+        if style is not None:
+            yield style.find(path)
+        if shape.is_placeholder:
+            placeholder = self.layout.placeholders.get(idx=shape.placeholder_format.idx)
+            if placeholder is not None and placeholder.has_text_frame:
+                yield placeholder._element.find(f"{qn('p:txBody')}/{qn('a:lstStyle')}/{path}")
+                yield placeholder._element.find(f"{qn('p:txBody')}/{qn('a:p')}/{qn('a:pPr')}/{qn('a:defRPr')}")
+                master_placeholder = self.master.placeholders.get(ph_type=placeholder.placeholder_format.type)
+                if master_placeholder is not None:
+                    yield master_placeholder._element.find(f"{qn('p:txBody')}/{qn('a:lstStyle')}/{path}")
+            placeholder_type = shape.placeholder_format.type.name
+            style_name = "titleStyle" if "TITLE" in placeholder_type else "bodyStyle"
+        else:
+            style_name = "otherStyle"
+        if self.text_styles is not None:
+            yield self.text_styles.find(f"{qn('p:' + style_name)}/{path}")
+        if self.default_style is not None:
+            yield self.default_style.find(path)
+            yield self.default_style.find(f"{qn('a:defPPr')}/{qn('a:defRPr')}")
+
+    def referenced_fills(self, reference):
+        if reference is None:
+            return
+        index = int(reference.get("idx", 0))
+        if index in (0, 1000):
+            return
+        matrix, offset = ("bgFillStyleLst", 1001) if index > 1000 else ("fillStyleLst", 1)
+        styles = self.theme.find(f".//{qn('a:' + matrix)}")
+        if styles is not None and index - offset < len(styles):
+            placeholder = reference[0] if len(reference) else None
+            yield from fill_colors([styles[index - offset]], self, placeholder)
+
+
+def fill_colors(properties, theme, placeholder=None):
+    if properties is None:
+        return
+    paths = {qn("a:solidFill"): "*", qn("a:gradFill"): f"{qn('a:gsLst')}/{qn('a:gs')}/*",
+             qn("a:pattFill"): "*/*"}
+    for fill in properties:
+        if fill.tag in paths:
+            for color in fill.findall(paths[fill.tag]):
+                yield theme.color(color, placeholder)
+
+
+def check_fill(properties, theme, palette, add, reference=None):
+    if properties is not None and any(node.tag in FILL_TAGS for node in properties):
+        colors = fill_colors(properties, theme)
+    else:
+        colors = theme.referenced_fills(reference)
+    for color in sorted(set(colors) - palette):
+        add("fill_color", f"Preenchimento {color} fora da paleta.")
+
+
+def check_text(frame, shape, theme, palette, add, width, height, margins, top, slide_bottom, *, grows=False):
+    text = frame.text.strip()
+    if not text:
+        return 0
+    if MARKER.search(text):
+        add("marker", "Marcador editorial pendente.", "warning")
+    fonts, colors = set(), set()
+    available_width = Emu(width - margins[0] - margins[1]).pt
+    available_height = Emu(height - margins[2] - margins[3]).pt
+    cursor = text_bottom = 0
+    wide_word = False
+    autofit = frame._bodyPr.normAutofit
+    scale = autofit.fontScale / 100 if autofit is not None else 1
+    family = clinic_deck.FONTE.casefold()
+    is_quote = text == bold_deck.QUOTE_MARK
+    for paragraph in frame.paragraphs:
+        defaults = [paragraph._p.find(f"{qn('a:pPr')}/{qn('a:defRPr')}"),
+                    *theme.defaults(shape, frame, paragraph.level)]
+        lines = [[]]
+        previous_size = next((int(style.get("sz")) / 100 for style in defaults
+                              if style is not None and "sz" in style.attrib), 18) * scale
+        for node in paragraph._p:
+            if node.tag == qn("a:br"):
+                if not lines[-1]:
+                    lines[-1].append(("", previous_size, MONTSERRAT_WIDTHS["regular"]))
+                lines.append([])
+            content = node.findtext(qn("a:t"), "")
+            if not content:
+                continue
+            styles = [item for item in (node.find(qn("a:rPr")), *defaults) if item is not None]
+            font = theme.font(next((latin.get("typeface") for style in styles
+                                    if (latin := style.find(qn("a:latin"))) is not None), "+mn-lt"))
+            decorative = is_quote and font == bold_deck.QUOTE_FONT
+            font_family = font.casefold()
+            if (content.strip() and not decorative and font_family != family
+                and not font_family.startswith(family + " ")):
+                fonts.add(font)
+            color = next((values for style in styles if (values := list(fill_colors(style, theme)))), [])
+            colors.update(set(color) - palette)
+            if decorative:
+                continue
+            size = next((int(style.get("sz")) / 100 for style in styles if "sz" in style.attrib), 18) * scale
+            previous_size = size
+            bold = next((style.get("b") in {"1", "true"} for style in styles if "b" in style.attrib), False)
+            weight = "extrabold" if font_family == clinic_deck.FONTE_FORTE.casefold() else "bold" if bold else "regular"
+            for token in re.split(r"([\v\n])", content):
+                if token in {"\v", "\n"}:
+                    lines[-1].append(("", size, MONTSERRAT_WIDTHS[weight]))
+                    lines.append([])
+                elif token:
+                    lines[-1].append((token, size, MONTSERRAT_WIDTHS[weight]))
+        spacing = paragraph.line_spacing
+        cursor += paragraph.space_before.pt if paragraph.space_before is not None else 0
+        for line in lines:
+            rows, over_width = measure_line(line, available_width, frame.word_wrap is not False)
+            wide_word |= over_width
+            has_text = any(part.strip() for part, _, _ in line)
+            for size in rows:
+                if not size:
+                    continue
+                # Aproxima a extensão vertical da Montserrat (968 + 251 unidades por em).
+                line_height = size * 1.219
+                if has_text:
+                    text_bottom = max(text_bottom, cursor + line_height)
+                cursor += spacing.pt if hasattr(spacing, "pt") else line_height * (spacing or 1)
+        cursor += paragraph.space_after.pt if paragraph.space_after is not None else 0
+    for font in sorted(fonts):
+        add("font", f"Fonte {font} fora da família {clinic_deck.FONTE}.")
+    for color in sorted(colors):
+        add("text_color", f"Cor de texto {color} fora da paleta.")
+    if not text_bottom:
+        return 0
+    grows = grows or frame.auto_size == MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
+    anchor = {MSO_ANCHOR.MIDDLE: 0.5, MSO_ANCHOR.BOTTOM: 1}.get(frame.vertical_anchor, 0)
+    offset = anchor * max(0, available_height - text_bottom)
+    reasons = []
+    if wide_word:
+        reasons.append("Palavra ou linha sem quebra excede a largura útil da caixa.")
+    if not grows and text_bottom > max(0, available_height) * 1.10:
+        reasons.append("Texto excede a altura da caixa fixa em mais de 10%.")
+    if Emu(slide_bottom - top - margins[2]).pt < offset + text_bottom:
+        reasons.append("Texto ultrapassa a borda inferior do slide.")
+    if reasons:
+        severity = "warning" if MARKER_ONLY.fullmatch(text) else "error"
+        add("overflow", "Texto provavelmente estourado. " + " ".join(reasons), severity)
+    return Pt(text_bottom) + margins[2] + margins[3]
+
+
+def check_table(shape, theme, palette, add, slide_bottom):
+    table = shape.table
+    heights = [row.height for row in table.rows]
+    top = shape.top
+    for row, table_row in enumerate(table.rows):
+        for col, cell in enumerate(table_row.cells):
+            if cell.is_spanned:
+                continue
+            width = sum(table.columns[i].width for i in range(col, col + cell.span_width))
+            last_row = row + cell.span_height - 1
+            height = sum(heights[row:last_row + 1])
+            check_fill(cell._tc.tcPr, theme, palette, add)
+            margins = (cell.margin_left, cell.margin_right, cell.margin_top, cell.margin_bottom)
+            needed = check_text(cell.text_frame, shape, theme, palette, add, width, height, margins,
+                                top, slide_bottom, grows=True)
+            # A altura gravada é mínima. O crescimento da célula desloca as linhas seguintes.
+            heights[last_row] += max(0, needed - height)
+        top += heights[row]
+
+
+def check_shape(shape, theme, palette, add, slide_bottom, preserved=False):
+    if shape._element._nvXxPr.cNvPr.get("hidden") in {"1", "true"}:
+        return
+    preserved = preserved or is_preserved(shape)
+
+    def finding(rule, message, severity="error"):
+        add(rule, message, "warning" if preserved else severity, shape.name)
+
+    if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+        transform = shape._element.grpSpPr.xfrm
+        if shape.height and transform.chOff is not None and transform.chExt is not None:
+            slide_bottom = (transform.chOff.y
+                            + (slide_bottom - shape.top) * transform.chExt.cy / shape.height)
+        for child in shape.shapes:
+            check_shape(child, theme, palette, add, slide_bottom, preserved)
+    elif not shape.has_chart and shape._element.tag != qn("p:pic"):
+        reference = shape._element.find(f"{qn('p:style')}/{qn('a:fillRef')}")
+        check_fill(shape._element.find(qn("p:spPr")), theme, palette, finding, reference)
+        if shape.has_text_frame:
+            frame = shape.text_frame
+            margins = (frame.margin_left, frame.margin_right, frame.margin_top, frame.margin_bottom)
+            check_text(frame, shape, theme, palette, finding, shape.width, shape.height, margins,
+                       shape.top, slide_bottom)
+        if shape.has_table:
+            check_table(shape, theme, palette, finding, slide_bottom)
+
+
+def inspect(path, style):
+    deck = open_deck(path)
+    palette = PALETTES[style]
+    findings = []
+    for number, slide in enumerate(deck.slides, 1):
+        def add(rule, message, severity="error", shape=None):
+            findings.append({"slide": number, "shape": shape, "rule": rule, "severity": severity,
+                             "message": message})
+
+        theme = Theme(slide, deck)
+        for layer in (slide, theme.layout, theme.master):
+            background = layer._element.find(f"{qn('p:cSld')}/{qn('p:bg')}")
+            if background is not None:
+                check_fill(background.find(qn("p:bgPr")), theme, palette, add, background.find(qn("p:bgRef")))
+                break
+        if style == "ousado":
+            names = {shape.name for shape in slide.shapes}
+            for name in sorted({"!!fundo", "!!logo"} - names):
+                add("morph_shape", f"Forma obrigatória ausente: {name}.")
+            if next(slide._element.iter(f"{{{bold_deck.P159}}}morph"), None) is None:
+                add("morph", "Transição Morph ausente.")
+            timing = slide._element.find(qn("p:timing"))
+            ids = {str(shape.shape_id) for shape in slide.shapes}
+            if timing is None or not any(target.get("spid") in ids for target in timing.iter(qn("p:spTgt"))):
+                add("animation", "Animação de forma ausente.")
+        for shape in slide.shapes:
+            box = bounds(shape)
+            if (shape.name not in BLEED_NAMES
+                and (min(box[:2]) < -BOUNDS_TOLERANCE
+                     or box[2] > deck.slide_width + BOUNDS_TOLERANCE
+                     or box[3] > deck.slide_height + BOUNDS_TOLERANCE)
+                and not legacy_arc(shape, box)):
+                add("bounds", "Forma fora dos limites do slide.",
+                    "warning" if is_preserved(shape) else "error", shape.name)
+            check_shape(shape, theme, palette, add, deck.slide_height)
+    return {"style": style, "slides": len(deck.slides), "findings": findings,
+            "errors": sum(item["severity"] == "error" for item in findings),
+            "warnings": sum(item["severity"] == "warning" for item in findings)}
+
+
+def report(path, style, *, as_json=False):
+    result = inspect(path, style)
+    if as_json:
+        print(json.dumps(result, ensure_ascii=False))
+    else:
+        print(f"Conferência ({style}): {result['slides']} slide(s), "
+              f"{result['errors']} reprovação(ões), {result['warnings']} aviso(s).")
+        for item in result["findings"]:
+            severity = "Reprovação" if item["severity"] == "error" else "Aviso"
+            shape = f" ({item['shape']})" if item["shape"] else ""
+            print(f"Slide {item['slide']}{shape} | {severity}: {item['message']}")
+    return int(result["errors"] > 0)
+
+
+def preview(deck, folder):
+    soffice, pdftoppm = (shutil.which(binary) for binary in ("soffice", "pdftoppm"))
+    missing = [name for name, path in (("soffice", soffice), ("pdftoppm", pdftoppm)) if path is None]
+    if missing:
+        raise ValueError(f"instale os executáveis ausentes para gerar a prévia: {', '.join(missing)}")
+    deck = deck.resolve()
+    expected = len(open_deck(deck).slides)
+    with TemporaryDirectory() as tmp:
+        directory = Path(tmp)
+        options = 'pdf:impress_pdf_Export:{"ExportHiddenSlides":{"type":"boolean","value":"true"}}'
+        pdf = directory / deck.with_suffix(".pdf").name
+        commands = [
+            [soffice, f"-env:UserInstallation={(directory / 'profile').as_uri()}", "--headless",
+             "--convert-to", options, "--outdir", str(directory), str(deck)],
+            [pdftoppm, "-png", str(pdf), str(directory / "slide")],
+        ]
+        for command in commands:
+            try:
+                subprocess.run(command, check=True, capture_output=True, text=True, timeout=120)
+            except subprocess.TimeoutExpired as exc:
+                raise ValueError(f"{Path(command[0]).name} excedeu 120 segundos") from exc
+            except subprocess.CalledProcessError as exc:
+                detail = (exc.stderr or exc.stdout).strip()
+                raise ValueError(f"{Path(command[0]).name} falhou: {detail}") from exc
+        images = list(directory.glob("slide-*.png"))
+        if len(images) != expected:
+            raise ValueError(f"a renderização produziu {len(images)} PNG(s) para {expected} slide(s)")
+        folder.mkdir(parents=True, exist_ok=True)
+        for image in images:
+            shutil.move(image, folder / image.name)
+    return expected

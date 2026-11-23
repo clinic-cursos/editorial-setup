@@ -1,6 +1,6 @@
 {
   "name": "clinic-editorial",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Equipe editorial para edição científica, diagramação, auditoria, imagens e aulas da Clinic Editora.",
   "skills": "./skills/"
 }

@@ -34,10 +34,10 @@ def built_repository(tmp_path_factory):
     return root
 
 
-def test_build_six_zips_with_skill_at_root(built_repository):
+def test_build_editorial_zips_with_skill_at_root(built_repository):
     root = built_repository
     skills = {source.parent.name: source for source in (root / "skills").glob("*/SKILL.md")}
-    assert EDITORIAL_SKILLS | {"aulas"} <= skills.keys()
+    assert EDITORIAL_SKILLS | {"aulas", "revisor-aulas"} <= skills.keys()
     for platform in ("chatgpt", "claude-ai"):
         archives = list((root / "dist" / platform).glob("*.zip"))
         assert {archive.stem for archive in archives} == skills.keys()
@@ -56,16 +56,20 @@ def test_codex_toml_fields(built_repository):
     root = built_repository
     sources = {source.stem: source for source in (root / "agents" / "editorial").glob("*.md")}
     agents = list((root / "dist" / "codex" / "agents").glob("*.toml"))
+    assert (root / "dist" / "codex" / "agents" / "revisor-aulas.toml").is_file()
     assert {agent.stem for agent in agents} == sources.keys()
     for agent in agents:
         source = sources[agent.stem].read_text(encoding="utf-8").splitlines(keepends=True)
         end = source.index("---\n", 1)
         fields = dict(line.rstrip().split(": ", 1) for line in source[1:end])
-        assert tomllib.loads(agent.read_text(encoding="utf-8")) == {
+        expected = {
             "name": fields["name"],
             "description": fields["description"],
             "developer_instructions": "".join(source[end + 1:]).lstrip("\n"),
         }
+        if agent.stem == "revisor-aulas":
+            expected.update(model="gpt-6.2-sol", sandbox_mode="read-only")
+        assert tomllib.loads(agent.read_text(encoding="utf-8")) == expected
 
 
 def test_project_bundle_has_instructions(built_repository):
@@ -85,6 +89,7 @@ def test_project_bundle_has_instructions(built_repository):
         "`editor-chefe-rubricas-fase-1-ampliacao.md` e `editor-chefe-rubricas-fase-3-4-diagramacao.md`"
         in instructions
     )
+    assert (project / "revisor-aulas-SKILL.md").is_file()
     expected = {"instrucoes.md"}
     for source in skills.glob("*/SKILL.md"):
         skill = source.parent.name

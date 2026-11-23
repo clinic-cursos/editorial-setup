@@ -1,0 +1,1805 @@
+[
+  {
+    "background": "1C1212",
+    "shapes": {
+      "!!fundo": [
+        0.0,
+        0.0,
+        10.0,
+        5.625
+      ],
+      "!!arco": [
+        -0.1,
+        2.9,
+        3.5,
+        3.5
+      ],
+      "!!logo": [
+        0.45,
+        0.4,
+        0.77309,
+        0.55
+      ],
+      "!!barra": [
+        0.45,
+        3.85,
+        0.7,
+        0.05
+      ]
+    },
+    "texts": [
+      "CURSO DE HARMONIZAÇÃO FACIAL",
+      "TOXINA +",
+      "PREENCHEDORES",
+      "Módulo 1"
+    ],
+    "runs": [
+      {
+        "text": "CURSO DE HARMONIZAÇÃO FACIAL",
+        "size_pt": 8.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "TOXINA +",
+        "size_pt": 50.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "PREENCHEDORES",
+        "size_pt": 50.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Módulo 1",
+        "size_pt": 13.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "FFFFFF"
+      }
+    ]
+  },
+  {
+    "background": "FAF6F4",
+    "shapes": {
+      "!!fundo": [
+        0.0,
+        0.0,
+        10.0,
+        5.625
+      ],
+      "!!painel": [
+        0.0,
+        0.0,
+        3.4,
+        5.625
+      ],
+      "!!arco": [
+        -0.1,
+        4.225,
+        2.1,
+        2.1
+      ],
+      "!!logo": [
+        0.45,
+        0.4,
+        0.59036,
+        0.42
+      ]
+    },
+    "texts": [
+      "CONTEÚDO PROGRAMÁTICO",
+      "12",
+      "temas em 2 dias de imersão",
+      "Dia 1 teórico\nDia 2 prático · 9h–17h",
+      "01",
+      "Fisiopatologia do envelhecimento",
+      "02",
+      "Anatomia e áreas de risco",
+      "03",
+      "Mecanismo de ação",
+      "04",
+      "Prescrição que prolonga a toxina",
+      "05",
+      "Imunogenicidade",
+      "06",
+      "Marcas comerciais",
+      "07",
+      "Tendência: Relfydess",
+      "08",
+      "Reações adversas e manejo",
+      "09",
+      "Reticulação dos materiais",
+      "10",
+      "Reconstituição e armazenamento",
+      "11",
+      "Preenchimento com cânula",
+      "12",
+      "Técnicas anestésicas"
+    ],
+    "runs": [
+      {
+        "text": "CONTEÚDO PROGRAMÁTICO",
+        "size_pt": 8.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "12",
+        "size_pt": 88.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "temas em 2 dias de imersão",
+        "size_pt": 12.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "Dia 1 ",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "teórico",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "E6E6E7"
+      },
+      {
+        "text": "Dia 2 ",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "prático · 9h–17h",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "E6E6E7"
+      },
+      {
+        "text": "01",
+        "size_pt": 20.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Fisiopatologia do envelhecimento",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "141211"
+      },
+      {
+        "text": "02",
+        "size_pt": 20.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Anatomia e áreas de risco",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "141211"
+      },
+      {
+        "text": "03",
+        "size_pt": 20.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Mecanismo de ação",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "141211"
+      },
+      {
+        "text": "04",
+        "size_pt": 20.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Prescrição que prolonga a toxina",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "141211"
+      },
+      {
+        "text": "05",
+        "size_pt": 20.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Imunogenicidade",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "141211"
+      },
+      {
+        "text": "06",
+        "size_pt": 20.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Marcas comerciais",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "141211"
+      },
+      {
+        "text": "07",
+        "size_pt": 20.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Tendência: Relfydess",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "141211"
+      },
+      {
+        "text": "08",
+        "size_pt": 20.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Reações adversas e manejo",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "141211"
+      },
+      {
+        "text": "09",
+        "size_pt": 20.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Reticulação dos materiais",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "141211"
+      },
+      {
+        "text": "10",
+        "size_pt": 20.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Reconstituição e armazenamento",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "141211"
+      },
+      {
+        "text": "11",
+        "size_pt": 20.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Preenchimento com cânula",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "141211"
+      },
+      {
+        "text": "12",
+        "size_pt": 20.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Técnicas anestésicas",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "141211"
+      }
+    ]
+  },
+  {
+    "background": "9C4C48",
+    "shapes": {
+      "!!fundo": [
+        0.0,
+        0.0,
+        10.0,
+        5.625
+      ],
+      "!!arco": [
+        3.6,
+        1.9,
+        4.5,
+        4.5
+      ],
+      "!!arco2": [
+        7.8,
+        3.825,
+        1.3,
+        1.3
+      ],
+      "!!logo": [
+        8.87,
+        0.32,
+        0.59036,
+        0.42
+      ],
+      "!!barra": [
+        0.5,
+        3.55,
+        0.9,
+        0.05
+      ]
+    },
+    "texts": [
+      "01",
+      "Introdução",
+      "Envelhecimento facial e diagnóstico"
+    ],
+    "runs": [
+      {
+        "text": "01",
+        "size_pt": 190.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Introdução",
+        "size_pt": 40.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "Envelhecimento facial e diagnóstico",
+        "size_pt": 12.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "F4ECEA"
+      }
+    ]
+  },
+  {
+    "background": "FAF6F4",
+    "shapes": {
+      "!!fundo": [
+        0.0,
+        0.0,
+        10.0,
+        5.625
+      ],
+      "!!arco": [
+        -1.5,
+        -1.5,
+        3.5,
+        3.5
+      ],
+      "!!logo": [
+        8.87,
+        0.32,
+        0.59036,
+        0.42
+      ]
+    },
+    "texts": [
+      "“",
+      "A harmonização facial é um conjunto de procedimentos que promove equilíbrio entre as proporções do rosto, valorizando características individuais com naturalidade.",
+      "Minimamente invasivo",
+      "Procedimento rápido",
+      "Recuperação reduzida",
+      "Mínimo de complicações"
+    ],
+    "runs": [
+      {
+        "text": "“",
+        "size_pt": 120.0,
+        "font": "Georgia",
+        "bold": false,
+        "color": "9C4C48"
+      },
+      {
+        "text": "A harmonização facial é um conjunto de procedimentos que promove ",
+        "size_pt": 21.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "141211"
+      },
+      {
+        "text": "equilíbrio entre as proporções",
+        "size_pt": 21.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": " do rosto, valorizando características individuais com ",
+        "size_pt": 21.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "141211"
+      },
+      {
+        "text": "naturalidade",
+        "size_pt": 21.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": ".",
+        "size_pt": 21.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "141211"
+      },
+      {
+        "text": "Minimamente invasivo",
+        "size_pt": 8.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "Procedimento rápido",
+        "size_pt": 8.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "Recuperação reduzida",
+        "size_pt": 8.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "Mínimo de complicações",
+        "size_pt": 8.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      }
+    ]
+  },
+  {
+    "background": "1C1212",
+    "shapes": {
+      "!!fundo": [
+        0.0,
+        0.0,
+        10.0,
+        5.625
+      ],
+      "!!foto": [
+        0.0,
+        0.0,
+        4.3,
+        5.625
+      ],
+      "!!arco2": [
+        3.55,
+        0.0,
+        0.9,
+        0.9
+      ],
+      "!!logo": [
+        8.87,
+        0.32,
+        0.59036,
+        0.42
+      ]
+    },
+    "texts": [
+      "Intrínseco cronológico\nExtrínseco fotoenvelhecimento",
+      "ENVELHECIMENTO",
+      "Os 3 pilares do envelhecimento",
+      "01",
+      "OSSO",
+      "Remodelação esquelética: a estrutura de suporte recua.",
+      "02",
+      "GORDURA",
+      "Perda e deslocamento dos coxins de gordura.",
+      "03",
+      "PELE",
+      "Menos tonicidade e elasticidade.",
+      "Swift A, et al. The Facial Aging Process from the “Inside Out”. Aesthet Surg J. 2021;41(10):1107-19."
+    ],
+    "runs": [
+      {
+        "text": "Intrínseco ",
+        "size_pt": 9.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "cronológico",
+        "size_pt": 9.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "Extrínseco ",
+        "size_pt": 9.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "fotoenvelhecimento",
+        "size_pt": 9.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "ENVELHECIMENTO",
+        "size_pt": 8.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Os ",
+        "size_pt": 24.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "3 pilares",
+        "size_pt": 24.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": " do envelhecimento",
+        "size_pt": 24.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "01",
+        "size_pt": 36.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "OSSO",
+        "size_pt": 13.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "Remodelação esquelética: a estrutura de suporte recua.",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "E6E6E7"
+      },
+      {
+        "text": "02",
+        "size_pt": 36.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "GORDURA",
+        "size_pt": 13.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "Perda e deslocamento dos coxins de gordura.",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "E6E6E7"
+      },
+      {
+        "text": "03",
+        "size_pt": 36.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "PELE",
+        "size_pt": 13.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "Menos tonicidade e elasticidade.",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "E6E6E7"
+      },
+      {
+        "text": "Swift A, et al. The Facial Aging Process from the “Inside Out”. Aesthet Surg J. 2021;41(10):1107-19.",
+        "size_pt": 6.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "6E6F73"
+      }
+    ]
+  },
+  {
+    "background": "FAF6F4",
+    "shapes": {
+      "!!fundo": [
+        0.0,
+        0.0,
+        10.0,
+        5.625
+      ],
+      "!!foto": [
+        7.0,
+        0.0,
+        3.0,
+        5.625
+      ],
+      "!!logo": [
+        0.45,
+        0.4,
+        0.59036,
+        0.42
+      ]
+    },
+    "texts": [
+      "VETOR DE ENVELHECIMENTO",
+      "De cima\npara baixo.",
+      "As alterações começam nos compartimentos superiores e repercutem nas regiões inferiores. O planejamento segue a mesma direção."
+    ],
+    "runs": [
+      {
+        "text": "VETOR DE ENVELHECIMENTO",
+        "size_pt": 8.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "De cima\npara ",
+        "size_pt": 46.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "141211"
+      },
+      {
+        "text": "baixo.",
+        "size_pt": 46.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "As alterações começam nos ",
+        "size_pt": 11.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "compartimentos superiores",
+        "size_pt": 11.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": " e repercutem nas regiões inferiores. O planejamento segue a mesma direção.",
+        "size_pt": 11.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      }
+    ]
+  },
+  {
+    "background": "9C4C48",
+    "shapes": {
+      "!!fundo": [
+        0.0,
+        0.0,
+        10.0,
+        5.625
+      ],
+      "!!arco": [
+        3.6,
+        1.9,
+        4.5,
+        4.5
+      ],
+      "!!arco2": [
+        7.8,
+        3.825,
+        1.3,
+        1.3
+      ],
+      "!!logo": [
+        8.87,
+        0.32,
+        0.59036,
+        0.42
+      ],
+      "!!barra": [
+        0.5,
+        3.55,
+        0.9,
+        0.05
+      ]
+    },
+    "texts": [
+      "02",
+      "Toxina botulínica",
+      "Mecanismo, duração e planejamento"
+    ],
+    "runs": [
+      {
+        "text": "02",
+        "size_pt": 190.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Toxina botulínica",
+        "size_pt": 40.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "Mecanismo, duração e planejamento",
+        "size_pt": 12.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "F4ECEA"
+      }
+    ]
+  },
+  {
+    "background": "FAF6F4",
+    "shapes": {
+      "!!fundo": [
+        0.0,
+        0.0,
+        10.0,
+        5.625
+      ],
+      "!!painel": [
+        0.0,
+        0.0,
+        10.0,
+        0.08
+      ],
+      "!!logo": [
+        8.87,
+        0.32,
+        0.59036,
+        0.42
+      ],
+      "!!foto": [
+        4.45,
+        1.45,
+        5.0,
+        2.8
+      ]
+    },
+    "texts": [
+      "TOXINA BOTULÍNICA",
+      "Mecanismo de ação",
+      "Local\nterminações pré-sinápticas, junção neuromuscular",
+      "Internalização\nliga-se ao terminal e entra no neurônio",
+      "Ação proteolítica\ncadeia leve cliva o complexo SNARE",
+      "Efeito\nmenos acetilcolina → relaxamento temporário",
+      "Recuperação\nnovas conexões restabelecem a função",
+      "O efeito é reversível: dura enquanto a terminação nervosa se regenera."
+    ],
+    "runs": [
+      {
+        "text": "TOXINA BOTULÍNICA",
+        "size_pt": 8.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "Mecanismo de ",
+        "size_pt": 26.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "141211"
+      },
+      {
+        "text": "ação",
+        "size_pt": 26.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "Local",
+        "size_pt": 10.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "141211"
+      },
+      {
+        "text": "terminações pré-sinápticas, junção neuromuscular",
+        "size_pt": 8.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "Internalização",
+        "size_pt": 10.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "141211"
+      },
+      {
+        "text": "liga-se ao terminal e entra no neurônio",
+        "size_pt": 8.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "Ação proteolítica",
+        "size_pt": 10.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "141211"
+      },
+      {
+        "text": "cadeia leve cliva o complexo ",
+        "size_pt": 8.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "SNARE",
+        "size_pt": 8.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "Efeito",
+        "size_pt": 10.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "141211"
+      },
+      {
+        "text": "menos acetilcolina → relaxamento temporário",
+        "size_pt": 8.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "Recuperação",
+        "size_pt": 10.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "141211"
+      },
+      {
+        "text": "novas conexões restabelecem a função",
+        "size_pt": 8.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "O efeito é reversível: dura enquanto a terminação nervosa se regenera.",
+        "size_pt": 8.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "6E6F73"
+      }
+    ]
+  },
+  {
+    "background": "1C1212",
+    "shapes": {
+      "!!fundo": [
+        0.0,
+        0.0,
+        10.0,
+        5.625
+      ],
+      "!!arco": [
+        2.2,
+        -0.7,
+        7.0,
+        3.5
+      ],
+      "!!logo": [
+        8.87,
+        0.32,
+        0.59036,
+        0.42
+      ]
+    },
+    "texts": [
+      "DURAÇÃO E EFEITOS",
+      "3–4",
+      "MESES DE EFEITO, EM BULA",
+      "A duração varia entre sorotipos, refletindo a meia-vida intracelular da cadeia leve."
+    ],
+    "runs": [
+      {
+        "text": "DURAÇÃO E EFEITOS",
+        "size_pt": 8.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "3–4",
+        "size_pt": 130.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "MESES DE EFEITO, EM BULA",
+        "size_pt": 16.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "A duração varia entre sorotipos, refletindo a meia-vida intracelular da cadeia leve.",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "E6E6E7"
+      }
+    ]
+  },
+  {
+    "background": "FAF6F4",
+    "shapes": {
+      "!!fundo": [
+        0.0,
+        0.0,
+        10.0,
+        5.625
+      ],
+      "!!painel": [
+        0.0,
+        0.0,
+        5.0,
+        5.625
+      ],
+      "!!arco2": [
+        0.2,
+        4.025,
+        1.2,
+        1.2
+      ],
+      "!!logo": [
+        8.87,
+        0.32,
+        0.59036,
+        0.42
+      ]
+    },
+    "texts": [
+      "Contraindicações",
+      "ABSOLUTAS",
+      "✕",
+      "Hipersensibilidade à TBA ou componentes",
+      "✕",
+      "Gestantes",
+      "✕",
+      "Quadro psicológico: expectativas irreais, instabilidade",
+      "RELATIVAS",
+      "!",
+      "Doenças neuromusculares",
+      "!",
+      "Doença autoimune",
+      "!",
+      "Antibióticos (aminoglicosídeos)",
+      "!",
+      "Vacinas recentes (COVID, gripe, HPV)",
+      "*Lactantes: dados atuais não mostram contraindicação."
+    ],
+    "runs": [
+      {
+        "text": "Contraindicações",
+        "size_pt": 24.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "ABSOLUTAS",
+        "size_pt": 20.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "✕",
+        "size_pt": 13.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Hipersensibilidade à TBA ou componentes",
+        "size_pt": 11.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "F4ECEA"
+      },
+      {
+        "text": "✕",
+        "size_pt": 13.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Gestantes",
+        "size_pt": 11.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "F4ECEA"
+      },
+      {
+        "text": "✕",
+        "size_pt": 13.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Quadro psicológico: expectativas irreais, instabilidade",
+        "size_pt": 11.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "F4ECEA"
+      },
+      {
+        "text": "RELATIVAS",
+        "size_pt": 20.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "!",
+        "size_pt": 13.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "Doenças neuromusculares",
+        "size_pt": 11.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "!",
+        "size_pt": 13.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "Doença autoimune",
+        "size_pt": 11.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "!",
+        "size_pt": 13.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "Antibióticos (aminoglicosídeos)",
+        "size_pt": 11.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "!",
+        "size_pt": 13.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "Vacinas recentes (COVID, gripe, HPV)",
+        "size_pt": 11.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "*Lactantes: dados atuais não mostram contraindicação.",
+        "size_pt": 7.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "F4ECEA"
+      }
+    ]
+  },
+  {
+    "background": "FFFFFF",
+    "shapes": {
+      "!!fundo": [
+        0.0,
+        0.0,
+        10.0,
+        5.625
+      ],
+      "!!foto": [
+        0.0,
+        0.0,
+        3.6,
+        5.625
+      ],
+      "!!logo": [
+        8.87,
+        0.32,
+        0.59036,
+        0.42
+      ],
+      "!!kpi": [
+        7.65,
+        1.8,
+        1.9,
+        2.0
+      ]
+    },
+    "texts": [
+      "PLANEJAMENTO",
+      "Glabela",
+      "M. Prócero  ·  M. Corrugadores do supercílio",
+      "1",
+      "Um ponto em cada corrugador, no início da sobrancelha",
+      "2",
+      "Um ponto central no prócero",
+      "3",
+      "Pinçar a pele",
+      "4",
+      "Agulha a 90°",
+      "2–5",
+      "UI de toxina por ponto"
+    ],
+    "runs": [
+      {
+        "text": "PLANEJAMENTO",
+        "size_pt": 8.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "Glabela",
+        "size_pt": 32.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "141211"
+      },
+      {
+        "text": "M. Prócero",
+        "size_pt": 9.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "  ·  ",
+        "size_pt": 9.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "M. Corrugadores do supercílio",
+        "size_pt": 9.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "1",
+        "size_pt": 18.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Um ponto em cada corrugador, no início da sobrancelha",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "2",
+        "size_pt": 18.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Um ponto central no prócero",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "3",
+        "size_pt": 18.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Pinçar a pele",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "4",
+        "size_pt": 18.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Agulha a 90°",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "2–5",
+        "size_pt": 40.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "UI de toxina por ponto",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "F4ECEA"
+      }
+    ]
+  },
+  {
+    "background": "9C4C48",
+    "shapes": {
+      "!!fundo": [
+        0.0,
+        0.0,
+        10.0,
+        5.625
+      ],
+      "!!arco": [
+        3.6,
+        1.9,
+        4.5,
+        4.5
+      ],
+      "!!arco2": [
+        7.8,
+        3.825,
+        1.3,
+        1.3
+      ],
+      "!!logo": [
+        8.87,
+        0.32,
+        0.59036,
+        0.42
+      ],
+      "!!barra": [
+        0.5,
+        3.55,
+        0.9,
+        0.05
+      ]
+    },
+    "texts": [
+      "03",
+      "Preenchedores AH",
+      "Materiais, técnica e intercorrências"
+    ],
+    "runs": [
+      {
+        "text": "03",
+        "size_pt": 190.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Preenchedores AH",
+        "size_pt": 40.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "Materiais, técnica e intercorrências",
+        "size_pt": 12.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "F4ECEA"
+      }
+    ]
+  },
+  {
+    "background": "1C1212",
+    "shapes": {
+      "!!fundo": [
+        0.0,
+        0.0,
+        10.0,
+        5.625
+      ],
+      "!!foto": [
+        0.0,
+        0.0,
+        10.0,
+        2.7
+      ],
+      "!!logo": [
+        8.87,
+        0.32,
+        0.59036,
+        0.42
+      ]
+    },
+    "texts": [
+      "Agulha ou cânula?",
+      "AGULHA",
+      "Traumatiza o vaso: aspire 10–20 s",
+      "Permite superficializar (contorno labial)",
+      "Exige mais prática",
+      "CÂNULA",
+      "Ponta romba: desvia do vaso",
+      "Precisa de pertuito prévio",
+      "Menos dor, mais segura em áreas críticas",
+      "ATENÇÃO  Cânulas finas podem agir como agulha. Mais segura: 22G × 50 mm ou 22G × 70 mm."
+    ],
+    "runs": [
+      {
+        "text": "Agulha ou ",
+        "size_pt": 24.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "cânula?",
+        "size_pt": 24.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "AGULHA",
+        "size_pt": 11.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Traumatiza o vaso: ",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "E6E6E7"
+      },
+      {
+        "text": "aspire 10–20 s",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "Permite superficializar (contorno labial)",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "E6E6E7"
+      },
+      {
+        "text": "Exige mais prática",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "E6E6E7"
+      },
+      {
+        "text": "CÂNULA",
+        "size_pt": 11.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "B68B85"
+      },
+      {
+        "text": "Ponta romba: ",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "E6E6E7"
+      },
+      {
+        "text": "desvia do vaso",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "Precisa de pertuito prévio",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "E6E6E7"
+      },
+      {
+        "text": "Menos dor, mais segura em áreas críticas",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "E6E6E7"
+      },
+      {
+        "text": "ATENÇÃO  ",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "F4ECEA"
+      },
+      {
+        "text": "Cânulas finas podem agir como agulha. Mais segura: 22G × 50 mm ou 22G × 70 mm.",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "FFFFFF"
+      }
+    ]
+  },
+  {
+    "background": "1C1212",
+    "shapes": {
+      "!!fundo": [
+        0.0,
+        0.0,
+        10.0,
+        5.625
+      ],
+      "!!painel": [
+        0.0,
+        0.0,
+        0.12,
+        5.625
+      ],
+      "!!foto": [
+        6.9,
+        0.55,
+        2.65,
+        4.5
+      ],
+      "!!logo": [
+        0.55,
+        0.32,
+        0.59036,
+        0.42
+      ]
+    },
+    "texts": [
+      "⚠  REAÇÕES DE MAIOR GRAVIDADE",
+      "Reconhecer cedo muda o desfecho.",
+      "ISQUEMIA\ndor intensa, palidez, livedo, alteração de cor e temperatura",
+      "NECROSE\nisquemia persistente que compromete a viabilidade do tecido",
+      "INFECÇÃO\ndor progressiva, calor, eritema em expansão, secreção"
+    ],
+    "runs": [
+      {
+        "text": "⚠  REAÇÕES DE MAIOR GRAVIDADE",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "D32F2F"
+      },
+      {
+        "text": "Reconhecer cedo muda o desfecho.",
+        "size_pt": 24.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "ISQUEMIA",
+        "size_pt": 12.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "dor intensa, palidez, livedo, alteração de cor e temperatura",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "E6E6E7"
+      },
+      {
+        "text": "NECROSE",
+        "size_pt": 12.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "isquemia persistente que compromete a viabilidade do tecido",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "E6E6E7"
+      },
+      {
+        "text": "INFECÇÃO",
+        "size_pt": 12.0,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "dor progressiva, calor, eritema em expansão, secreção",
+        "size_pt": 9.5,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "E6E6E7"
+      }
+    ]
+  },
+  {
+    "background": "FAF6F4",
+    "shapes": {
+      "!!fundo": [
+        0.0,
+        0.0,
+        10.0,
+        5.625
+      ],
+      "!!arco": [
+        8.0,
+        1.4,
+        2.0,
+        2.0
+      ],
+      "!!logo": [
+        8.87,
+        0.32,
+        0.59036,
+        0.42
+      ]
+    },
+    "texts": [
+      "HIALURONIDASE",
+      "Tenha sempre\nno consultório.",
+      "2×",
+      "o volume de AH aplicado, para remoção completa",
+      "7 dias",
+      "de intervalo, se precisar repetir",
+      "6 h",
+      "de meia-vida: descarte após reconstituir",
+      "Pó liofilizado: reconstituir com soro fisiológico estéril antes da aplicação."
+    ],
+    "runs": [
+      {
+        "text": "HIALURONIDASE",
+        "size_pt": 8.5,
+        "font": "Montserrat",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "Tenha ",
+        "size_pt": 38.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "141211"
+      },
+      {
+        "text": "sempre",
+        "size_pt": 38.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "\nno consultório.",
+        "size_pt": 38.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "141211"
+      },
+      {
+        "text": "2×",
+        "size_pt": 34.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "o volume de AH aplicado, para remoção completa",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "7 dias",
+        "size_pt": 34.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "de intervalo, se precisar repetir",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "6 h",
+        "size_pt": 34.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "9C4C48"
+      },
+      {
+        "text": "de meia-vida: descarte após reconstituir",
+        "size_pt": 10.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "404040"
+      },
+      {
+        "text": "Pó liofilizado: reconstituir com soro fisiológico estéril antes da aplicação.",
+        "size_pt": 8.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "6E6F73"
+      }
+    ]
+  },
+  {
+    "background": "1C1212",
+    "shapes": {
+      "!!fundo": [
+        0.0,
+        0.0,
+        10.0,
+        5.625
+      ],
+      "!!arco": [
+        6.0,
+        1.3,
+        3.5,
+        3.5
+      ],
+      "!!logo": [
+        0.45,
+        0.4,
+        0.77309,
+        0.55
+      ],
+      "!!barra": [
+        0.45,
+        3.0,
+        0.7,
+        0.05
+      ]
+    },
+    "texts": [
+      "Obrigado.",
+      "Continue sua evolução com a Clinic Cursos."
+    ],
+    "runs": [
+      {
+        "text": "Obrigado.",
+        "size_pt": 54.0,
+        "font": "Montserrat ExtraBold",
+        "bold": true,
+        "color": "FFFFFF"
+      },
+      {
+        "text": "Continue sua evolução com a Clinic Cursos.",
+        "size_pt": 13.0,
+        "font": "Montserrat",
+        "bold": false,
+        "color": "FFFFFF"
+      }
+    ]
+  }
+]
