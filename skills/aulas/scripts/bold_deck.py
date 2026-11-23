@@ -26,6 +26,8 @@ CREME = RGBColor(0xFA, 0xF6, 0xF4)
 QUOTE_FONT = "Georgia"
 QUOTE_MARK = "“"
 MIN_LIST_BODY_SIZE = 8
+MAX_TEXT_ONLY_BODY_SIZE = 18
+TEXT_ONLY_ITEM_TITLE_SCALE = 1.2
 
 P14 = "http://schemas.microsoft.com/office/powerpoint/2010/main"
 P159 = "http://schemas.microsoft.com/office/powerpoint/2015/09/main"
@@ -282,14 +284,36 @@ def s_pillars(prs, s, d):
     an.add(title(s, d.get("titulo", ""), x, 0.8, 4.6 if panel else full_width,
                  1.0, size=24, hl=d.get("destaque_titulo")), eff="up")
     body_width = 3.7 if panel else full_width - 1.0
-    for i, pillar in enumerate(d.get("pilares", [])):
-        h, t = pillar.get("titulo", ""), pillar.get("texto", "")
-        y = 2.0 + i * 0.95
-        n = text(s, x, y - 0.1, 1.0, 0.9, f"{i+1:02d}", size=36, color=VINHO, font=FONTE_FORTE, bold=True)
-        a = text(s, x + 1.0, y, body_width, 0.3, h, size=13, color=BRANCO, bold=True, caps=True)
-        b = text(s, x + 1.0, y + 0.32, body_width, 0.5, t, size=9.5, color=CINZA_CLARO)
-        line(s, x + 0.05, y + 0.85, W - M, y + 0.85, color=NOITE2, w=0.75)
-        an.add(n, gap=0, eff="up"); an.add(a, gap=60); an.add(b, gap=200)
+    rows = [(pillar.get("titulo", ""), pillar.get("texto", "")) for pillar in d.get("pilares", [])]
+    if panel:
+        size, heading_size = 9.5, 13
+        boxes = [(2.0 + i * 0.95, 0.85) for i in range(len(rows))]
+    else:
+        footer = 0.85 if info else 0.7 if badge_text else 0.4
+        size, boxes = fit_text_only_list([(plain_text(h).upper(), plain_text(t)) for h, t in rows],
+                                         width=body_width, top=2.0, bottom=H - footer, split_title=True)
+        heading_size = size * TEXT_ONLY_ITEM_TITLE_SCALE
+    for i, ((h, t), (y, height)) in enumerate(zip(rows, boxes)):
+        if panel:
+            number_top, number_height, number_size = y - 0.1, 0.9, 36
+            heading_height, body_top, body_height = 0.3, y + 0.32, 0.5
+        else:
+            number_top, number_height, number_size = y, height, size
+            heading_height = list_text_height([(plain_text(h).upper(), heading_size)], body_width, size) if h else 0
+            body_top, body_height = y + heading_height, height - heading_height
+        n = text(s, x, number_top, 1.0, number_height, f"{i+1:02d}", size=number_size,
+                 color=VINHO, font=FONTE_FORTE, bold=True)
+        if h or panel:
+            a = text(s, x + 1.0, y, body_width, heading_height, h, size=heading_size,
+                     color=BRANCO, bold=True, caps=True)
+        if t or panel:
+            b = text(s, x + 1.0, body_top, body_width, body_height, t, size=size, color=CINZA_CLARO)
+        line(s, x + 0.05, y + height, W - M, y + height, color=NOITE2, w=0.75)
+        an.add(n, gap=0, eff="up")
+        if h or panel:
+            an.add(a, gap=60)
+        if t or panel:
+            an.add(b, gap=200)
     if badge_text:
         badge(s, badge_text, badge_left, H - 0.7, w=badge_width, color=VINHO_ESC)
     text(s, x, H - 0.4, 4.8 if panel else full_width, 0.25, d.get("referencia", ""), size=6.5, color=CINZA)
@@ -317,7 +341,7 @@ def wrapped_rows(words, available):
     return rows
 
 
-def text_image_font_size(paragraphs, width, height, model_size, min_size, spacing):
+def text_image_font_size(paragraphs, width, height, model_size, min_size, spacing, *, max_rows=None):
     # Measure the box inside the 0.02-inch margins from text().
     width_pt = Inches(width - 0.04).pt
     height_pt = Inches(height - 0.04).pt
@@ -328,6 +352,8 @@ def text_image_font_size(paragraphs, width, height, model_size, min_size, spacin
         if widest_word > available:
             continue
         rows = sum(wrapped_rows(line, available) for line in lines)
+        if max_rows is not None and rows > max_rows:
+            continue
         # Include room for the first line's glyphs and the following baselines.
         if not rows or size * (1.38 + (rows - 1) * spacing * 1.2) <= height_pt:
             return size
@@ -376,6 +402,32 @@ def fit_list(items, *, width, tops, bottom, base_height, body_size, inset=0):
     return size, boxes
 
 
+def fit_text_only_list(rows, *, width, top, bottom, split_title=False):
+    available = Inches(width - 0.04).pt
+    for size in range(MAX_TEXT_ONLY_BODY_SIZE, MIN_LIST_BODY_SIZE - 1, -1):
+        heading_size = size * TEXT_ONLY_ITEM_TITLE_SCALE
+        gap = size / 180
+        items = [[(heading, heading_size), (body, size)] for heading, body in rows]
+        min_height = 0.04 + 1.38 * size / 72
+        heights = [
+            max(min_height, list_text_height(item, width, size) + (0.04 if split_title and all(row) else 0))
+            for row, item in zip(rows, items)
+        ]
+        words_fit = all(word * font_size <= available for item in items
+                        for value, font_size in item for word, _ in measured_words(value))
+        if words_fit and top + sum(heights) + gap * max(0, len(rows) - 1) <= bottom + 1e-9:
+            break
+
+    boxes = []
+    for height in heights:
+        if top + height > bottom + 1e-9:
+            # Keep the overflowing item editable and let conferir report it.
+            top = max(top, H)
+        boxes.append((top, height))
+        top += height + gap
+    return size, boxes
+
+
 def s_text_image(prs, s, d):
     image_mode = d.get("imagem_modo", "sangrar")
     if image_mode not in ("sangrar", "conter"):
@@ -390,8 +442,13 @@ def s_text_image(prs, s, d):
     kicker(s, d.get("kicker", ""), M, 1.3, VINHO)
     heading = d.get("titulo", "")
     title_width = 5.4 if panel else W - 2 * M
-    title_size = text_image_font_size([heading], title_width, 1.8, 46, 18, spacing=0.9)
-    an.add(title(s, heading, M, 1.6, title_width, 1.8, color=PRETO, size=title_size,
+    if panel:
+        title_height = 1.8
+        title_size = text_image_font_size([heading], title_width, title_height, 46, 18, spacing=0.9)
+    else:
+        title_size = text_image_font_size([heading], title_width, 1.8, 40, 18, spacing=0.9, max_rows=2)
+        title_height = 0.04 + title_size * (1.38 + 0.9 * 1.2) / 72
+    an.add(title(s, heading, M, 1.6, title_width, title_height, color=PRETO, size=title_size,
                  hl=d.get("destaque_titulo"), hlc=VINHO), eff="up", dur=700, gap=400)
     if panel and d.get("seta"):
         ln = line(s, 5.75, 1.0, 5.75, 4.6, color=VINHO, w=2.5)
@@ -399,19 +456,65 @@ def s_text_image(prs, s, d):
         tri.rotation = 180
         an.add(ln, gap=0, dur=900)
         an.add(tri, gap=300)
-    body = [d.get("texto", "")]
+    rows = [(None, d.get("texto", ""))]
     for topic in d.get("topicos", []):
         if isinstance(topic, dict):
-            body.extend([f"**{topic.get('titulo', '')}**", topic.get("texto", "")])
+            rows.append((str(topic.get("titulo", "")), topic.get("texto", "")))
         else:
-            body.append(topic)
-    body.append(d.get("destaque", ""))
-    body = [row for row in body if row]
-    body_width = 5.0 if panel else title_width
-    body_size = text_image_font_size([plain_text(row) for row in body], body_width, 1.2,
-                                     11, 8, spacing=1.1)
-    an.add(text(s, M, 3.55, body_width, 1.2, body, size=body_size, color=TEXTO), eff="up")
+            rows.append((None, topic))
+    rows.append((None, d.get("destaque", "")))
+    if panel:
+        body = [value for heading, content in rows
+                for value in (f"**{heading}**" if heading is not None else "", content) if value]
+        body_size = text_image_font_size([plain_text(row) for row in body], 5.0, 1.2, 11, 8, spacing=1.1)
+        an.add(text(s, M, 3.55, 5.0, 1.2, body, size=body_size, color=TEXTO), eff="up")
+    else:
+        rows = [(heading, content) for heading, content in rows if heading or content]
+        size, boxes = fit_text_only_list([(plain_text(heading or ""), plain_text(content or ""))
+                                         for heading, content in rows],
+                                         width=title_width, top=1.75 + title_height, bottom=H - M)
+        for (heading, content), (y, height) in zip(rows, boxes):
+            paragraphs = []
+            if heading:
+                paragraphs.append([(heading, {"bold": True, "color": VINHO, "size": size * TEXT_ONLY_ITEM_TITLE_SCALE})])
+            if content:
+                paragraphs.append(content)
+            an.add(text(s, M, y, title_width, height, paragraphs, size=size, color=TEXTO), eff="up")
     morph(s); an.build()
+
+
+def space_steps(prs, slide, steps, track, bottom):
+    # Use the same Montserrat metrics as the editorial check for visible text.
+    from conferir import Theme, check_text
+
+    theme = Theme(slide, prs)
+    edges = []
+    for _, box in steps:
+        frame = box.text_frame
+        margins = frame.margin_left, frame.margin_right, frame.margin_top, frame.margin_bottom
+        _, rows = check_text(frame, box, theme, set(), lambda *args: None,
+                             box.width, box.height, margins, box.top, prs.slide_height)
+        edges.append((rows[0][1], rows[-1][3]) if rows else (box.top, box.top + box.height))
+
+    gaps = [start - end for (_, end), (start, _) in zip(edges, edges[1:])]
+    # Ignore rounding of the text positions to whole EMUs.
+    if max(gaps) - min(gaps) <= 2:
+        return
+    # Keep the original span unless the measured text needs more room.
+    gap = max(0, sum(gaps) / len(gaps))
+    tops = [steps[0][1].top]
+    for i, old_gap in enumerate(gaps):
+        tops.append(tops[-1] + steps[i + 1][1].top - steps[i][1].top + gap - old_gap)
+    if tops[-1] + steps[-1][1].height > Inches(bottom) + 1:
+        return
+
+    for i, ((dot, box), top) in enumerate(zip(steps, tops)):
+        top = round(top)
+        dot.top += top - box.top
+        box.top = top
+        if i + 1 < len(tops):
+            box.height = min(box.height, round(tops[i + 1]) - top)
+    track.end_y = round(steps[-1][0].top + steps[-1][0].height / 2)
 
 
 def s_steps(prs, s, d):
@@ -422,25 +525,51 @@ def s_steps(prs, s, d):
     kicker(s, d.get("kicker", ""), M, 0.42, VINHO)
     panel = has_image_panel(d)
     full_width = W - 2 * M
-    heading = title(s, d.get("titulo", ""), M, 0.62, 6 if panel else full_width, 0.6,
-                    color=PRETO, size=26, hl=d.get("destaque_titulo"), hlc=VINHO)
+    heading_text = d.get("titulo", "")
+    heading_size = 26
+    heading_width = 6 if panel else full_width
+    heading_height = 0.6
     if panel:
-        rect(s, 4.35, 1.35, 5.2, 3.0, fill=BRANCO)
-        an.add(photo(s, d, 4.45, 1.45, 5.0, 2.8), gap=300, dur=700)
-    steps = d.get("passos", [])
-    stride = max(0.31, min(0.68, 3.4 / max(len(steps), 1)))
-    tops = [1.38 + i * stride for i in range(len(steps))]
-    rows = [(str(step.get("titulo", "")), step.get("texto", "")) for step in steps]
+        available = Inches(heading_width - 0.04).pt / heading_size
+        lines = sum(wrapped_rows(measured_words(line), available) for line in heading_text.splitlines())
+        if lines > 1:
+            heading_height = 0.04 + heading_size * (1.38 + 0.9 * 1.2) / 72
+    heading = title(s, heading_text, M, 0.62, heading_width, heading_height,
+                    color=PRETO, size=heading_size, hl=d.get("destaque_titulo"), hlc=VINHO)
+    extra_height = heading_height - 0.6
+    steps_top = 1.38 + extra_height
+    steps_bottom = 4.78
+    if panel:
+        rect(s, 4.35, 1.35 + extra_height, 5.2, 3.0 - extra_height, fill=BRANCO)
+        an.add(photo(s, d, 4.45, 1.45 + extra_height, 5.0, 2.8 - extra_height), gap=300, dur=700)
+    rows = [(str(step.get("titulo", "")), step.get("texto", "")) for step in d.get("passos", [])]
     body_width = 3.4 if panel else full_width - 0.45
-    size, boxes = fit_list([[(h, 10.5), (plain_text(t), None)] for h, t in rows],
-                           width=body_width, tops=tops, bottom=4.78, base_height=min(0.6, stride), body_size=8.5)
-    if len(steps) > 1:
-        line(s, M + 0.14, 1.55, M + 0.14, boxes[-1][0] + 0.17, color=ROSE, w=1.5)
+    if panel:
+        stride = max(0.31, min(0.68, (3.4 - extra_height) / max(len(rows), 1)))
+        tops = [steps_top + i * stride for i in range(len(rows))]
+        size, boxes = fit_list([[(h, 10.5), (plain_text(t), None)] for h, t in rows],
+                               width=body_width, tops=tops, bottom=steps_bottom,
+                               base_height=min(0.6, stride), body_size=8.5)
+    else:
+        size, boxes = fit_text_only_list([(h, plain_text(t)) for h, t in rows],
+                                         width=body_width, top=steps_top, bottom=steps_bottom)
+    heading_size = 10.5 if panel else size * TEXT_ONLY_ITEM_TITLE_SCALE
+    dot_size = 0.28 if panel else size / 64
+    if len(rows) > 1:
+        center = 0.17 if panel else 0.03 + dot_size / 2
+        track_top = 1.55 + extra_height if panel else steps_top + center
+        track = line(s, M + dot_size / 2, track_top, M + dot_size / 2, boxes[-1][0] + center, color=ROSE, w=1.5)
+    steps = []
     for (h, t), (y, height) in zip(rows, boxes):
-        c = rect(s, M, y + 0.03, 0.28, 0.28, fill=VINHO, line=CREME, shape=MSO_SHAPE.OVAL, lw=2)
-        a = text(s, M + 0.45, y, body_width, height,
-                 [[(h, {"bold": True, "color": PRETO, "size": 10.5})], _parse_bold(t)], size=size)
+        c = rect(s, M, y + 0.03, dot_size, dot_size, fill=VINHO, line=CREME, shape=MSO_SHAPE.OVAL, lw=2)
+        paragraphs = [[(h, {"bold": True, "color": PRETO, "size": heading_size})], _parse_bold(t)]
+        if not panel:
+            paragraphs = [runs for value, runs in zip((h, t), paragraphs) if value]
+        a = text(s, M + 0.45, y, body_width, height, paragraphs, size=size)
+        steps.append((c, a))
         an.add(c, gap=0); an.add(a, gap=220, eff="left")
+    if len(steps) > 2 and boxes[-1][0] < H:
+        space_steps(prs, s, steps, track, steps_bottom)
     tip_x, tip_y, tip_width = (4.35, 4.45, 5.2) if panel else (M, 4.85, full_width)
     text(s, tip_x, tip_y, tip_width, 0.4, d.get("dica", ""), size=8.5, color=CINZA, italic=True)
     if not an.items:
@@ -533,18 +662,26 @@ def s_anatomy(prs, s, d):
 
 
 def s_comparison(prs, s, d):
+    image_mode = d.get("imagem_modo", "sangrar")
+    if image_mode not in ("sangrar", "conter"):
+        raise ValueError("imagem_modo de comparativo deve ser sangrar ou conter")
+
     an = Anim(s)
     bg(s, NOITE)
-    photo(s, d, 0, 0, W, 2.7, dark=True)
+    photo(s, d, 0, 0, W, 2.7, dark=True, contain=image_mode == "conter")
     logo(s, True)
     heading = title(s, d.get("titulo", ""), M, 2.85, 6, 0.6, size=24, hl=d.get("destaque_titulo"))
+    bottom = H - 0.42 if d.get("nota") else H
     for k, col in enumerate(d.get("colunas", [])):
         h, its = col.get("titulo", ""), col.get("itens", [])
         x = M + k * 4.6
         an.add(text(s, x, 3.45, 4, 0.3, h.upper(), size=11, color=ROSE, bold=True), gap=100)
-        for i, it in enumerate(its):
+        tops = [3.78 + i * 0.3 for i in range(len(its))]
+        size, boxes = fit_list([[(plain_text(item), None)] for item in its], width=4.3,
+                               tops=tops, bottom=bottom, base_height=0.3, body_size=9.5)
+        for it, (y, height) in zip(its, boxes):
             segs = accent_runs(it, BRANCO)
-            an.add(text(s, x, 3.78 + i * 0.3, 4.3, 0.3, [segs], size=9.5, color=CINZA_CLARO), gap=90, eff="left")
+            an.add(text(s, x, y, 4.3, height, [segs], size=size, color=CINZA_CLARO), gap=90, eff="left")
     if d.get("nota"):
         r = rect(s, 0, H - 0.42, W, 0.42, fill=VINHO)
         t = text(s, M, H - 0.42, W - 2 * M, 0.42, [[("ATENÇÃO  ", {"bold": True, "color": ROSE_CLARO}),
@@ -571,14 +708,21 @@ def s_alert(prs, s, d):
         items = [{"titulo": label, "texto": " · ".join(d[key])}
                  for key, label in (("sinais", "Sinais de alerta"), ("conduta", "Conduta")) if d.get(key)]
     rows = [(item.get("titulo", "").upper(), item.get("texto", "")) for item in items]
-    tops = [2.55 + i * 0.75 for i in range(len(rows))]
     body_width = 5.5 if panel else full_width - 0.35
-    size, boxes = fit_list([[(h, 12), (t, None)] for h, t in rows], width=body_width, tops=tops,
-                           bottom=H - 0.6, base_height=0.7, body_size=9.5)
+    if panel:
+        tops = [2.55 + i * 0.75 for i in range(len(rows))]
+        size, boxes = fit_list([[(h, 12), (t, None)] for h, t in rows], width=body_width, tops=tops,
+                               bottom=H - 0.6, base_height=0.7, body_size=9.5)
+    else:
+        size, boxes = fit_text_only_list(rows, width=body_width, top=2.55, bottom=H - 0.6)
+    heading_size = 12 if panel else size * TEXT_ONLY_ITEM_TITLE_SCALE
     for i, ((h, t), (y, height)) in enumerate(zip(rows, boxes)):
-        n = rect(s, M + 0.1, y + 0.05, 0.08, 0.55, fill=ALERTA if i < 2 else ROSE)
-        a = text(s, M + 0.35, y, body_width, height,
-                 [[(h, {"bold": True, "color": BRANCO, "size": 12})], [(t, {"color": CINZA_CLARO})]], size=size)
+        n = rect(s, M + 0.1, y + 0.05, 0.08, 0.55 if panel else min(0.55, height - 0.05),
+                 fill=ALERTA if i < 2 else ROSE)
+        paragraphs = [[(h, {"bold": True, "color": BRANCO, "size": heading_size})], [(t, {"color": CINZA_CLARO})]]
+        if not panel:
+            paragraphs = [runs for value, runs in zip((h, t), paragraphs) if value]
+        a = text(s, M + 0.35, y, body_width, height, paragraphs, size=size)
         an.add(n, gap=0); an.add(a, gap=250, eff="left")
     if d.get("urgente"):
         an.add(text(s, M + 0.35, H - 0.6, body_width, 0.45,

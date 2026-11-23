@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 from collections import Counter
+from itertools import combinations
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unicodedata import combining, normalize
@@ -50,6 +51,9 @@ MARKER_ONLY = re.compile(r"\[(?:exemplo[^\]]*|confirmar)\]", re.IGNORECASE)
 PRESERVED_EXTENSION = "{A046E92C-840E-4D35-9C5C-4A96E281F065}"
 FILL_TAGS = {qn("a:" + name) for name in ("solidFill", "gradFill", "pattFill", "blipFill", "noFill", "grpFill")}
 
+# Métricas verticais da Montserrat em unidades por em.
+CAP_HEIGHT = 0.7
+DESCENT = 0.251
 # Avanços hmtx em milésimos de em. Regular e Bold vêm dos TTF do diagramador;
 # ExtraBold vem da Montserrat variável no peso 800. A tabela dispensa fonte instalada.
 WIDTH_CHARS = "".join(map(chr, range(32, 127))) + "\u2013\u2014‘’“”…•→"
@@ -300,14 +304,14 @@ def check_text(frame, shape, theme, palette, add, width, height, margins, top, s
                     continue
                 # Métricas verticais da Montserrat em unidades por em.
                 ascent = size * 0.968
-                line_height = ascent + size * 0.251
+                line_height = ascent + size * DESCENT
                 if has_text:
                     text_bottom = max(text_bottom, cursor + line_height)
                     if advance:
                         left = max(0, available_width - advance) * alignment
                         # Estima a faixa das letras entre a altura das maiúsculas e a linha de base.
                         baseline = cursor + ascent
-                        text_rows.append((left, baseline - size * 0.7, left + advance, baseline))
+                        text_rows.append((left, baseline - size * CAP_HEIGHT, left + advance, baseline))
                 cursor += spacing.pt if hasattr(spacing, "pt") else line_height * (spacing or 1)
         cursor += paragraph.space_after.pt if paragraph.space_after is not None else 0
     for font in sorted(fonts):
@@ -391,9 +395,17 @@ def check_shape(shape, theme, palette, add, slide_bottom, text_boxes, preserved=
         if shape.has_text_frame:
             frame = shape.text_frame
             margins = (frame.margin_left, frame.margin_right, frame.margin_top, frame.margin_bottom)
-            _, rows = check_text(frame, shape, theme, palette, finding, shape.width, shape.height,
-                                 margins, shape.top, slide_bottom)
+            needed, rows = check_text(frame, shape, theme, palette, finding, shape.width, shape.height,
+                                      margins, shape.top, slide_bottom)
             if rows and not preserved and not shape.rotation:
+                if (len(rows) > 1 and needed > shape.height
+                    and frame.auto_size == MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT):
+                    # Inclua os descendentes das linhas que avançam além da altura nominal.
+                    nominal_bottom = shape.top + shape.height - margins[3]
+                    for i, (x1, y1, x2, baseline) in enumerate(rows):
+                        bottom = baseline + (baseline - y1) * DESCENT / CAP_HEIGHT
+                        if bottom > nominal_bottom:
+                            rows[i] = (x1, y1, x2, bottom)
                 text_boxes.append((shape, shape.top, rows))
         if shape.has_table:
             check_table(shape, theme, palette, finding, slide_bottom)
@@ -437,15 +449,15 @@ def inspect(path, style):
                 add("bounds", "Forma fora dos limites do slide.", shape=shape.name,
                     preserved=is_preserved(shape))
             check_shape(shape, theme, palette, add, deck.slide_height, text_boxes)
-        for upper, upper_top, upper_rows in text_boxes:
-            for lower, lower_top, lower_rows in text_boxes:
-                if upper_top < lower_top and any(
-                    max(x1, a1) < min(x2, a2) and max(y1, b1) < min(y2, b2)
-                    for x1, y1, x2, y2 in upper_rows for a1, b1, a2, b2 in lower_rows
-                ):
-                    severity = "warning" if MARKER_ONLY.fullmatch(upper.text.strip()) else "error"
-                    add("text_overlap", f"Texto sobreposto: {upper.name} invade a caixa de {lower.name}.",
-                        severity, upper.name)
+        text_boxes.sort(key=lambda box: box[1])
+        for (upper, _, upper_rows), (lower, _, lower_rows) in combinations(text_boxes, 2):
+            if any(
+                max(x1, a1) < min(x2, a2) and max(y1, b1) < min(y2, b2)
+                for x1, y1, x2, y2 in upper_rows for a1, b1, a2, b2 in lower_rows
+            ):
+                severity = "warning" if MARKER_ONLY.fullmatch(upper.text.strip()) else "error"
+                add("text_overlap", f"Texto sobreposto: {upper.name} invade a caixa de {lower.name}.",
+                    severity, upper.name)
     return {"style": style, "slides": len(deck.slides), "findings": findings,
             "preserved_findings": preserved_findings, "preserved_warnings": len(preserved_findings),
             "errors": sum(item["severity"] == "error" for item in findings),

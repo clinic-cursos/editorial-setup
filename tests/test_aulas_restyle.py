@@ -8,6 +8,7 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_FILL, MSO_THEME_COLOR
 from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE, MSO_SHAPE_TYPE
+from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.opc.oxml import serialize_part_xml
 from pptx.oxml import parse_xml
@@ -144,8 +145,10 @@ def source_deck(tmp_path):
     page.name = "Número de página"
     page.text = "1"
     slide.shapes.add_picture(str(image), Inches(1), Inches(2), Inches(4))
-    slide.shapes.add_textbox(Inches(6), Inches(3), Inches(3), Inches(0.3)).text = "Depois"
-    slide.shapes.add_textbox(Inches(6), Inches(2), Inches(3), Inches(0.3)).text = "Antes"
+    for y, value in ((3, "Depois"), (2, "Antes")):
+        textbox = slide.shapes.add_textbox(Inches(6), Inches(y), Inches(3), Inches(0.3))
+        textbox.text_frame.auto_size = MSO_AUTO_SIZE.NONE
+        textbox.text = value
     group = slide.shapes.add_group_shape()
     group.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(2), Inches(2.5), Inches(0.8), Inches(0.3)).text = "Rótulo"
     group.shapes.add_picture(str(image), Inches(2), Inches(3), Inches(0.5))
@@ -395,6 +398,53 @@ def test_preserved_omits_only_first_matching_text_box(tmp_path, style, title_sou
     assert sum(value.casefold() == script_title.casefold() for value in copied_text.values()) == 1
 
 
+@pytest.mark.parametrize("separator", [" -\v", "\t:\n", " <a:br/> "])
+def test_extract_flattens_title_from_regular_text_box(tmp_path, separator):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    title = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(5), Inches(1))
+    title.text = f"  Título{separator}  de teste!  "
+    source = tmp_path / "original.pptx"
+    original.save(source)
+
+    folder = tmp_path / "rascunho"
+    result = run_cli("extrair", source, folder)
+    assert result.returncode == 0, result.stderr
+    entry = json.loads((folder / "roteiro-rascunho.json").read_text(encoding="utf-8"))["slides"][0]
+    assert entry["titulo"] == "Título de teste!"
+    assert entry["textos"] == [title.text]
+
+
+@pytest.mark.parametrize("style", ["padrao", "ousado"])
+def test_preserved_drops_multiline_title_with_nearby_rules(tmp_path, style):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    title = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(5), Inches(1))
+    title.name = "Original title"
+    title.text = "Título -\vde teste"
+    body = slide.shapes.add_textbox(Inches(2), Inches(3), Inches(3), Inches(1))
+    body.name = "Body"
+    body.text = "Texto a preservar"
+    for name, points, weight in [
+        ("Vertical rule", (0.78, 1, 0.78, 2), 2.25),
+        ("Horizontal rule", (1, 0.85, 6, 0.85), 2.25),
+        ("Rule at limit", (0.7, 1.5, 0.7, 2.5), 2.25),
+        ("Misaligned line", (0.78, 1.51, 0.78, 2.51), 2.25),
+        ("Distant line", (0.69, 1, 0.69, 2), 2.25),
+        ("Thick line", (1, 2.1, 6, 2.1), 8),
+        ("Diagonal annotation", (1, 2.1, 2, 3), 2.25),
+    ]:
+        line = slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, *map(Inches, points))
+        line.name = name
+        line.line.width = Pt(weight)
+
+    copied = {shape.name: shape for shape in restyle_one(tmp_path, original, style)}
+
+    assert not {"Original title", "Vertical rule", "Horizontal rule", "Rule at limit"} & copied.keys()
+    assert copied["Body"].text == "Texto a preservar"
+    assert {"Misaligned line", "Distant line", "Thick line", "Diagonal annotation"} <= copied.keys()
+
+
 @pytest.mark.parametrize("style", ["padrao", "ousado"])
 def test_preserved_frame_keeps_divider_below_title(tmp_path, source_deck, style):
     source, _ = source_deck
@@ -484,15 +534,28 @@ def test_preserved_objects_and_exact_standalone_slide_count(tmp_path, source_dec
     ("padrao", 1.4, 5.275),
     ("ousado", 1.79, 5.375),
 ])
-@pytest.mark.parametrize("extra_extent", ["table-frame", "background"])
+@pytest.mark.parametrize("extra_extent", ["table-frame", "background", "empty-shapes"])
 def test_preserved_fits_centered_content(tmp_path, style, content_top, content_bottom, extra_extent):
     original = Presentation()
-    slide = original.slides.add_slide(original.slide_layouts[5])
+    slide = original.slides.add_slide(original.slide_layouts[1 if extra_extent == "empty-shapes" else 5])
     slide.shapes.title.text = "Título original"
+    invisible = []
     if extra_extent == "background":
         background = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, original.slide_width, original.slide_height)
         background.fill.solid()
         background.fill.fore_color.rgb = RGBColor.from_string("FFFFFF")
+        invisible.append(background.name)
+    if extra_extent == "empty-shapes":
+        extent = 0, 0, original.slide_width, original.slide_height
+        empty = slide.shapes.add_textbox(*extent)
+        empty.name = "Empty source textbox"
+        empty.text = " \t "
+        transparent = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, *extent)
+        transparent.fill.background()
+        transparent.line.fill.background()
+        placeholder = slide.placeholders[1]
+        placeholder._element.spPr.append(parse_xml(f'<a:prstGeom {nsdecls("a")} prst="rect"><a:avLst/></a:prstGeom>'))
+        invisible.extend([empty.name, transparent.name, placeholder.name])
     label = slide.shapes.add_textbox(Inches(3), Inches(3), Inches(4), Inches(1))
     label.name = "Rótulo central"
     label.text_frame.margin_left = Inches(0.2)
@@ -548,5 +611,81 @@ def test_preserved_fits_centered_content(tmp_path, style, content_top, content_b
     assert copied_cell.margin_left == pytest.approx(Inches(0.1) * scale, abs=1)
     border_width = int(copied_cell._tc.tcPr.find(qn("a:lnL")).get("w"))
     assert border_width == pytest.approx(Pt(1) * scale, abs=1)
-    if extra_extent == "background":
-        assert all(shape.name != slide.shapes[1].name for shape in shapes)
+    assert {shape.name for shape in shapes}.isdisjoint(invisible)
+
+
+@pytest.mark.parametrize("frame_height", [0.48, 5])
+def test_preserved_fits_autofit_text_and_keeps_visible_shapes(tmp_path, frame_height, monkeypatch):
+    monkeypatch.syspath_prepend(str(CLI.parent))
+    from conferir import Theme
+    from restyle import text_bounds
+
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[1])
+    slide.shapes.title.text = "Título original"
+    placeholder = slide.placeholders[1]
+    placeholder.left, placeholder.top = Inches(4), Inches(3)
+    placeholder.width, placeholder.height = Inches(2), Inches(1)
+    placeholder.text = "Texto em espaço reservado"
+    placeholder.text_frame.auto_size = MSO_AUTO_SIZE.NONE
+    oversized = slide.shapes.add_textbox(Inches(4), Inches(2), Inches(6), Inches(frame_height))
+    oversized.text_frame.auto_size = MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
+    run = oversized.text_frame.paragraphs[0].add_run()
+    run.text = "Rótulo"
+    run.font.size = Pt(18)
+    filled = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(4), Inches(3), Inches(1), Inches(1))
+    outlined = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(5), Inches(3), Inches(1), Inches(1))
+    outlined.fill.background()
+
+    copied = {shape.name: shape for shape in restyle_one(tmp_path, original, "ousado")}
+    assert {placeholder.name, oversized.name, filled.name, outlined.name} <= copied.keys()
+    label = copied[oversized.name]
+    assert label.text == oversized.text
+    assert copied[placeholder.name].text == placeholder.text
+    assert label.top >= Inches(1.79) - 1
+    assert label.top + label.height <= Inches(5.375) + 1
+    assert label.height < 0.99 * oversized.height * (copied[filled.name].height / filled.height)
+    assert label.text_frame.paragraphs[0].runs[0].font.size > Pt(18)
+
+    target_deck = label.part.package.presentation_part.presentation
+    target_theme = Theme(label.part.slide, target_deck)
+    for shape in (copied[placeholder.name], label):
+        _, _, _, text_bottom = text_bounds(shape, target_theme, target_deck.slide_height)
+        assert text_bottom <= Inches(5.375) + 1, shape.name
+
+
+def test_preserved_excludes_empty_textbox_inside_group(tmp_path):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    group = slide.shapes.add_group_shape()
+    group.shapes.add_textbox(0, 0, original.slide_width, original.slide_height)
+    visible = group.shapes.add_shape(MSO_SHAPE.OVAL, Inches(4), Inches(3), Inches(1), Inches(1))
+
+    copied = next(shape for shape in restyle_one(tmp_path, original, "ousado") if shape.name == group.name)
+    assert [shape.name for shape in copied.shapes] == [visible.name]
+    assert copied.height == pytest.approx(Inches(5.375 - 1.79), abs=1)
+
+
+@pytest.mark.parametrize("explicit_size", [True, False])
+def test_preserved_reserves_height_for_six_autofit_lines(tmp_path, explicit_size):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(2), Inches(2), Inches(1), Inches(1))
+    label = slide.shapes.add_textbox(Inches(2), Inches(4), Inches(5), Inches(3))
+    label.text_frame.auto_size = MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
+    label.text_frame.word_wrap = False
+    for index in range(6):
+        paragraph = label.text_frame.add_paragraph() if index else label.text_frame.paragraphs[0]
+        run = paragraph.add_run()
+        run.text = "Linha de conteúdo"
+        if explicit_size:
+            paragraph.line_spacing = Pt(24)
+            run.font.size = Pt(20)
+
+    copied = next(shape for shape in restyle_one(tmp_path, original, "ousado") if shape.name == label.name)
+    paragraphs = copied.text_frame.paragraphs
+    font_size = paragraphs[-1].runs[0].font.size or paragraphs[-1].font.size or Pt(18)
+    line_height = font_size * (0.968 + 0.251)
+    text_height = sum(paragraph.line_spacing or line_height for paragraph in paragraphs[:-1]) + line_height
+    estimated_bottom = copied.top + copied.text_frame.margin_top + 1.2 * text_height
+    assert estimated_bottom <= Inches(5.375)

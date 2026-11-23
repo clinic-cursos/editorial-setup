@@ -14,7 +14,7 @@ from zipfile import ZipFile
 from PIL import Image
 from pptx import Presentation
 from pptx.enum.dml import MSO_COLOR_TYPE
-from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
 from pptx.oxml.ns import qn
 from pptx.util import Inches
 import pytest
@@ -257,6 +257,91 @@ def test_bold_optional_image_panel_uses_full_text_width_when_omitted(tmp_path, k
     assert full.left + full.width == pytest.approx(deck.slide_width - Inches(0.45), abs=1)
 
 
+@pytest.mark.parametrize("kind,field,expected_size", [
+    ("passo_a_passo", "passos", 18),
+    ("alerta", "itens", 18),
+    ("pilares", "pilares", 18),
+    ("texto_imagem", "topicos", 15),
+])
+def test_bold_text_only_enlarges_five_short_items(tmp_path, kind, field, expected_size):
+    items = [f"Item {i}" for i in range(1, 6)]
+    values = items if kind == "texto_imagem" else [{"texto": item} for item in items]
+    path = write_script(tmp_path, [{"tipo": kind, "titulo": "Roteiro", field: values}], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    runs = run_styles(fingerprint(Presentation(out).slides[0])["runs"])
+    assert [runs[item][0][0] for item in items] == [expected_size] * len(items)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("kind,field,count", [
+    ("passo_a_passo", "passos", 6),
+    ("alerta", "itens", 4),
+    ("pilares", "pilares", 5),
+    ("texto_imagem", "topicos", 5),
+])
+def test_bold_text_only_fits_dense_items_at_the_floor(tmp_path, kind, field, count):
+    content = "Planeje as etapas e revise o material. " * 5 + "Fim."
+    items = [f"{i}. {content}" for i in range(1, count + 1)]
+    values = items if kind == "texto_imagem" else [{"titulo": f"Etapa {i}", "texto": item}
+                                                   for i, item in enumerate(items, 1)]
+    path = write_script(tmp_path, [{"tipo": kind, "titulo": "Roteiro", field: values}], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    deck = Presentation(out)
+    slide = deck.slides[0]
+    runs = run_styles(fingerprint(slide)["runs"])
+    for item in items:
+        assert runs[item][0][0] == 8
+    if kind != "texto_imagem":
+        assert 8 < runs["ETAPA 1" if kind != "passo_a_passo" else "Etapa 1"][0][0] <= 10
+    boxes = [shape for shape in slide.shapes if shape.has_text_frame
+             and any(item in shape.text for item in items)]
+    assert all(first.top + first.height <= second.top for first, second in zip(boxes, boxes[1:]))
+    assert boxes[-1].top + boxes[-1].height <= deck.slide_height
+    if kind == "texto_imagem":
+        for box in boxes:
+            frame = box.text_frame
+            width = box.width.pt - frame.margin_left.pt - frame.margin_right.pt
+            line_count = sum(len(wrap(line, width=int(width / (8 * 0.6)))) for line in box.text.splitlines())
+            assert line_count * 8 * 1.2 + frame.margin_top.pt + frame.margin_bottom.pt <= box.height.pt
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("heading", [
+    "Planejamento",
+    "Um roteiro claro ajuda a organizar as atividades da oficina e preparar o material de apoio",
+])
+def test_bold_text_only_title_has_a_two_line_limit(tmp_path, heading):
+    path = write_script(tmp_path, [{
+        "tipo": "texto_imagem", "titulo": heading, "texto": "Confira o roteiro.",
+    }], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+    slide = Presentation(out).slides[0]
+    title, body = [next(shape for shape in slide.shapes if shape.has_text_frame and shape.text == value)
+                   for value in (heading, "Confira o roteiro.")]
+    frame = title.text_frame
+    size = frame.paragraphs[0].runs[0].font.size.pt
+    width = title.width.pt - frame.margin_left.pt - frame.margin_right.pt
+    assert 18 <= size <= 40
+    assert len(wrap(heading, width=int(width / (size * 0.7)), break_long_words=False)) <= 2
+    assert title.top + title.height <= body.top
+
+
+def test_bold_text_only_topic_heading_scales_with_body(tmp_path):
+    path = write_script(tmp_path, [{
+        "tipo": "texto_imagem", "titulo": "Roteiro",
+        "topicos": [{"titulo": "Planejamento", "texto": "Confira o roteiro."}],
+    }], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    runs = run_styles(fingerprint(Presentation(out).slides[0])["runs"])
+    assert runs["Planejamento"][0][0] == pytest.approx(runs["Confira o roteiro."][0][0] * 1.2)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 @pytest.mark.parametrize("panel", [{}, {"prompt_imagem": "Cena de teste"}], ids=["text-only", "with-panel"])
 def test_bold_pillars_badge_matches_module_without_covering_text(tmp_path, panel):
     label = "Conheça nosso curso online de planejamento de aulas"
@@ -430,6 +515,141 @@ def test_bold_text_image_contains_picture_inside_panel(tmp_path, image_size):
     assert 0 <= photo.top <= photo.top + photo.height <= deck.slide_height
     assert 2 * photo.left + photo.width == pytest.approx(panel_left + deck.slide_width, abs=2)
     assert 2 * photo.top + photo.height == pytest.approx(deck.slide_height, abs=2)
+
+
+@pytest.mark.parametrize("heading,lines", [
+    ("Revisão em dupla", 1),
+    ("Preparação da leitura para a revisão em dupla", 2),
+])
+def test_bold_steps_with_panel_start_below_title(tmp_path, heading, lines):
+    path = write_script(tmp_path, [{
+        "tipo": "passo_a_passo", "titulo": heading, "prompt_imagem": "Material de leitura",
+        "passos": [{"titulo": "Leia", "texto": "Confira o material."},
+                   {"titulo": "Compare", "texto": "Converse em dupla."},
+                   {"titulo": "Anote", "texto": "Registre as dúvidas."},
+                   {"titulo": "Revise", "texto": "Confira as anotações."},
+                   {"titulo": "Envie", "texto": "Compartilhe o resumo."}],
+    }], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    slide = Presentation(out).slides[0]
+    boxes = {shape.text: shape for shape in slide.shapes if shape.has_text_frame}
+    title = boxes[heading]
+    first = boxes["Leia\nConfira o material."]
+    last = boxes["Envie\nCompartilhe o resumo."]
+    assert first.top >= title.top + title.height
+    if lines == 1:
+        assert first.top == Inches(1.38)
+    else:
+        assert title.height >= Inches(0.9)
+        assert first.top > Inches(1.38)
+        photo = next(shape for shape in slide.shapes if shape.name == "!!foto")
+        assert photo.top >= title.top + title.height
+    assert last.top + last.height <= Inches(4.78)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("panel", [False, True])
+def test_bold_steps_keep_even_visible_gaps(tmp_path, monkeypatch, panel):
+    monkeypatch.syspath_prepend(str(SKILL / "scripts"))
+    from conferir import Theme, check_text
+
+    texts = ["Leia o material.", "Compare as notas.", "Confira os rótulos e as legendas."]
+    if panel:
+        texts += ["Organize o material da oficina e compartilhe as anotações com a turma.",
+                  "Prepare um resumo da oficina e envie junto com as observações de cada etapa."]
+    else:
+        texts[2] = "Confira os rótulos e as legendas antes de compartilhar as anotações com o grupo."
+        texts += ["Organize o material da oficina e compartilhe as anotações com a turma "
+                  "antes de preparar as próximas atividades em dupla.",
+                  "Prepare um resumo dos assuntos da oficina e envie junto com as anotações "
+                  "e as observações feitas ao longo de cada etapa."]
+    fields = {"prompt_imagem": "Material de leitura"} if panel else {}
+    path = write_script(tmp_path, [{
+        "tipo": "passo_a_passo", "titulo": "Roteiro",
+        "passos": [{"texto": value} for value in texts], **fields,
+    }], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    deck = Presentation(out)
+    slide = deck.slides[0]
+    boxes = {shape.text.strip(): shape for shape in slide.shapes if shape.has_text_frame}
+    theme = Theme(slide, deck)
+    text_rows = []
+    for value in texts:
+        box = boxes[value]
+        frame = box.text_frame
+        margins = frame.margin_left, frame.margin_right, frame.margin_top, frame.margin_bottom
+        _, rows = check_text(frame, box, theme, set(), lambda *args: None,
+                             box.width, box.height, margins, box.top, deck.slide_height)
+        text_rows.append(rows)
+    assert [len(rows) for rows in text_rows] == [1, 1, 1, 2, 2]
+    gaps = [second[0][1] - first[-1][3] for first, second in zip(text_rows, text_rows[1:])]
+    assert min(gaps) > 0
+    assert max(gaps) - min(gaps) <= Inches(0.02), [gap / Inches(1) for gap in gaps]
+
+    dots = [shape for shape in slide.shapes if shape.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE
+            and shape.auto_shape_type == MSO_SHAPE.OVAL]
+    assert len(dots) == len(texts)
+    for dot, value in zip(dots, texts):
+        assert dot.top - boxes[value].top == pytest.approx(Inches(0.03), abs=1)
+    track = next(shape for shape in slide.shapes if shape.shape_type == MSO_SHAPE_TYPE.LINE)
+    assert track.top == pytest.approx(dots[0].top + dots[0].height / 2, abs=1)
+    assert track.top + track.height == pytest.approx(dots[-1].top + dots[-1].height / 2, abs=1)
+
+
+@pytest.mark.parametrize("mode", [None, "sangrar", "conter", "esticar"])
+def test_bold_comparison_image_mode(tmp_path, mode):
+    Image.new("RGB", (100, 200)).save(tmp_path / "diagrama.png")
+    fields = {"imagem_modo": mode} if mode is not None else {}
+    path = write_script(tmp_path, [{
+        "tipo": "comparativo", "titulo": "Dois formatos", "imagem": "diagrama.png", **fields,
+    }], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    if mode == "esticar":
+        assert result.returncode == 2
+        assert "imagem_modo de comparativo" in result.stderr
+        return
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    deck = Presentation(out)
+    photo = next(shape for shape in deck.slides[0].shapes if shape.name == "!!foto")
+    if mode == "conter":
+        assert (photo.crop_left, photo.crop_right, photo.crop_top, photo.crop_bottom) == (0, 0, 0, 0)
+        assert photo.width / photo.height == pytest.approx(0.5)
+        assert photo.height == Inches(2.7)
+        assert 2 * photo.left + photo.width == pytest.approx(deck.slide_width, abs=2)
+    else:
+        assert photo.crop_top > 0 and photo.crop_bottom > 0
+        assert photo.left == 0
+        assert photo.width == deck.slide_width
+    assert photo.top == 0
+
+
+def test_bold_comparison_columns_make_room_for_wrapped_items(tmp_path):
+    first_items = [
+        "Confira **o título e a ordem dos tópicos** antes da discussão em dupla.",
+        "Confira **os rótulos e as legendas** antes de compartilhar com o grupo.",
+    ]
+    next_items = ["Compare as anotações.", "Abra a prévia."]
+    path = write_script(tmp_path, [{
+        "tipo": "comparativo", "titulo": "Dois formatos", "prompt_imagem": "Material de leitura",
+        "colunas": [{"itens": [first, second]} for first, second in zip(first_items, next_items)],
+        "nota": "Abra a prévia antes de compartilhar.",
+    }], avulso=True)
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    slide = Presentation(out).slides[0]
+    boxes = {shape.text: shape for shape in slide.shapes if shape.has_text_frame}
+    for first_text, next_text in zip(first_items, next_items):
+        first = boxes[first_text.replace("**", "")]
+        second = boxes[next_text]
+        assert first.height > Inches(0.3)
+        assert first.top + first.height <= second.top
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_bold_animates_standard_layouts(tmp_path):
