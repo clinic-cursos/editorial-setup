@@ -89,7 +89,9 @@ def test_extract_retains_text_and_filters_slides(tmp_path, source_deck):
     assert first["tipo"] == "preservado"
     assert len(first["imagens"]) == 3
     assert all((folder / path).read_bytes() == image for path in first["imagens"])
-    assert [slide["tipo"] for slide in draft["slides"]] == ["preservado", "preservado", "texto_imagem", "frase"]
+    assert [slide["tipo"] for slide in draft["slides"]] == ["preservado", "preservado", "texto_imagem", "modulo"]
+    assert [slide["revisar"] for slide in draft["slides"]] == [False, False, True, False]
+    assert draft["slides"][2]["imagem_modo"] == "conter"
     assert draft["slides"][1]["formas_desenhadas"] == 5
     out = folder / "rascunho.pptx"
     generated = run_cli("gerar", folder / "roteiro-rascunho.json", out)
@@ -99,6 +101,46 @@ def test_extract_retains_text_and_filters_slides(tmp_path, source_deck):
     assert bad.returncode == 2
     assert "6" in bad.stderr
     assert not (tmp_path / "invalido").exists()
+
+
+def test_extract_suggests_layouts_from_simple_slide_content(tmp_path):
+    prs = Presentation()
+    cases = [
+        ("Aula de teste", "Turma A", "capa", False),
+        ("CONTEÚDO programático", "Primeiro\n\nSegundo", "sumario", True),
+        ("Introdução", "", "modulo", False),
+        ("Materiais", "Item A\vItem B", "texto_imagem", True),
+        ("“Uma frase curta.”", "", "frase", True),
+        ("Prática", "", "modulo", False),
+        ("Sumário", "Parte A\nParte B", "sumario", True),
+        ("Uma frase comum " * 6, "", "texto_imagem", True),
+    ]
+    for title, body, _, _ in cases:
+        slide = prs.slides.add_slide(prs.slide_layouts[5])
+        slide.shapes.title.text = title
+        if body:
+            slide.shapes.add_textbox(Inches(1), Inches(2), Inches(7), Inches(3)).text = body
+    source = tmp_path / "sugestoes.pptx"
+    prs.save(source)
+    folder = tmp_path / "rascunho"
+
+    result = run_cli("extrair", source, folder)
+
+    assert result.returncode == 0, result.stderr
+    slides = json.loads((folder / "roteiro-rascunho.json").read_text(encoding="utf-8"))["slides"]
+    assert [(slide["tipo"], slide.get("revisar")) for slide in slides] == [
+        (kind, review) for _, _, kind, review in cases
+    ]
+    assert [slide["textos"] for slide in slides] == [
+        [title, body] if body else [title] for title, body, _, _ in cases
+    ]
+    assert [slides[2]["numero"], slides[5]["numero"]] == [1, 2]
+    assert slides[1]["itens"] == ["Primeiro", "Segundo"]
+    assert slides[6]["itens"] == ["Parte A", "Parte B"]
+    assert slides[3]["topicos"] == ["Item A", "Item B"]
+    assert slides[3]["imagem_modo"] == slides[7]["imagem_modo"] == "conter"
+    assert "imagem" not in slides[3]
+    assert slides[4]["frase"] == "“Uma frase curta.”"
 
 
 @pytest.mark.parametrize("style", ["padrao", "ousado"])

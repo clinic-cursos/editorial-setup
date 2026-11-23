@@ -20,6 +20,7 @@ from pptx.oxml.ns import qn
 REL_PREFIX = qn("r:id").split("}")[0] + "}"
 GROUP = MSO_SHAPE_TYPE.GROUP
 NUMBER = re.compile(r"\d+(?:\s*/\s*\d+)?")
+QUOTE_END = {'"': '"', "'": "'", "“": "”", "‘": "’", "«": "»"}
 
 
 def open_deck(path):
@@ -159,6 +160,7 @@ def extract(deck, folder, selection):
     numbers = slide_numbers(selection, len(presentation.slides))
     (folder / "img").mkdir(parents=True, exist_ok=True)
     slides = []
+    section_number = 0
     source = str(deck.resolve())
     for number in numbers:
         slide = presentation.slides[number - 1]
@@ -177,25 +179,40 @@ def extract(deck, folder, selection):
             if exported and shape.shape_id in content_ids:
                 content_images.extend(exported)
         drawings, annotations = drawing_counts(content)
-        body = [value for shape in ordered for value in texts(shape)]
+        heading = title.text.strip() if title is not None else ""
+        paragraphs = [value for shape in reading_order(content) for value in texts(shape) if value.strip()]
+        topics = [line for value in paragraphs for line in value.splitlines() if line.strip()]
         entry = {
             "origem": number, "deck": source, "slide": number, "titulo": title.text if title is not None else "",
-            "textos": body, "imagens": images, "formas_desenhadas": drawings,
+            "textos": [value for shape in ordered for value in texts(shape)],
+            "imagens": images, "formas_desenhadas": drawings,
         }
-        # Preserva composições complexas. Foto única com até três sobreposições usa texto_imagem.
-        # Frases recebem o texto integral na ordem de leitura. O roteiro é uma sugestão para direção.
+        # Preserva composições complexas antes de sugerir um layout, inclusive no primeiro slide.
         complex_content = (annotations >= 4 or len(content_images) > 1
                            or any(shape.has_table or shape.has_chart for shape in content))
-        if complex_content or (not content_images and (drawings or not body)):
+        if complex_content or (not content_images and (drawings or not (heading or paragraphs))):
             entry["tipo"] = "preservado"
-        elif content_images and Path(content_images[0]).suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff"}:
-            entry.update(tipo="texto_imagem", imagem=content_images[0],
-                         topicos=[value for shape in ordered if title is None or shape.shape_id != title.shape_id
-                                  for value in texts(shape)])
+        elif number == 1 and heading:
+            entry["tipo"] = "capa"
         elif content_images:
-            entry["tipo"] = "preservado"
+            if Path(content_images[0]).suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff"}:
+                entry.update(tipo="texto_imagem", imagem=content_images[0], imagem_modo="conter", topicos=topics)
+            else:
+                entry["tipo"] = "preservado"
         else:
-            entry.update(tipo="frase", frase="\n".join(body))
+            # Citação ocupa o slide inteiro. Divisória tem só título de uma linha, até 80 caracteres.
+            blocks = ([heading] if heading else []) + paragraphs
+            quote = blocks[0].strip() if len(blocks) == 1 else ""
+            if len(quote) > 2 and quote[1:-1].strip() and quote[-1] == QUOTE_END.get(quote[0]):
+                entry.update(tipo="frase", frase=quote)
+            elif heading and not topics and len(heading) <= 80 and len(heading.splitlines()) == 1:
+                section_number += 1
+                entry.update(tipo="modulo", numero=section_number)
+            elif topics and any(word in heading.casefold() for word in ("conteúdo", "sumário")):
+                entry.update(tipo="sumario", itens=topics)
+            else:
+                entry.update(tipo="texto_imagem", imagem_modo="conter", topicos=topics)
+        entry["revisar"] = entry["tipo"] not in {"preservado", "capa", "modulo"}
         slides.append(entry)
     path = folder / "roteiro-rascunho.json"
     path.write_text(json.dumps({"estilo": "ousado", "avulso": True, "slides": slides},
