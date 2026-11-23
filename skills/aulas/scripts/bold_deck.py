@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Layouts do estilo editorial ousado, com Morph e animações de entrada."""
 
+from hashlib import sha1
 from pathlib import Path
 
 from lxml import etree
@@ -19,6 +20,8 @@ from clinic_deck import (
 NOITE = RGBColor(0x1C, 0x12, 0x12)      # fundo escuro quente (vinho quase preto)
 NOITE2 = RGBColor(0x2A, 0x1A, 0x19)
 CREME = RGBColor(0xFA, 0xF6, 0xF4)
+QUOTE_FONT = "Georgia"
+QUOTE_MARK = "“"
 
 P14 = "http://schemas.microsoft.com/office/powerpoint/2010/main"
 P159 = "http://schemas.microsoft.com/office/powerpoint/2015/09/main"
@@ -213,7 +216,7 @@ def s_quote(prs, s, d):
     bg(s, CREME)
     big_arc(s, -5.0, -5.0, 7.0, VINHO, 0.5, 0, 90)
     logo(s, False)
-    text(s, M + 0.6, 0.55, 1.4, 1.4, "“", size=120, color=VINHO, font="Georgia")
+    text(s, M + 0.6, 0.55, 1.4, 1.4, QUOTE_MARK, size=120, color=VINHO, font=QUOTE_FONT)
     an.add(text(s, M + 1.15, 1.5, 7.4, 2.0, d.get("frase", ""), size=21, color=PRETO, font=FONTE, spacing=1.15),
            eff="up", dur=800, gap=500)
     x = M + 0.9
@@ -483,8 +486,27 @@ def s_preserved(prs, s, d, preserved):
 def s_from_layout(prs, s, d):
     """Usa o layout padrão com Morph e entrada suave do conteúdo."""
     LAYOUTS[d["tipo"]](prs, s, d)
+    shapes = list(s.shapes)
+    first = shapes[0]
+    if (first.left, first.top, first.width, first.height) == (0, 0, Inches(W), Inches(H)):
+        name(first, "!!fundo")
+    else:
+        background = bg(s, BRANCO)
+        s.shapes._spTree.insert(s.shapes._spTree.index(first._element), background._element)
+
+    logos = {sha1(Path(A(asset)).read_bytes()).hexdigest()
+             for asset in ("logo_branco.png", "logo_cor.png")}
+    existing_logo = next((shape for shape in shapes
+                          if shape.shape_type == MSO_SHAPE_TYPE.PICTURE and shape.image.sha1 in logos), None)
+    # Estes layouts legados representam a marca no cabeçalho ou no arco junto ao rodapé.
+    if existing_logo is None and d["tipo"] == "parceria":
+        existing_logo = next(shape for shape in shapes if shape.has_text_frame and shape.text.startswith("CLINIC CURSOS"))
+    if existing_logo is None and d["tipo"] == "continue_evolucao":
+        existing_logo = next(shape for shape in reversed(shapes) if shape.shape_type == MSO_SHAPE_TYPE.FREEFORM)
+    if existing_logo is not None:
+        name(existing_logo, "!!logo")
     an = Anim(s)
-    for sh in list(s.shapes)[1:]:
+    for sh in shapes[1:]:
         if sh.has_text_frame or sh.has_table or sh.shape_type in (MSO_SHAPE_TYPE.PICTURE, MSO_SHAPE_TYPE.CHART):
             an.add(sh, gap=40)
     morph(s); an.build()

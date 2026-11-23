@@ -4,10 +4,37 @@
 import argparse
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import clinic_deck
 from bold_deck import BOLD_LAYOUTS
+import conferir
 import restyle
+
+
+def build_deck(spec, output, base_dir, layouts):
+    if not any(slide.get("tipo") == "preservado" for slide in spec["slides"]):
+        clinic_deck.build(spec, output, base_dir, layouts=layouts)
+        return
+
+    layout = layouts["preservado"]
+
+    def marked_layout(prs, slide, data, preserved):
+        def copy(target, script, box):
+            shapes = preserved.copy(target, script, box)
+            for shape in shapes:
+                conferir.mark_preserved(shape)
+            return shapes
+
+        # Os layouts de preservado usam apenas o método copy.
+        layout(prs, slide, data, SimpleNamespace(copy=copy))
+
+    # O gerador padrão usa a identidade do mapa para acrescentar o rodapé.
+    layouts["preservado"] = marked_layout
+    try:
+        clinic_deck.build(spec, output, base_dir, layouts=layouts)
+    finally:
+        layouts["preservado"] = layout
 
 
 def main():
@@ -16,11 +43,32 @@ def main():
     generate = commands.add_parser("gerar", help="Gera um PowerPoint a partir de um roteiro JSON")
     generate.add_argument("roteiro", type=Path)
     generate.add_argument("saida", type=Path)
+    generate.add_argument("--sem-conferir", action="store_true", help=argparse.SUPPRESS)
     extract = commands.add_parser("extrair", help="Extrai o roteiro e as imagens de um PowerPoint")
     extract.add_argument("deck", type=Path)
     extract.add_argument("pasta", type=Path)
     extract.add_argument("--slides", help="Números e intervalos de slides, como 3,5-9")
+    check = commands.add_parser("conferir", help="Confere um PowerPoint pelo padrão editorial")
+    check.add_argument("deck", type=Path)
+    check.add_argument("--estilo", choices=conferir.PALETTES, default="padrao")
+    check.add_argument("--json", action="store_true")
+    preview = commands.add_parser("previa", help="Gera um PNG por slide")
+    preview.add_argument("deck", type=Path)
+    preview.add_argument("pasta", type=Path)
     args = parser.parse_args()
+
+    if args.command == "conferir":
+        try:
+            return conferir.report(args.deck, args.estilo, as_json=args.json)
+        except ValueError as exc:
+            check.error(str(exc))
+    if args.command == "previa":
+        try:
+            count = conferir.preview(args.deck, args.pasta)
+        except (OSError, ValueError) as exc:
+            preview.error(f"previa de {args.deck}: {exc}")
+        print(f"Prévia: {count} PNG(s) em {args.pasta}")
+        return 0
 
     if args.command == "extrair":
         try:
@@ -46,11 +94,12 @@ def main():
         generate.error(f"estilo desconhecido: {style}. Disponíveis: padrao, ousado")
     layouts = BOLD_LAYOUTS if style == "ousado" else clinic_deck.LAYOUTS
     try:
-        clinic_deck.build(spec, args.saida, args.roteiro.absolute().parent, layouts=layouts)
+        build_deck(spec, args.saida, args.roteiro.absolute().parent, layouts)
+        print("ok:", args.saida)
+        return 0 if args.sem_conferir else conferir.report(args.saida, style)
     except (OSError, ValueError) as exc:
         generate.error(str(exc))
-    print("ok:", args.saida)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
