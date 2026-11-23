@@ -450,6 +450,20 @@ def s_closing(prs, s, d):
     morph(s); an.build()
 
 
+def s_preserved(prs, s, d, preserved):
+    bg(s, CREME)
+    logo(s, False)
+    kicker(s, d.get("kicker", ""), M, 0.22, VINHO)
+    heading = title(s, d.get("titulo", ""), M, 0.54, W - 2 * M - 1, 0.64, color=PRETO, size=26)
+    bar(s, M, 1.23, color=VINHO)
+    objects = preserved.copy(s, d, (Inches(M), Inches(1.43), Inches(W - 2 * M), Inches(H - 1.68)))
+    animation = Anim(s)
+    for shape in [heading, *objects]:
+        animation.add(shape, gap=0 if shape is not heading else 250)
+    morph(s)
+    animation.build()
+
+
 def s_from_layout(prs, s, d):
     """Usa o layout padrão com Morph e entrada suave do conteúdo."""
     LAYOUTS[d["tipo"]](prs, s, d)
@@ -476,4 +490,5 @@ BOLD_LAYOUTS = {
     "alerta": s_alert,
     "numeros": s_numbers,
     "encerramento": s_closing,
+    "preservado": s_preserved,
 }

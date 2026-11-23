@@ -25,6 +25,8 @@ from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION, XL_LABEL_POSITION
 from pptx.oxml.ns import qn
 from lxml import etree
 
+from restyle import PreservedSlides
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(HERE, "..", "assets")
 
@@ -951,6 +953,11 @@ PARCERIAS_PADRAO = [
 ]
 
 
+def layout_preservado(prs, s, d, preserved):
+    header_editorial(s, d.get("titulo", ""), d.get("kicker"))
+    preserved.copy(s, d, (Inches(M), Inches(1.05), Inches(W - 2 * M), Inches(H - 1.4)))
+
+
 LAYOUTS = {k[7:]: v for k, v in globals().items() if k.startswith("layout_")}
 
 
@@ -960,11 +967,12 @@ def build(spec, out, base_dir=".", *, layouts=LAYOUTS):
     prs.slide_width = Inches(W); prs.slide_height = Inches(H)
     blank = prs.slide_layouts[6]
     slides = copy.deepcopy(spec["slides"])
+    avulso = spec.get("avulso", False)
     tipos = [x.get("tipo") for x in slides]
     for tipo in tipos:
         if not isinstance(tipo, str) or tipo not in layouts:
             raise SystemExit(f"tipo desconhecido: {tipo}. Disponíveis: {', '.join(layouts)}")
-    if spec.get("parcerias", True) and "parceria" not in tipos and "continue_evolucao" not in tipos:
+    if not avulso and spec.get("parcerias", True) and "parceria" not in tipos and "continue_evolucao" not in tipos:
         pos = tipos.index("encerramento") if "encerramento" in tipos else len(slides)
         extra = copy.deepcopy(PARCERIAS_PADRAO)
         for e in extra:  # assets padrão
@@ -974,10 +982,11 @@ def build(spec, out, base_dir=".", *, layouts=LAYOUTS):
                 c["icone"] = A(c["icone"]); c["qr"] = A(c["qr"])
         slides[pos:pos] = extra
     tipos = [x.get("tipo") for x in slides]
-    if spec.get("precificacao", True) and "precificacao" not in tipos:
+    if not avulso and spec.get("precificacao", True) and "precificacao" not in tipos:
         pos = tipos.index("parceria") if "parceria" in tipos else (tipos.index("encerramento") if "encerramento" in tipos else len(slides))
         slides[pos:pos] = [x for x in copy.deepcopy(PRECIFICACAO_PADRAO) if x["tipo"] not in tipos]
     total = len(slides)
+    preserved = PreservedSlides()
     for n, d in enumerate(slides, 1):
         # resolve caminhos relativos
         for k in ("imagem", "antes", "depois", "qr", "logo"):
@@ -988,7 +997,12 @@ def build(spec, out, base_dir=".", *, layouts=LAYOUTS):
                             for i in d["imagens"]]
         s = prs.slides.add_slide(blank)
         tipo = d.get("tipo")
-        layouts[tipo](prs, s, d)
+        if tipo == "preservado":
+            if isinstance(d.get("deck"), str) and d["deck"]:
+                d["deck"] = os.path.join(base_dir, d["deck"])
+            layouts[tipo](prs, s, d, preserved)
+        else:
+            layouts[tipo](prs, s, d)
         if layouts is LAYOUTS and tipo not in ("capa", "modulo", "frase", "encerramento", "parceria", "continue_evolucao", "custos", "precificacao"):
             footer(s, n, total, spec.get("rodape", ""))
         notes(s, d.get("notas"))
