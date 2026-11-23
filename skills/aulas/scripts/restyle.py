@@ -24,7 +24,7 @@ from pptx.oxml import parse_xml
 from pptx.oxml.ns import qn
 from pptx.oxml.shapes.picture import CT_Picture
 from pptx.shapes.picture import Picture
-from pptx.util import Length
+from pptx.util import Inches, Length, Pt
 
 
 REL_PREFIX = qn("r:id").split("}")[0] + "}"
@@ -179,17 +179,23 @@ def slide_content(presentation, slide):
                 rectangle_color = color
         elif not is_decoration(shape, width, height):
             content.append(shape)
-    if title is None or not title.text.strip():
+    if title is None or not title_line(title.text):
         # Sem placeholder, o primeiro texto curto na faixa superior é o candidato a título.
         title = next((shape for shape in reading_order(content)
-                      if shape.has_text_frame and 0 < len(shape.text.strip()) <= 150
-                      and (shape.top or 0) <= height * 0.22
-                      and "\n" not in shape.text and "\v" not in shape.text), None)
+                      if shape.has_text_frame and (shape.top or 0) <= height * 0.22
+                      and 0 < len(title_line(shape.text)) <= 150), None)
     return shapes, title, backdrops, content, rectangle_color
 
 
+def title_line(text):
+    # python-pptx já traduz quebras DrawingML para tabulação vertical.
+    text = re.sub(r"<a:br\s*/>", " ", text)
+    text = re.sub(r"(?<=\s)[-:](?=\s)", " ", text)
+    return " ".join(text.split())
+
+
 def normalize_title(text):
-    words = "".join(" " if category(char).startswith("P") else char for char in text.casefold())
+    words = "".join(" " if category(char).startswith("P") else char for char in title_line(text).casefold())
     return " ".join(words.split())
 
 
@@ -289,6 +295,20 @@ def overlaps(first, second):
     return x1 <= a2 and a1 <= x2 and y1 <= b2 and b1 <= y2
 
 
+def is_title_rule(shape, title_bounds):
+    if shape.shape_type != MSO_SHAPE_TYPE.LINE or shape.line.width > Pt(3):
+        return False
+    left, top, right, bottom = title_bounds
+    x1, y1, x2, y2 = bounds(shape)
+    gap = Inches(0.15)
+    # Aceita a sobreposição no eixo longo e mede a distância até a borda paralela.
+    if x2 - x1 <= 1 and y2 > y1:
+        return y1 <= bottom and top <= y2 and min(abs(x1 - left), abs(x1 - right)) <= gap
+    if y2 - y1 <= 1 and x2 > x1:
+        return x1 <= right and left <= x2 and min(abs(y1 - top), abs(y1 - bottom)) <= gap
+    return False
+
+
 def drawing_counts(shapes):
     images = [(shape.shape_id, bounds(shape)) for shape in shapes if next(image_parts(shape), None) is not None]
     drawings = overlays = 0
@@ -360,11 +380,12 @@ def extract(deck, folder, selection):
             images.append({"caminho": path, "decorativa": decorative})
         content_images = [image["caminho"] for image in images if not image["decorativa"]]
         drawings, annotations = drawing_counts(content)
-        heading = title.text.strip() if title is not None else ""
+        title_text = title.text if title is not None else ""
+        heading = title_text.strip()
         paragraphs = [value for shape in reading_order(content) for value in texts(shape) if value.strip()]
         topics = [line for value in paragraphs for line in value.splitlines() if line.strip()]
         entry = {
-            "origem": number, "deck": source, "slide": number, "titulo": title.text if title is not None else "",
+            "origem": number, "deck": source, "slide": number, "titulo": title_line(title_text),
             "textos": [value for shape in ordered for value in texts(shape)],
             "imagens": images, "formas_desenhadas": drawings,
         }
@@ -468,6 +489,8 @@ class PreservedSlides:
         for index, shape in enumerate(content):
             if shape.has_text_frame and normalize_title(shape.text) in titles:
                 del content[index]
+                title_bounds = bounds(shape)
+                content = [item for item in content if not is_title_rule(item, title_bounds)]
                 break
         shapes = backdrops + content
         if not shapes:

@@ -395,6 +395,51 @@ def test_preserved_omits_only_first_matching_text_box(tmp_path, style, title_sou
     assert sum(value.casefold() == script_title.casefold() for value in copied_text.values()) == 1
 
 
+@pytest.mark.parametrize("separator", [" -\v", "\t:\n", " <a:br/> "])
+def test_extract_flattens_title_from_regular_text_box(tmp_path, separator):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    title = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(5), Inches(1))
+    title.text = f"  Título{separator}  de teste!  "
+    source = tmp_path / "original.pptx"
+    original.save(source)
+
+    folder = tmp_path / "rascunho"
+    result = run_cli("extrair", source, folder)
+    assert result.returncode == 0, result.stderr
+    entry = json.loads((folder / "roteiro-rascunho.json").read_text(encoding="utf-8"))["slides"][0]
+    assert entry["titulo"] == "Título de teste!"
+    assert entry["textos"] == [title.text]
+
+
+@pytest.mark.parametrize("style", ["padrao", "ousado"])
+def test_preserved_drops_multiline_title_with_nearby_rules(tmp_path, style):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    title = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(5), Inches(1))
+    title.name = "Original title"
+    title.text = "Título -\vde teste"
+    body = slide.shapes.add_textbox(Inches(2), Inches(3), Inches(3), Inches(1))
+    body.name = "Body"
+    body.text = "Texto a preservar"
+    for name, points, weight in [
+        ("Vertical rule", (0.9, 1, 0.9, 2), 2.25),
+        ("Horizontal rule", (1, 0.85, 6, 0.85), 2.25),
+        ("Distant line", (0.8, 1, 0.8, 2), 2.25),
+        ("Thick line", (1, 2.1, 6, 2.1), 8),
+        ("Diagonal annotation", (1, 2.1, 2, 3), 2.25),
+    ]:
+        line = slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, *map(Inches, points))
+        line.name = name
+        line.line.width = Pt(weight)
+
+    copied = {shape.name: shape for shape in restyle_one(tmp_path, original, style)}
+
+    assert not {"Original title", "Vertical rule", "Horizontal rule"} & copied.keys()
+    assert copied["Body"].text == "Texto a preservar"
+    assert {"Distant line", "Thick line", "Diagonal annotation"} <= copied.keys()
+
+
 @pytest.mark.parametrize("style", ["padrao", "ousado"])
 def test_preserved_frame_keeps_divider_below_title(tmp_path, source_deck, style):
     source, _ = source_deck
