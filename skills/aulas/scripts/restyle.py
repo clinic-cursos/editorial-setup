@@ -426,12 +426,14 @@ def is_title_rule(shape, title_bounds):
         return False
     left, top, right, bottom = title_bounds
     x1, y1, x2, y2 = bounds(shape)
-    gap = Inches(0.15)
-    # Aceita a sobreposição no eixo longo e mede a distância até a borda paralela.
+    gap = Inches(0.30)
+    # Pelo menos metade do fio deve acompanhar a caixa do título no eixo longo.
     if x2 - x1 <= 1 and y2 > y1:
-        return y1 <= bottom and top <= y2 and min(abs(x1 - left), abs(x1 - right)) <= gap
+        overlap = min(y2, bottom) - max(y1, top)
+        return 2 * overlap >= y2 - y1 and min(abs(x1 - left), abs(x1 - right)) <= gap
     if y2 - y1 <= 1 and x2 > x1:
-        return x1 <= right and left <= x2 and min(abs(y1 - top), abs(y1 - bottom)) <= gap
+        overlap = min(x2, right) - max(x1, left)
+        return 2 * overlap >= x2 - x1 and min(abs(y1 - top), abs(y1 - bottom)) <= gap
     return False
 
 

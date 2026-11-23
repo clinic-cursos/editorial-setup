@@ -426,9 +426,11 @@ def test_preserved_drops_multiline_title_with_nearby_rules(tmp_path, style):
     body.name = "Body"
     body.text = "Texto a preservar"
     for name, points, weight in [
-        ("Vertical rule", (0.9, 1, 0.9, 2), 2.25),
+        ("Vertical rule", (0.78, 1, 0.78, 2), 2.25),
         ("Horizontal rule", (1, 0.85, 6, 0.85), 2.25),
-        ("Distant line", (0.8, 1, 0.8, 2), 2.25),
+        ("Rule at limit", (0.7, 1.5, 0.7, 2.5), 2.25),
+        ("Misaligned line", (0.78, 1.51, 0.78, 2.51), 2.25),
+        ("Distant line", (0.69, 1, 0.69, 2), 2.25),
         ("Thick line", (1, 2.1, 6, 2.1), 8),
         ("Diagonal annotation", (1, 2.1, 2, 3), 2.25),
     ]:
@@ -438,9 +440,9 @@ def test_preserved_drops_multiline_title_with_nearby_rules(tmp_path, style):
 
     copied = {shape.name: shape for shape in restyle_one(tmp_path, original, style)}
 
-    assert not {"Original title", "Vertical rule", "Horizontal rule"} & copied.keys()
+    assert not {"Original title", "Vertical rule", "Horizontal rule", "Rule at limit"} & copied.keys()
     assert copied["Body"].text == "Texto a preservar"
-    assert {"Distant line", "Thick line", "Diagonal annotation"} <= copied.keys()
+    assert {"Misaligned line", "Distant line", "Thick line", "Diagonal annotation"} <= copied.keys()
 
 
 @pytest.mark.parametrize("style", ["padrao", "ousado"])
