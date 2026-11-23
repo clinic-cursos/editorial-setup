@@ -36,6 +36,16 @@ Use o formato **Fase concluída** e **Próxima fase**, com os arquivos da versã
 
 Esse pedido entra na fase 3 e segue para a fase 4 se houver espaço suficiente e a diagramação passar na auditoria. Enquanto o manual estiver pendente, confira as regras inferidas no relatório e a marca “provisória: manual ausente” na nota.
 
+## Peça uma aula ou um slide
+
+Fale com o Editor-Chefe e anexe os materiais citados no pedido. Escolha uma das frases para colar:
+
+- “Crie uma aula do zero para [curso] usando o conteúdo anexado. Use o estilo padrão da Clinic.”
+- “Refaça o deck ou slide anexado no design system novo, preservando o sentido do conteúdo.”
+- “Crie um slide avulso sobre [tema] com o material anexado, ou corrija o slide [número] conforme [ajuste] e entregue só esse slide.”
+
+O pedido de design system novo usa o estilo ousado do modelo mestre v1. O Editor-Chefe encaminha o PowerPoint para sua conferência depois da revisão dos slides.
+
 ## Abra a auditoria científica em uma conversa nova
 
 1. Na conversa do livro, peça ao Editor-Chefe o pacote de auditoria da fase 1. Ele inclui o manuscrito, a tabela de rastreabilidade, a tabela slide a capítulo, os materiais originais e a rubrica da fase.

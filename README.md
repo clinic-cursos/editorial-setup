@@ -1,6 +1,6 @@
 # Setup editorial da Clinic Editora
 
-Sete papéis de IA ajudam a transformar slides e apostilas em livros e a produzir aulas no padrão da Clinic. As mesmas skills são distribuídas para ChatGPT, Claude Code, Cowork, claude.ai e Codex.
+Oito papéis de IA ajudam a transformar slides e apostilas em livros e a produzir aulas no padrão da Clinic. As mesmas skills são distribuídas para ChatGPT, Claude Code, Cowork, claude.ai e Codex.
 
 - [Guia da Paula](docs/guia-paula.md) para instalar no ChatGPT e conduzir um livro.
 - [Guia da equipe](docs/guia-equipe.md) para empacotar e instalar nas demais plataformas.
@@ -15,7 +15,8 @@ Sete papéis de IA ajudam a transformar slides e apostilas em livros e a produzi
 | Diagramador | [`diagramador`](skills/diagramador/SKILL.md) | Fonte editável em HTML, PDF A4, mapa de páginas e checagem de layout. |
 | Imagens | [`imagens`](skills/imagens/SKILL.md) | Imagens conceituais ou briefings para preencher espaços do livro. |
 | Auditor Gráfico | [`auditor-grafico`](skills/auditor-grafico/SKILL.md) | Relatório por página e nota da diagramação e da reinserção de imagens. |
-| Aulas | [`aulas`](skills/aulas/SKILL.md) | PowerPoint editável e roteiro estruturado que pode alimentar a ampliação científica. |
+| Aulas | [`aulas`](skills/aulas/SKILL.md) | PowerPoint editável, roteiro, checagem automática e prévia, gerados pela ferramenta de aulas. |
+| Revisor de Aulas | [`revisor-aulas`](skills/revisor-aulas/SKILL.md) | Revisão independente de cada slide, com nota e achados antes da entrega. |
 
 João aprova o conteúdo técnico. Paula aprova a versão editorial e gráfica e libera a impressão. As notas das auditorias orientam o fluxo entre fases.
 

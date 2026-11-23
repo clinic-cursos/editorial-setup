@@ -1,6 +1,6 @@
 {
   "name": "clinic-editorial",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Equipe editorial para edição científica, diagramação, auditoria, imagens e aulas da Clinic Editora.",
   "author": {
     "name": "Clinic Editora"
@@ -12,6 +12,7 @@
     "./agents/editorial/diagramador.md",
     "./agents/editorial/editor-chefe.md",
     "./agents/editorial/editor-cientifico.md",
-    "./agents/editorial/imagens.md"
+    "./agents/editorial/imagens.md",
+    "./agents/editorial/revisor-aulas.md"
   ]
 }

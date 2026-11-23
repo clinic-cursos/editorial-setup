@@ -88,7 +88,7 @@ Verificação comum (todo cartão): `uv run --locked pytest -q tests/test_aulas.
 
 ## Status
 
-- Feito: verificação dos três arquivos de referência; plano.
-- Em andamento: cartões 1 a 4, em série, pelo Codex.
+- Feito: verificação dos três arquivos de referência, plano e cartões 1 a 4.
+- Em andamento: nada.
 - Travado: nada.
-- Próximo passo: revisão única do `cross-reviewer`, `integrate`, PR e merge.
+- Próximo passo: revisão única do `cross-reviewer`, integração, PR e merge.

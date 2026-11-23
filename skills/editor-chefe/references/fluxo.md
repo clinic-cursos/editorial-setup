@@ -16,8 +16,10 @@
 - Fases 5 e 6 são de pessoas. O Editor-Chefe só prepara o pacote e registra a decisão.
 
 ## Produção de aulas
-- O Editor-Chefe aciona `aulas` quando a pessoa pede para produzir ou refazer uma aula. A entrada usa os materiais do pedido e dispensa fase concluída do livro.
-- `aulas` entrega o PowerPoint e o roteiro em JSON ao Editor-Chefe pelo [bloco de retorno](comum/retorno.md). O Editor-Chefe encaminha a entrega e as pendências à pessoa para conferência, sem portão de nota na V1.
+- O Editor-Chefe aciona `aulas` em três entradas: aula do zero com conteúdo; deck ou slide de referência para adaptar com `extrair`, direção do roteiro e `gerar`; slide avulso ou correção de slide. Use os materiais do pedido, sem exigir fase concluída de livro.
+- `aulas` dirige o roteiro e gera o PowerPoint pela ferramenta. Após a checagem automática e a inspeção da prévia, devolve o .pptx, o roteiro JSON, o relatório do `conferir` e a prévia no bloco de `references/comum/retorno.md`.
+- O Editor-Chefe encaminha esses arquivos e a descrição do estilo da skill `aulas` ao `revisor-aulas`. Registre o status, a nota e os achados na ficha para a versão examinada.
+- Encaminhe o PowerPoint à pessoa para conferência após o retorno `PRONTO` do `revisor-aulas`, com nota de pelo menos 90 e sem eliminatórios. Na reprovação, devolva a `aulas` com os achados e reencaminhe a nova versão para revisão. Na terceira reprovação, pare e encaminhe à pessoa as notas, os achados e as pendências para decisão.
 - Quando a aula servir de base para a ampliação científica de um livro, o Editor-Chefe pode entregar o roteiro em JSON ao `editor-cientifico` como fonte estruturada dos slides para a tabela slide a capítulo.
 
 ## Independência

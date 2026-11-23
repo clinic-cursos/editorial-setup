@@ -1,6 +1,6 @@
 # Regras do time: editorial-setup
 
-Setup editorial de IA da Clinic Editora: seis papéis como skills de fonte única (`skills/`), empacotados para ChatGPT, claude.ai, Claude Code e Codex.
+Setup editorial de IA da Clinic Editora com oito papéis como skills de fonte única (`skills/`), empacotados para ChatGPT, claude.ai, Claude Code e Codex.
 
 ## Governança (spec, seção 2)
 - Agente nunca aprova no lugar de pessoa. João aprova o conteúdo técnico; Paula aprova a versão e libera a impressão. Nota alta não libera nada para impressão.

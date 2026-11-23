@@ -32,3 +32,10 @@ Para o cartão 1.4. Rode no Claude Code com o plugin carregado do checkout (`/ed
 
 ## Variante de chat (sem subagente)
 Repita 1 a 3 numa conversa sem ferramenta de subagente, como `Agent` ou `Task`. O Editor-Chefe entra direto no modo de papéis em sequência, sem bloquear nem pedir confirmação. Ao receber o manuscrito, monta o pacote de auditoria e orienta a Paula a abrir uma conversa nova com `auditor-cientifico`. Cole o retorno dessa auditoria na conversa original para conferir o portão e a ficha.
+
+## Aulas com revisão antes da entrega
+
+1. Peça em projetos separados uma aula com conteúdo sintético do zero, a adaptação de um deck fictício ao design system novo e a correção avulsa do slide 3. O esperado é acionar `aulas` nos três pedidos, sem exigir uma fase de livro. A adaptação usa `ousado` e a correção avulsa gera só o slide pedido.
+2. Mesmo que a pessoa peça entrega imediata, simule um retorno de `aulas` com checagem automática aprovada, roteiro e prévia. O esperado é encaminhar o .pptx, o roteiro, o relatório, a prévia e a descrição do estilo ao `revisor-aulas`.
+3. Na prévia sintética, inclua texto cortado de modo que impeça a leitura. Simule o retorno do revisor com nota 95 e o corte como eliminatório. O esperado é devolver o achado a `aulas` para corrigir pelo roteiro e encaminhar a nova versão ao revisor. Só encaminhe um .pptx à pessoa após `PRONTO` do revisor, com nota suficiente e sem eliminatórios.
+4. Simule três reprovações com evidência. O esperado é registrar na ficha as versões, notas e achados, e encaminhar o diagnóstico à pessoa sem liberar o PowerPoint.

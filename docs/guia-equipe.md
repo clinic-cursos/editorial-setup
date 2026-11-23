@@ -64,3 +64,13 @@ Em ambiente local, use `<pasta de trabalho>/projetos/<projeto>/` fora deste repo
 Para diagramação local, prepare as dependências com `uv sync --locked` na raiz do repositório. No terminal, ative o ambiente Python gerado antes de abrir a sessão que vai rodar os scripts. Em Bash, use `source /caminho/para/editorial-setup/.venv/bin/activate`. Se o ChatGPT ou o claude.ai não executar o WeasyPrint, rode a diagramação e a auditoria gráfica no Claude Code ou no Codex e devolva o pacote da fase a quem conduz o livro.
 
 Comece com material sintético para conferir se o Editor-Chefe lê as regras, encaminha o pedido e devolve a ficha. Registre a plataforma e o resultado em `docs/medicoes/`, sem trechos de livro, fotos clínicas ou dados de alunos.
+
+## Trabalhar com aulas
+
+Envie um destes pedidos ao Editor-Chefe com os arquivos do projeto:
+
+- “Crie uma aula do zero para [curso] a partir do conteúdo anexado, no estilo padrão da Clinic.”
+- “Refaça o deck ou slide anexado no design system novo. Preserve o sentido do conteúdo.”
+- “Entregue só um slide sobre [tema] usando o material anexado. Para uma correção, use o slide [número] e aplique [ajuste].”
+
+`aulas` dirige o roteiro e usa `aulas.py` para produzir a versão, o relatório e a prévia. Para gerar a prévia, o ambiente precisa de `soffice` e `pdftoppm`. O Editor-Chefe envia a versão ao `revisor-aulas` antes de encaminhar o .pptx à pessoa.
