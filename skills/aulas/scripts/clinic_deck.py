@@ -13,6 +13,7 @@ Imagens: qualquer campo "imagem" aceita um caminho de arquivo. Se faltar ou o
 arquivo não existir, entra um espaço reservado cinza com a descrição, para o
 professor trocar depois.
 """
+import copy
 import json, os, sys
 from pptx import Presentation
 from pptx.util import Inches, Pt, Emu
@@ -953,14 +954,17 @@ PARCERIAS_PADRAO = [
 LAYOUTS = {k[7:]: v for k, v in globals().items() if k.startswith("layout_")}
 
 
-def build(spec, out, base_dir="."):
+def build(spec, out, base_dir=".", *, layouts=LAYOUTS):
+    PROMPTS.clear()
     prs = Presentation()
     prs.slide_width = Inches(W); prs.slide_height = Inches(H)
     blank = prs.slide_layouts[6]
-    slides = list(spec["slides"])
+    slides = copy.deepcopy(spec["slides"])
     tipos = [x.get("tipo") for x in slides]
+    for tipo in tipos:
+        if not isinstance(tipo, str) or tipo not in layouts:
+            raise SystemExit(f"tipo desconhecido: {tipo}. Disponíveis: {', '.join(layouts)}")
     if spec.get("parcerias", True) and "parceria" not in tipos and "continue_evolucao" not in tipos:
-        import copy
         pos = tipos.index("encerramento") if "encerramento" in tipos else len(slides)
         extra = copy.deepcopy(PARCERIAS_PADRAO)
         for e in extra:  # assets padrão
@@ -971,7 +975,6 @@ def build(spec, out, base_dir="."):
         slides[pos:pos] = extra
     tipos = [x.get("tipo") for x in slides]
     if spec.get("precificacao", True) and "precificacao" not in tipos:
-        import copy
         pos = tipos.index("parceria") if "parceria" in tipos else (tipos.index("encerramento") if "encerramento" in tipos else len(slides))
         slides[pos:pos] = [x for x in copy.deepcopy(PRECIFICACAO_PADRAO) if x["tipo"] not in tipos]
     total = len(slides)
@@ -985,10 +988,8 @@ def build(spec, out, base_dir="."):
                             for i in d["imagens"]]
         s = prs.slides.add_slide(blank)
         tipo = d.get("tipo")
-        if tipo not in LAYOUTS:
-            raise SystemExit(f"tipo desconhecido: {tipo}. Disponíveis: {', '.join(LAYOUTS)}")
-        LAYOUTS[tipo](prs, s, d)
-        if tipo not in ("capa", "modulo", "frase", "encerramento", "parceria", "continue_evolucao", "custos", "precificacao"):
+        layouts[tipo](prs, s, d)
+        if layouts is LAYOUTS and tipo not in ("capa", "modulo", "frase", "encerramento", "parceria", "continue_evolucao", "custos", "precificacao"):
             footer(s, n, total, spec.get("rodape", ""))
         notes(s, d.get("notas"))
     prs.save(out)

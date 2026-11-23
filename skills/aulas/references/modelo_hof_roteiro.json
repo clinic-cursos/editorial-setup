@@ -1,0 +1,256 @@
+{
+  "titulo": "HOF básico",
+  "estilo": "ousado",
+  "parcerias": false,
+  "precificacao": false,
+  "slides": [
+    {
+      "tipo": "capa",
+      "curso": "CURSO DE HARMONIZAÇÃO FACIAL",
+      "titulo": "TOXINA +",
+      "titulo_secundario": "PREENCHEDORES",
+      "subtitulo": "Módulo 1"
+    },
+    {
+      "tipo": "sumario",
+      "titulo": "CONTEÚDO PROGRAMÁTICO",
+      "resumo": "temas em 2 dias de imersão",
+      "info": "**Dia 1 **teórico\n**Dia 2 **prático · 9h–17h",
+      "itens": [
+        "Fisiopatologia do envelhecimento",
+        "Anatomia e áreas de risco",
+        "Mecanismo de ação",
+        "Prescrição que prolonga a toxina",
+        "Imunogenicidade",
+        "Marcas comerciais",
+        "Tendência: Relfydess",
+        "Reações adversas e manejo",
+        "Reticulação dos materiais",
+        "Reconstituição e armazenamento",
+        "Preenchimento com cânula",
+        "Técnicas anestésicas"
+      ]
+    },
+    {
+      "tipo": "modulo",
+      "numero": 1,
+      "titulo": "Introdução",
+      "descricao": "Envelhecimento facial e diagnóstico"
+    },
+    {
+      "tipo": "frase",
+      "frase": "A harmonização facial é um conjunto de procedimentos que promove **equilíbrio entre as proporções** do rosto, valorizando características individuais com **naturalidade**.",
+      "selos": [
+        "Minimamente invasivo",
+        "Procedimento rápido",
+        "Recuperação reduzida",
+        "Mínimo de complicações"
+      ]
+    },
+    {
+      "tipo": "pilares",
+      "titulo": "Os 3 pilares do envelhecimento",
+      "kicker": "ENVELHECIMENTO",
+      "destaque_titulo": "3 pilares",
+      "info": "**Intrínseco **cronológico\n**Extrínseco **fotoenvelhecimento",
+      "pilares": [
+        {
+          "titulo": "OSSO",
+          "texto": "Remodelação esquelética: a estrutura de suporte recua."
+        },
+        {
+          "titulo": "GORDURA",
+          "texto": "Perda e deslocamento dos coxins de gordura."
+        },
+        {
+          "titulo": "PELE",
+          "texto": "Menos tonicidade e elasticidade."
+        }
+      ],
+      "referencia": "Swift A, et al. The Facial Aging Process from the “Inside Out”. Aesthet Surg J. 2021;41(10):1107-19.",
+      "estilo_imagem": "foto",
+      "prompt_imagem": "Retrato editorial de estúdio de duas mulheres lado a lado, a da esquerda com cerca de 25 anos e a da direita com cerca de 60 anos, mesmo enquadramento frontal do rosto e pescoço, expressão neutra. Sobre cada rosto, um triângulo de linhas finas: na jovem com a base larga nas maçãs do rosto e a ponta no queixo (triângulo da juventude); na madura invertido, com a base larga na mandíbula. Fotografia realista, pele natural sem retoque excessivo, iluminação suave e uniforme, fundo neutro escuro quente"
+    },
+    {
+      "tipo": "texto_imagem",
+      "titulo": "De cima\npara baixo.",
+      "kicker": "VETOR DE ENVELHECIMENTO",
+      "destaque_titulo": "baixo.",
+      "seta": true,
+      "texto": "As alterações começam nos **compartimentos superiores** e repercutem nas regiões inferiores. O planejamento segue a mesma direção.",
+      "estilo_imagem": "foto",
+      "prompt_imagem": "Retrato em perfil três quartos de uma mulher de cerca de 60 anos, olhos fechados, expressão serena, enquadramento da testa ao pescoço. Setas finas e translúcidas em vinho descendo suavemente sobre a face (sobrancelha, maçã do rosto, sulco nasogeniano, mandíbula), indicando o vetor de envelhecimento de cima para baixo. Sobreposição gráfica minimalista"
+    },
+    {
+      "tipo": "modulo",
+      "numero": 2,
+      "titulo": "Toxina botulínica",
+      "descricao": "Mecanismo, duração e planejamento"
+    },
+    {
+      "tipo": "passo_a_passo",
+      "titulo": "Mecanismo de ação",
+      "kicker": "TOXINA BOTULÍNICA",
+      "destaque_titulo": "ação",
+      "passos": [
+        {
+          "titulo": "Local",
+          "texto": "terminações pré-sinápticas, junção neuromuscular"
+        },
+        {
+          "titulo": "Internalização",
+          "texto": "liga-se ao terminal e entra no neurônio"
+        },
+        {
+          "titulo": "Ação proteolítica",
+          "texto": "cadeia leve cliva o complexo **SNARE**"
+        },
+        {
+          "titulo": "Efeito",
+          "texto": "menos acetilcolina → relaxamento temporário"
+        },
+        {
+          "titulo": "Recuperação",
+          "texto": "novas conexões restabelecem a função"
+        }
+      ],
+      "dica": "O efeito é reversível: dura enquanto a terminação nervosa se regenera.",
+      "prompt_imagem": "Ilustração científica 3D da junção neuromuscular em dois painéis lado a lado. Painel esquerdo: terminal nervoso liberando vesículas de acetilcolina na fenda sináptica sobre a fibra muscular. Painel direito: a mesma junção com moléculas de toxina botulínica ligadas ao terminal e as vesículas bloqueadas, sem liberação. Corte em seção transversal, cores limpas, visual de livro de fisiologia moderno",
+      "alerta_imagem": "Diagrama científico: confira se a sequência das etapas está correta."
+    },
+    {
+      "tipo": "numero",
+      "kicker": "DURAÇÃO E EFEITOS",
+      "valor": "3–4",
+      "legenda": "MESES DE EFEITO, EM BULA",
+      "texto": "A duração varia entre sorotipos, refletindo a meia-vida intracelular da cadeia leve."
+    },
+    {
+      "tipo": "duas_colunas",
+      "titulo": "Contraindicações",
+      "colunas": [
+        {
+          "titulo": "ABSOLUTAS",
+          "itens": [
+            "Hipersensibilidade à TBA ou componentes",
+            "Gestantes",
+            "Quadro psicológico: expectativas irreais, instabilidade"
+          ]
+        },
+        {
+          "titulo": "RELATIVAS",
+          "itens": [
+            "Doenças neuromusculares",
+            "Doença autoimune",
+            "Antibióticos (aminoglicosídeos)",
+            "Vacinas recentes (COVID, gripe, HPV)"
+          ]
+        }
+      ],
+      "nota": "*Lactantes: dados atuais não mostram contraindicação."
+    },
+    {
+      "tipo": "anatomia",
+      "titulo": "Glabela",
+      "kicker": "PLANEJAMENTO",
+      "marcacoes": [
+        {
+          "nome": "M. Prócero"
+        },
+        {
+          "nome": "M. Corrugadores do supercílio"
+        }
+      ],
+      "passos": [
+        "Um ponto em cada corrugador, no início da sobrancelha",
+        "Um ponto central no prócero",
+        "Pinçar a pele",
+        "Agulha a 90°"
+      ],
+      "indicador": {
+        "valor": "2–5",
+        "texto": "UI de toxina por ponto"
+      },
+      "prompt_imagem": "Ilustração anatômica 3D frontal do terço superior da face feminina, pele removida, mostrando a musculatura: músculo prócero na raiz do nariz e músculos corrugadores do supercílio acima das sobrancelhas, destacados em vinho; demais músculos em tom rosado mais suave. Enquadramento da testa até a ponta do nariz, simetria perfeita",
+      "alerta_imagem": "Anatomia gerada por IA pode errar trajetos e inserções: confira com atlas antes de usar."
+    },
+    {
+      "tipo": "modulo",
+      "numero": 3,
+      "titulo": "Preenchedores AH",
+      "descricao": "Materiais, técnica e intercorrências"
+    },
+    {
+      "tipo": "comparativo",
+      "titulo": "Agulha ou cânula?",
+      "destaque_titulo": "cânula?",
+      "colunas": [
+        {
+          "titulo": "AGULHA",
+          "itens": [
+            "Traumatiza o vaso: aspire 10–20 s",
+            "Permite superficializar (contorno labial)",
+            "Exige mais prática"
+          ]
+        },
+        {
+          "titulo": "CÂNULA",
+          "itens": [
+            "Ponta romba: **desvia do vaso**",
+            "Precisa de pertuito prévio",
+            "Menos dor, mais segura em áreas críticas"
+          ]
+        }
+      ],
+      "nota": "Cânulas finas podem agir como agulha. Mais segura: 22G × 50 mm ou 22G × 70 mm.",
+      "prompt_imagem": "Ilustração médica 3D em corte transversal da pele em camadas (epiderme, derme e gordura subcutânea) com um vaso sanguíneo na derme. À esquerda, agulha fina perfurando o vaso, com pequeno ponto de sangramento. À direita, cânula de ponta romba desviando suavemente do mesmo vaso. Composição dividida ao meio"
+    },
+    {
+      "tipo": "alerta",
+      "titulo": "Reconhecer cedo muda o desfecho.",
+      "intercorrencia": "REAÇÕES DE MAIOR GRAVIDADE",
+      "itens": [
+        {
+          "titulo": "ISQUEMIA",
+          "texto": "dor intensa, palidez, livedo, alteração de cor e temperatura"
+        },
+        {
+          "titulo": "NECROSE",
+          "texto": "isquemia persistente que compromete a viabilidade do tecido"
+        },
+        {
+          "titulo": "INFECÇÃO",
+          "texto": "dor progressiva, calor, eritema em expansão, secreção"
+        }
+      ],
+      "prompt_imagem": "Ilustração médica 3D em dois quadros empilhados, de um vaso sanguíneo em corte longitudinal. Quadro superior: gel de ácido hialurônico translúcido azulado dentro do vaso, obstruindo o fluxo (embolização). Quadro inferior: o gel fora do vaso, comprimindo-o por fora e estreitando a luz (compressão). Hemácias visíveis, foco nítido",
+      "alerta_imagem": "Confira com o professor antes de usar em aula."
+    },
+    {
+      "tipo": "numeros",
+      "titulo": "Tenha sempre\nno consultório.",
+      "kicker": "HIALURONIDASE",
+      "destaque_titulo": "sempre",
+      "itens": [
+        {
+          "valor": "2×",
+          "texto": "o volume de AH aplicado, para remoção completa"
+        },
+        {
+          "valor": "7 dias",
+          "texto": "de intervalo, se precisar repetir"
+        },
+        {
+          "valor": "6 h",
+          "texto": "de meia-vida: descarte após reconstituir"
+        }
+      ],
+      "nota": "Pó liofilizado: reconstituir com soro fisiológico estéril antes da aplicação."
+    },
+    {
+      "tipo": "encerramento",
+      "titulo": "Obrigado.",
+      "mensagem": "Continue sua evolução com a Clinic Cursos."
+    }
+  ]
+}
