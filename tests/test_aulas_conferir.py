@@ -177,6 +177,71 @@ def test_checks_text_overlap_between_shapes(tmp_path, monkeypatch, upper_text, l
         assert findings == []
 
 
+def test_rejects_two_line_title_over_first_step(tmp_path):
+    title = "Preparação da leitura para a revisão em dupla"
+    step = "Leia\nConfira o material."
+    script = write_script(tmp_path, "ousado", [{
+        "tipo": "passo_a_passo", "titulo": title, "prompt_imagem": "Material de leitura",
+        "passos": [{"titulo": "Leia", "texto": "Confira o material."}],
+    }])
+    deck = tmp_path / "passos.pptx"
+    generated = run_cli("gerar", script, deck, "--sem-conferir")
+    assert generated.returncode == 0, generated.stderr or generated.stdout
+    presentation = Presentation(deck)
+    boxes = {shape.text: shape for shape in presentation.slides[0].shapes if shape.has_text_frame}
+    boxes[title].name = "Título"
+    boxes[title].height = Inches(0.6)
+    boxes[step].name = "Primeiro passo"
+    boxes[step].top = Inches(1.38)
+    presentation.save(deck)
+
+    result = run_cli("conferir", deck, "--estilo", "ousado", "--json")
+    assert result.returncode == 1, result.stderr or result.stdout
+    findings = json.loads(result.stdout)["findings"]
+    assert [(item["shape"], item["rule"], item["severity"]) for item in findings] == [
+        ("Título", "text_overlap", "error"),
+    ]
+    assert "Primeiro passo" in findings[0]["message"]
+
+
+@pytest.mark.parametrize("variant,left,overlaps", [
+    ("same_top", 1.25, True),
+    ("same_top", 3, False),
+    ("wrapped", 1.25, True),
+])
+def test_checks_comparison_items_for_text_overlap(tmp_path, variant, left, overlaps):
+    item = "Revise os registros\nCompare as imagens" if variant == "wrapped" else "Revise as imagens"
+    script = write_script(tmp_path, "ousado", [{
+        "tipo": "comparativo", "titulo": "Dois formatos", "prompt_imagem": "Material de leitura",
+        "colunas": [{"itens": [item]}, {"itens": ["Compare os exemplos"]}],
+    }])
+    deck = tmp_path / "comparativo.pptx"
+    generated = run_cli("gerar", script, deck, "--sem-conferir")
+    assert generated.returncode == 0, generated.stderr or generated.stdout
+    presentation = Presentation(deck)
+    boxes = {shape.text: shape for shape in presentation.slides[0].shapes if shape.has_text_frame}
+    first, second = boxes[item], boxes["Compare os exemplos"]
+    first.name, second.name = "Item esquerdo", "Item direito"
+    assert first.top == second.top
+    second.left = Inches(left)
+    assert first.left < second.left < first.left + first.width
+    if variant == "wrapped":
+        first.height = Inches(0.3)
+        second.top = first.top + first.height
+    presentation.save(deck)
+
+    result = run_cli("conferir", deck, "--estilo", "ousado", "--json")
+    assert result.returncode == int(overlaps), result.stderr or result.stdout
+    findings = json.loads(result.stdout)["findings"]
+    if overlaps:
+        assert [(item["shape"], item["rule"], item["severity"]) for item in findings] == [
+            ("Item esquerdo", "text_overlap", "error"),
+        ]
+        assert "Item direito" in findings[0]["message"]
+    else:
+        assert findings == []
+
+
 def test_table_rows_grow_into_the_remaining_slide_space(tmp_path):
     presentation = Presentation()
     slide = presentation.slides.add_slide(presentation.slide_layouts[6])
