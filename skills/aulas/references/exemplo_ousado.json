@@ -1,0 +1,153 @@
+{
+  "estilo": "ousado",
+  "titulo": "Oficina de aulas",
+  "avulso": true,
+  "precificacao": false,
+  "parcerias": false,
+  "slides": [
+    {
+      "tipo": "capa",
+      "curso": "Oficina de aulas",
+      "titulo": "Planejar",
+      "titulo_secundario": "e apresentar",
+      "subtitulo": "Módulo 1",
+      "notas": "Substitua os marcadores antes de usar o material em aula."
+    },
+    {
+      "tipo": "sumario",
+      "titulo": "Programa",
+      "itens": ["Roteiro", "Exercício", "Revisão"],
+      "resumo": "Três momentos",
+      "info": "**Manhã**\nAtividade em grupo"
+    },
+    {
+      "tipo": "modulo",
+      "numero": 1,
+      "titulo": "Roteiro",
+      "descricao": "Uma ideia por slide",
+      "selo": "Oficina"
+    },
+    {
+      "tipo": "frase",
+      "frase": "Uma boa pergunta abre a aula.",
+      "autor": "Exercício da oficina",
+      "selos": ["Abertura", "Discussão"]
+    },
+    {
+      "tipo": "pilares",
+      "kicker": "Planejamento",
+      "titulo": "Três pilares",
+      "destaque_titulo": "pilares",
+      "pilares": [
+        {"titulo": "Objetivo", "texto": "Defina a pergunta."},
+        {"titulo": "Material", "texto": "Selecione um exemplo."},
+        {"titulo": "Revisão", "texto": "Confira a resposta."}
+      ],
+      "info": "**Oficina**\nAtividade em grupo",
+      "referencia": "Roteiro da oficina",
+      "prompt_imagem": "Caderno aberto sobre uma mesa.",
+      "estilo_imagem": "foto"
+    },
+    {
+      "tipo": "texto_imagem",
+      "kicker": "Material",
+      "titulo": "A marca no slide",
+      "destaque_titulo": "marca",
+      "texto": "Confira o contraste.",
+      "topicos": [
+        "Use o arquivo oficial.",
+        {"titulo": "Proporção", "texto": "Mantenha a imagem inteira."}
+      ],
+      "destaque": "Confira a prévia.",
+      "seta": true,
+      "imagem": "../assets/logo_cor.png",
+      "imagem_modo": "conter"
+    },
+    {
+      "tipo": "passo_a_passo",
+      "kicker": "Exercício",
+      "titulo": "Revisão em dupla",
+      "destaque_titulo": "dupla",
+      "passos": [
+        {"titulo": "Leia", "texto": "Confira a ordem dos tópicos."},
+        {"titulo": "Compare", "texto": "Confira o texto na prévia."},
+        {"titulo": "Anote", "texto": "Registre os ajustes."}
+      ],
+      "legenda": "Duas pessoas revisando um roteiro.",
+      "dica": "Comece pelo slide de abertura."
+    },
+    {
+      "tipo": "numero",
+      "kicker": "Dinâmica",
+      "valor": 3,
+      "legenda": "Tópicos para revisar",
+      "texto": "Marque cada tópico depois da leitura."
+    },
+    {
+      "tipo": "duas_colunas",
+      "titulo": "Antes de enviar",
+      "colunas": [
+        {"titulo": "Revise", "itens": ["Textos longos", "Imagens cortadas"]},
+        {"titulo": "Confira", "itens": ["Títulos curtos", "Notas legíveis"]}
+      ],
+      "nota": "Leia o relatório de conferência."
+    },
+    {
+      "tipo": "anatomia",
+      "kicker": "Leitura de imagem",
+      "titulo": "Estruturas",
+      "marcacoes": [
+        {"nome": "[EXEMPLO: nome]", "desc": "[EXEMPLO: descrição]"}
+      ],
+      "passos": [],
+      "indicador": {"valor": "A", "texto": "Painel de apoio"},
+      "nota": "Use material validado pelo professor.",
+      "prompt_imagem": "[EXEMPLO: descrição da ilustração anatômica]",
+      "alerta_imagem": "Conferir com atlas ou professor."
+    },
+    {
+      "tipo": "comparativo",
+      "titulo": "Dois formatos",
+      "destaque_titulo": "formatos",
+      "colunas": [
+        {"titulo": "Rascunho", "itens": ["**Texto** editável", "Imagens provisórias"]},
+        {"titulo": "Prévia", "itens": ["Leitura por slide", "Checagem de cortes"]}
+      ],
+      "nota": "Abra a prévia antes de compartilhar.",
+      "prompt_imagem": "Folhas de rascunho ao lado de uma tela.",
+      "estilo_imagem": false
+    },
+    {
+      "tipo": "alerta",
+      "intercorrencia": "[EXEMPLO: rótulo]",
+      "titulo": "[EXEMPLO: alerta]",
+      "itens": [],
+      "sinais": ["[EXEMPLO: sinal]"],
+      "conduta": ["[EXEMPLO: conduta]"],
+      "urgente": "[EXEMPLO: aviso]",
+      "prompt_imagem": "[EXEMPLO: descrição de ilustração a validar]",
+      "alerta_imagem": "Validar a ilustração com o professor."
+    },
+    {
+      "tipo": "numeros",
+      "kicker": "Roteiro",
+      "titulo": "Resumo da oficina",
+      "destaque_titulo": "oficina",
+      "itens": [
+        {"valor": 3, "texto": "Tópicos"},
+        {"valor": "2", "texto": "Formatos"},
+        {"valor": 1, "texto": "Exercício"}
+      ],
+      "nota": "Contagem dos itens deste roteiro."
+    },
+    {
+      "tipo": "encerramento",
+      "titulo": "Até breve",
+      "mensagem": "Revise a aula antes de enviar.",
+      "contatos": ["[Contato da escola]"],
+      "qr": "../assets/parcerias/qr_clinicplus.png",
+      "qr_legenda": "ClinicPlus",
+      "selo": "Oficina"
+    }
+  ]
+}

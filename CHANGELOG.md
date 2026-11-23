@@ -1,5 +1,9 @@
 # Histórico de versões
 
+## 0.2.1
+
+- A skill de aulas documenta os campos do estilo ousado e inclui um roteiro de exemplo validado pelo `conferir`.
+
 ## 0.2.0
 
 - A ferramenta `aulas.py` gera o PowerPoint nos estilos padrão e ousado. O ousado segue o modelo mestre v1.
