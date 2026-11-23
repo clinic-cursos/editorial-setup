@@ -999,8 +999,18 @@ def build(spec, out, base_dir=".", *, layouts=LAYOUTS):
             if isinstance(d.get(k), str) and d[k] and not os.path.isabs(d[k]):
                 d[k] = os.path.join(base_dir, d[k])
         if "imagens" in d:
-            d["imagens"] = [os.path.join(base_dir, i) if isinstance(i, str) and not os.path.isabs(i) else i
-                            for i in d["imagens"]]
+            image_paths = []
+            for path in d["imagens"]:
+                if isinstance(path, dict):
+                    if path.get("decorativa") is True:
+                        continue
+                    path = path.get("caminho")
+                    if not isinstance(path, str):
+                        raise ValueError(f"slide {n}: caminho em imagens deve ser texto")
+                if isinstance(path, str) and not os.path.isabs(path):
+                    path = os.path.join(base_dir, path)
+                image_paths.append(path)
+            d["imagens"] = image_paths
         s = prs.slides.add_slide(blank)
         tipo = d.get("tipo")
         if tipo == "preservado":

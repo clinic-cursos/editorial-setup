@@ -285,6 +285,41 @@ def test_extract_ranks_images_by_slide_area_and_filters_decorations(tmp_path):
     assert slide["imagem"] == slide["imagens"][1]["caminho"]
 
 
+@pytest.mark.parametrize("style", ["padrao", "ousado"])
+def test_generate_clinical_case_from_extracted_images(tmp_path, style):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[5])
+    slide.shapes.title.text = "Caso de teste"
+    decoration = tmp_path / "marca.png"
+    photo = tmp_path / "foto.png"
+    Image.new("RGB", (16, 16), "white").save(decoration)
+    Image.new("RGB", (32, 24), "red").save(photo)
+    logo = slide.shapes.add_picture(str(decoration), Inches(9), 0, Inches(0.4))
+    logo.name = "Logo"
+    slide.shapes.add_picture(str(photo), Inches(1), Inches(2), Inches(4))
+    source = tmp_path / "original.pptx"
+    original.save(source)
+    folder = tmp_path / "rascunho"
+
+    extracted = run_cli("extrair", source, folder)
+    assert extracted.returncode == 0, extracted.stderr
+    script = folder / "roteiro-rascunho.json"
+    draft = json.loads(script.read_text(encoding="utf-8"))
+    draft_slide, = draft["slides"]
+    assert [item["decorativa"] for item in draft_slide["imagens"]] == [False, True]
+    draft_slide["tipo"] = "caso_clinico"
+    draft["estilo"] = style
+    script.write_text(json.dumps(draft), encoding="utf-8")
+
+    out = tmp_path / "caso.pptx"
+    generated = run_cli("gerar", script, out)
+    assert generated.returncode == 0, generated.stdout + generated.stderr
+    slide, = Presentation(out).slides
+    pictures = [shape.image.blob for shape in slide.shapes if shape.shape_type == MSO_SHAPE_TYPE.PICTURE]
+    assert pictures.count(photo.read_bytes()) == 1
+    assert decoration.read_bytes() not in pictures
+
+
 def test_extract_maps_single_callout_to_module_badge(tmp_path):
     prs = Presentation()
     slide = prs.slides.add_slide(prs.slide_layouts[5])
