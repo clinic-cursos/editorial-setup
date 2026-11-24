@@ -1,5 +1,11 @@
 # Histórico de versões
 
+## 0.2.5
+
+- A exceção clínica do `preservado` mantém as cores de marcadores pequenos e de marcações sobre imagem, inclusive ilustração anatômica. A legenda cromática mantém no texto e nos marcadores de lista a cor da marcação do mesmo slide, com ajuste de contraste quando necessário. O `conferir` reprova cores de texto fora da paleta sem correspondência com uma marcação.
+- O `preservado` ajusta os rótulos do original que estouram. Caixas com ajuste automático crescem quando há espaço. Nos demais casos, a fonte diminui até caber ou chegar ao limite previsto. O `conferir` reprova estouro de altura que persiste após o ajuste.
+- O `extrair` sugere `preservado` para marcações sobre imagem, tabelas ou composições de três ou mais imagens. Em aulas completas, o `gerar` recusa `preservado` de imagem simples e indica `texto_imagem` com `imagem_modo` igual a `conter`.
+
 ## 0.2.4
 
 - O slide `preservado` recebe a mesma moldura do slide 8 do modelo mestre v1.

@@ -967,7 +967,7 @@ def layout_preservado(prs, s, d, preserved):
 LAYOUTS = {k[7:]: v for k, v in globals().items() if k.startswith("layout_")}
 
 
-def validate_lesson_structure(slides, script_positions, spec):
+def validate_lesson_structure(slides, script_positions, spec, preserved):
     opening = {"capa": 1, "sumario": 2}
     tail = {kind: rank for rank, kind in enumerate(
         ("referencias", "custos", "precificacao", "parceria", "continue_evolucao", "encerramento")
@@ -1009,6 +1009,11 @@ def validate_lesson_structure(slides, script_positions, spec):
                 errors.append(f"{label}: frase excede o limite de duas por aula")
         elif kind != "modulo" and "modulo" not in seen:
             errors.append(f"{label}: {kind} deve vir depois de um modulo")
+        if kind == "preservado":
+            try:
+                preserved.validate(slide)
+            except ValueError as exc:
+                errors.append(f"{label}: {exc}")
         seen.add(kind)
 
     for option, required in (("precificacao", ("custos", "precificacao")),
@@ -1045,9 +1050,11 @@ def build(spec, out, base_dir=".", *, layouts=LAYOUTS, enforce_structure=False):
     script_positions = {id(slide): i for i, slide in enumerate(slides, 1)}
     avulso = spec.get("avulso", False)
     tipos = [x.get("tipo") for x in slides]
-    for tipo in tipos:
+    for slide, tipo in zip(slides, tipos, strict=True):
         if not isinstance(tipo, str) or tipo not in layouts:
             raise SystemExit(f"tipo desconhecido: {tipo}. Disponíveis: {', '.join(layouts)}")
+        if tipo == "preservado" and isinstance(slide.get("deck"), str) and slide["deck"]:
+            slide["deck"] = os.path.join(base_dir, slide["deck"])
     if not avulso and spec.get("parcerias", True) and "parceria" not in tipos and "continue_evolucao" not in tipos:
         pos = tipos.index("encerramento") if "encerramento" in tipos else len(slides)
         extra = copy.deepcopy(PARCERIAS_PADRAO)
@@ -1061,9 +1068,10 @@ def build(spec, out, base_dir=".", *, layouts=LAYOUTS, enforce_structure=False):
     if not avulso and spec.get("precificacao", True) and "precificacao" not in tipos:
         pos = tipos.index("parceria") if "parceria" in tipos else (tipos.index("encerramento") if "encerramento" in tipos else len(slides))
         slides[pos:pos] = [x for x in copy.deepcopy(PRECIFICACAO_PADRAO) if x["tipo"] not in tipos]
+    preserved = PreservedSlides()
     if enforce_structure:
         if not avulso:
-            validate_lesson_structure(slides, script_positions, spec)
+            validate_lesson_structure(slides, script_positions, spec, preserved)
         number_modules(slides, standalone=avulso)
 
     PROMPTS.clear()
@@ -1071,7 +1079,6 @@ def build(spec, out, base_dir=".", *, layouts=LAYOUTS, enforce_structure=False):
     prs.slide_width = Inches(W); prs.slide_height = Inches(H)
     blank = prs.slide_layouts[6]
     total = len(slides)
-    preserved = PreservedSlides()
     for n, d in enumerate(slides, 1):
         # resolve caminhos relativos
         for k in ("imagem", "antes", "depois", "qr", "logo"):
@@ -1093,8 +1100,6 @@ def build(spec, out, base_dir=".", *, layouts=LAYOUTS, enforce_structure=False):
         s = prs.slides.add_slide(blank)
         tipo = d.get("tipo")
         if tipo == "preservado":
-            if isinstance(d.get("deck"), str) and d["deck"]:
-                d["deck"] = os.path.join(base_dir, d["deck"])
             layouts[tipo](prs, s, d, preserved)
         else:
             layouts[tipo](prs, s, d)

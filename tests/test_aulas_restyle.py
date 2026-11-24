@@ -26,6 +26,89 @@ def run_cli(*args):
     return subprocess.run([sys.executable, str(CLI), *map(str, args)], capture_output=True, text=True)
 
 
+@pytest.fixture
+def preservation_deck(tmp_path):
+    deck = Presentation()
+    image = tmp_path / "ilustracao.png"
+    Image.new("RGB", (32, 24), "white").save(image)
+    for kind in ("one", "two", "dots", "group", "outside", "table", "three", "hidden"):
+        slide = deck.slides.add_slide(deck.slide_layouts[5])
+        slide.shapes.title.text = "Ilustração anatômica"
+        if kind == "table":
+            slide.shapes.add_table(1, 1, Inches(1), Inches(2), Inches(4), Inches(1)).table.cell(0, 0).text = "Dado"
+            continue
+        for index in range({"two": 2, "three": 3}.get(kind, 1)):
+            slide.shapes.add_picture(str(image), Inches(1 + 3 * index), Inches(2), Inches(2))
+        if kind in {"dots", "group", "outside", "hidden"}:
+            shapes = slide.shapes
+            if kind in {"group", "outside"}:
+                shapes = shapes.add_group_shape().shapes
+            for x in ((0.2, 3.5) if kind == "outside" else (1.5, 2.5)):
+                dot = shapes.add_shape(MSO_SHAPE.OVAL, Inches(x), Inches(2.5), Pt(6), Pt(6))
+                if kind == "hidden":
+                    dot._element.nvSpPr.cNvPr.set("hidden", "1")
+    source = tmp_path / "original.pptx"
+    deck.save(source)
+    return source
+
+
+@pytest.mark.parametrize("style", ["padrao", "ousado"])
+@pytest.mark.parametrize("source_slide,allowed", [(1, False), (3, True), (4, True), (6, True), (7, True)])
+def test_generate_validates_preserved_content(tmp_path, preservation_deck, style, source_slide, allowed):
+    script = tmp_path / "roteiro.json"
+    script.write_text(json.dumps({
+        "estilo": style, "parcerias": False, "precificacao": False,
+        "slides": [{"tipo": "capa"}, {"tipo": "sumario"}, {"tipo": "modulo"}, {
+            "tipo": "preservado", "deck": preservation_deck.name, "slide": source_slide,
+            "titulo": "Ilustração anatômica",
+        }, {"tipo": "encerramento"}],
+    }), encoding="utf-8")
+    out = tmp_path / "aula.pptx"
+    result = run_cli("gerar", script, out, "--sem-conferir")
+
+    if allowed:
+        assert result.returncode == 0, result.stderr
+        assert len(Presentation(out).slides) == 5
+    else:
+        assert result.returncode == 2, result.stdout + result.stderr
+        assert not out.exists()
+        assert "esqueleto inválido" in result.stderr
+        assert any(line.startswith("slide 4:") and all(term in line for term in (
+            "preservado", "tabela", "marcação", "texto_imagem", "imagem_modo",
+        )) for line in result.stderr.splitlines())
+
+
+def test_generate_accumulates_preservation_and_structure_errors(tmp_path, preservation_deck):
+    script = tmp_path / "roteiro.json"
+    script.write_text(json.dumps({
+        "parcerias": False, "precificacao": False,
+        "slides": [{"tipo": "preservado", "deck": preservation_deck.name, "slide": i}
+                   for i in (2, 5, 8)],
+    }), encoding="utf-8")
+    result = run_cli("gerar", script, tmp_path / "aula.pptx", "--sem-conferir")
+
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "slide 1: deve ser capa" in result.stderr
+    assert "slide 4: falta encerramento" in result.stderr
+    for i in (1, 2, 3):
+        assert any(line.startswith(f"slide {i}:") and "imagem_modo" in line for line in result.stderr.splitlines())
+
+
+def test_extract_suggests_preservation_only_for_eligible_content(tmp_path, preservation_deck):
+    folder = tmp_path / "rascunho"
+    result = run_cli("extrair", preservation_deck, folder)
+
+    assert result.returncode == 0, result.stderr
+    slides = json.loads((folder / "roteiro-rascunho.json").read_text(encoding="utf-8"))["slides"]
+    assert [slide["tipo"] for slide in slides] == [
+        "capa", "texto_imagem", "preservado", "preservado", "texto_imagem", "preservado", "preservado", "texto_imagem",
+    ]
+    assert slides[1]["imagem_modo"] == "conter"
+    assert len(slides[1]["imagens"]) == 2
+    assert slides[1]["imagem"] == slides[1]["imagens"][0]["caminho"]
+    assert slides[1]["revisar"] is True
+
+
 def restyle_one(tmp_path, original, style, title="Novo título"):
     source = tmp_path / "original.pptx"
     original.save(source)
@@ -108,7 +191,9 @@ def test_preserved_keeps_annotations_over_picture(tmp_path):
     assert "conteúdo preservado com 1 contorno fora da paleta" in checked.stdout
 
 
-@pytest.mark.parametrize("case", ["yellow", "office-rgb", "office-theme", "white-on-wine", "white-over-wine", "title"])
+@pytest.mark.parametrize("case", [
+    "yellow", "blue", "purple", "office-rgb", "office-theme", "white-on-wine", "white-over-wine", "title",
+])
 def test_preserved_normalizes_text_on_its_surface(tmp_path, case):
     original = Presentation()
     slide = original.slides.add_slide(original.slide_layouts[1 if case == "title" else 6])
@@ -129,18 +214,25 @@ def test_preserved_normalizes_text_on_its_surface(tmp_path, case):
     frame = shape.text_frame
     frame.auto_size = MSO_AUTO_SIZE.NONE
     paragraph = frame.paragraphs[0]
-    paragraph.font.bold = True
+    paragraph.font.bold = case != "blue"
     paragraph.font.italic = True
     run = paragraph.add_run()
     run.text = "Projeção"
     run.font.name = "Calibri"
     run.font.size = Pt(20)
     yellow = RGBColor.from_string("FFF4A3")
+    purple = RGBColor.from_string("682FAA")
+    if case in {"yellow", "purple"}:
+        marker = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(1.7), Inches(3), Inches(0.15), Inches(0.15))
+        marker.fill.solid()
+        marker.fill.fore_color.rgb = yellow if case == "yellow" else purple
+        marker.line.fill.background()
     if case == "office-theme":
         run.font.color.theme_color = MSO_THEME_COLOR.DARK_2
         run.font.color.brightness = 0.4
     else:
-        source_colors = {"yellow": yellow, "office-rgb": RGBColor.from_string("1F497D"),
+        source_colors = {"yellow": yellow, "purple": purple, "blue": RGBColor.from_string("1769F2"),
+                         "office-rgb": RGBColor.from_string("1F497D"),
                          "title": RGBColor.from_string("666666")}
         run.font.color.rgb = source_colors.get(case, RGBColor.from_string("FFFFFF"))
 
@@ -151,14 +243,52 @@ def test_preserved_normalizes_text_on_its_surface(tmp_path, case):
     if case == "yellow":
         assert 4.5 <= contrast_ratio(color, RGBColor.from_string("FAF6F4")) < 4.6
         assert rgb_to_hls(*color)[0] == pytest.approx(rgb_to_hls(*yellow)[0], abs=0.003)
+    elif case == "purple":
+        assert color == purple
     elif case.startswith("white"):
         assert str(color) == "FFFFFF"
         assert shapes[rectangle.name].fill.fore_color.rgb == wine
-    else:
+    elif case == "blue":
         assert str(color) == "404040"
+    else:
+        assert str(color) == "9C4C48"
     assert font.name == ("Montserrat ExtraBold" if case == "title" else "Montserrat")
-    assert font.bold and font.italic
+    assert font.bold == (case != "blue") and font.italic
     assert font.size.pt == pytest.approx(20 * copied.width / shape.width, abs=0.005)
+
+
+@pytest.mark.parametrize("color, source_dk2, expected", [
+    ('<a:schemeClr val="dk2"/>', None, "404040"),
+    ('<a:schemeClr val="dk2"/>', "682FAA", "682FAA"),
+    ('<a:srgbClr val="1769F2"/>', None, "404040"),
+    ('<a:srgbClr val="682FAA"/>', None, "682FAA"),
+])
+def test_preserved_normalizes_explicit_bullet_color(tmp_path, color, source_dk2, expected):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    if source_dk2:
+        part = slide.slide_layout.slide_master.part.part_related_by(RT.THEME)
+        theme = parse_xml(part.blob)
+        theme.find(f".//{qn('a:clrScheme')}/{qn('a:dk2')}/{qn('a:srgbClr')}").set("val", source_dk2)
+        part.blob = serialize_part_xml(theme)
+    box = slide.shapes.add_textbox(Inches(2), Inches(3), Inches(4), Inches(1))
+    box.text_frame.auto_size = MSO_AUTO_SIZE.NONE
+    box.text = "Item"
+    paragraph = box.text_frame.paragraphs[0]
+    paragraph._p.get_or_add_pPr().extend(parse_xml(node) for node in (
+        f'<a:buClr {nsdecls("a")}>{color}</a:buClr>',
+        f'<a:buChar {nsdecls("a")} char="•"/>',
+    ))
+    marker = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(1.7), Inches(3), Inches(0.15), Inches(0.15))
+    marker.fill.solid()
+    marker.fill.fore_color.rgb = RGBColor.from_string("682FAA")
+    marker.line.fill.background()
+
+    copied = next(shape for shape in restyle_one(tmp_path, original, "padrao") if shape.name == box.name)
+    bullet = copied.text_frame.paragraphs[0]._p.pPr.find(qn("a:buClr"))
+    assert len(bullet) == 1
+    assert bullet[0].tag == qn("a:srgbClr")
+    assert bullet[0].get("val") == expected
 
 
 def picture_fill(slide, image):
@@ -530,7 +660,7 @@ def test_extract_maps_single_callout_to_module_badge(tmp_path):
     assert slide["textos"] == ["Prática", callout]
 
 
-def test_extract_preserves_textless_content_and_flags_empty_slides(tmp_path):
+def test_extract_suggests_native_layout_for_textless_content(tmp_path):
     prs = Presentation()
     photo = tmp_path / "foto.png"
     Image.new("RGB", (16, 16), "red").save(photo)
@@ -550,11 +680,13 @@ def test_extract_preserves_textless_content_and_flags_empty_slides(tmp_path):
         (folder / "roteiro-rascunho.json").read_text(encoding="utf-8")
     )["slides"]
     for slide in (picture, drawing):
-        assert slide["tipo"] == "preservado"
+        assert slide["tipo"] == "texto_imagem"
+        assert slide["imagem_modo"] == "conter"
         assert slide["revisar"] is True
         assert slide["motivo"] == "conteúdo só em imagem"
         assert not slide.get("vazio")
     assert empty["vazio"] is True
+    assert empty["tipo"] == "texto_imagem"
 
 
 @pytest.mark.parametrize("style", ["padrao", "ousado"])
@@ -867,6 +999,48 @@ def test_preserved_excludes_empty_textbox_inside_group(tmp_path):
     copied = next(shape for shape in restyle_one(tmp_path, original, "ousado") if shape.name == group.name)
     assert [shape.name for shape in copied.shapes] == [visible.name]
     assert copied.height == pytest.approx(Inches(5.375 - 1.35), abs=1)
+
+
+@pytest.mark.parametrize("mode", ["fixed", "auto", "grouped", "inherited", "tolerated"])
+def test_preserved_fits_two_line_label(tmp_path, mode):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    reference = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(1), Inches(2), Inches(1), Inches(3))
+    fixed = mode in {"fixed", "inherited", "tolerated"}
+    label = slide.shapes.add_textbox(Inches(2), Inches(3), Inches(3), Pt(46 if mode == "tolerated" else 42))
+    frame = label.text_frame
+    frame.margin_top = frame.margin_bottom = 0
+    frame.auto_size = MSO_AUTO_SIZE.NONE if fixed else MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
+    frame.text = "Rótulo sintético\nSegunda linha"
+    for paragraph in frame.paragraphs:
+        font = paragraph.font if mode == "inherited" else paragraph.runs[0].font
+        font.size = Pt(20)
+    if mode == "grouped":
+        group = slide.shapes.add_group_shape([label])
+
+    copied = {shape.name: shape for shape in restyle_one(tmp_path, original, "ousado")}
+    if mode == "grouped":
+        copied_label = copied[group.name].shapes[0]
+        scale = 1
+    else:
+        copied_label = copied[label.name]
+        scale = copied[reference.name].height / reference.height
+    paragraph = copied_label.text_frame.paragraphs[0]
+    size = (paragraph.runs[0].font.size or paragraph.font.size).pt
+    assert copied_label.text == label.text
+    if mode == "tolerated":
+        assert size == pytest.approx(20 * scale, abs=0.005)
+        assert copied_label.height < Pt(2 * size * 1.219)
+        return
+    assert copied_label.height >= Pt(2 * size * 1.219)
+    if fixed:
+        assert copied_label.height == pytest.approx(label.height * scale, abs=1)
+        steps = (round(20 * scale, 2) - size) / 0.5
+        assert steps == pytest.approx(round(steps))
+        assert steps >= 1
+        assert 2 * (size + 0.5) * 1.219 > copied_label.height.pt
+    else:
+        assert size == pytest.approx(20 * scale, abs=0.005)
 
 
 @pytest.mark.parametrize("explicit_size", [True, False])
