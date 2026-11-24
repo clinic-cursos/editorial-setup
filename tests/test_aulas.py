@@ -3,10 +3,71 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from pptx import Presentation
 
 SKILL = Path(__file__).resolve().parent.parent / "skills" / "aulas"
 EXAMPLE = SKILL / "references" / "exemplo_roteiro.json"
+
+
+def generate(tmp_path, spec):
+    roteiro = tmp_path / "roteiro.json"
+    roteiro.write_text(json.dumps(spec), encoding="utf-8")
+    out = tmp_path / "aula.pptx"
+    result = subprocess.run(
+        [sys.executable, str(SKILL / "scripts" / "aulas.py"), "gerar", str(roteiro), str(out), "--sem-conferir"],
+        capture_output=True, text=True,
+    )
+    return result, out
+
+
+@pytest.mark.parametrize("style", ["padrao", "ousado"])
+@pytest.mark.parametrize("kinds,violations", [
+    ("sumario modulo texto_imagem encerramento", [(1, "capa"), (2, "sumario")]),
+    ("capa sumario texto_imagem modulo encerramento", [(3, "modulo")]),
+    ("capa sumario modulo custos precificacao texto_imagem encerramento", [(4, "custos"), (5, "precificacao")]),
+    ("capa sumario modulo frase frase frase encerramento", [(6, "frase")]),
+    ("capa sumario modulo referencias texto_imagem encerramento", [(4, "referencias")]),
+    ("capa sumario modulo custos precificacao referencias encerramento", [(6, "referencias")]),
+    ("capa sumario modulo precificacao custos encerramento", [(5, "custos")]),
+    ("capa sumario modulo continue_evolucao parceria encerramento", [(5, "parceria")]),
+    ("capa sumario modulo precificacao parceria encerramento", [(6, "custos"), (6, "continue_evolucao")]),
+    ("capa sumario modulo encerramento texto_imagem", [(5, "encerramento")]),
+    ("capa sumario modulo", [(4, "encerramento")]),
+])
+def test_generate_rejects_invalid_lesson_structure(tmp_path, style, kinds, violations):
+    result, out = generate(tmp_path, {"estilo": style, "slides": [{"tipo": kind} for kind in kinds.split()]})
+    assert result.returncode == 2, result.stdout + result.stderr
+    errors = result.stderr.splitlines()
+    for index, rule in violations:
+        assert any(f"slide {index}:" in line and rule in line for line in errors), result.stderr
+    assert not out.exists()
+    assert not out.with_name("aula - prompts de imagem.md").exists()
+
+
+@pytest.mark.parametrize("style", ["padrao", "ousado"])
+def test_generate_accepts_declared_final_block(tmp_path, style):
+    kinds = "capa sumario modulo texto_imagem referencias custos precificacao parceria continue_evolucao encerramento"
+    slides = [{"tipo": kind} for kind in kinds.split()]
+    result, out = generate(tmp_path, {"estilo": style, "slides": slides})
+    assert result.returncode == 0, result.stderr
+    assert len(Presentation(out).slides) == len(slides)
+
+
+@pytest.mark.parametrize("style", ["padrao", "ousado"])
+def test_generate_numbers_modules_by_position(tmp_path, style):
+    result, out = generate(tmp_path, {"estilo": style, "parcerias": False, "precificacao": False, "slides": [
+        {"tipo": "capa"}, {"tipo": "sumario"}, {"tipo": "modulo", "numero": "07"},
+        {"tipo": "texto_imagem"}, {"tipo": "modulo"}, {"tipo": "texto_imagem"},
+        {"tipo": "modulo", "numero": 3}, {"tipo": "texto_imagem"}, {"tipo": "encerramento"},
+    ]})
+    assert result.returncode == 0, result.stderr
+    warnings = result.stderr.splitlines()
+    assert len(warnings) == 1
+    assert all(value in warnings[0] for value in ("Aviso", "slide 3:", "07", "01"))
+    slides = Presentation(out).slides
+    for index, expected in [(2, "01"), (4, "02"), (6, "03")]:
+        assert expected in [shape.text for shape in slides[index].shapes if shape.has_text_frame]
 
 
 def build(tmp_path, spec, name="aula"):

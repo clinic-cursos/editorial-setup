@@ -967,12 +967,77 @@ def layout_preservado(prs, s, d, preserved):
 LAYOUTS = {k[7:]: v for k, v in globals().items() if k.startswith("layout_")}
 
 
-def build(spec, out, base_dir=".", *, layouts=LAYOUTS):
-    PROMPTS.clear()
-    prs = Presentation()
-    prs.slide_width = Inches(W); prs.slide_height = Inches(H)
-    blank = prs.slide_layouts[6]
+def validate_lesson_structure(slides, script_positions, spec):
+    opening = {"capa": 1, "sumario": 2}
+    tail = {kind: rank for rank, kind in enumerate(
+        ("referencias", "custos", "precificacao", "parceria", "continue_evolucao", "encerramento")
+    )}
+    kinds = [slide["tipo"] for slide in slides]
+    last_body = max((i for i, kind in enumerate(kinds, 1) if kind not in opening and kind not in tail), default=0)
+    errors = []
+    for kind, position in opening.items():
+        if kinds[position - 1:position] != [kind]:
+            errors.append(f"slide {position}: deve ser {kind}")
+
+    seen = set()
+    quotes = 0
+    latest_tail = None
+    closing_label = f"slide {len(script_positions) + 1}"
+    for i, slide in enumerate(slides, 1):
+        kind = slide["tipo"]
+        position = script_positions.get(id(slide))
+        label = f"slide {position}" if position else f"slide automático {i}"
+        if "encerramento" in seen:
+            errors.append(f"{label}: {kind} vem depois do encerramento")
+        if kind in opening:
+            if i != opening[kind]:
+                errors.append(f"{label}: {kind} só pode aparecer no slide {opening[kind]}")
+        elif kind in tail:
+            if i < last_body:
+                errors.append(f"{label}: {kind} deve vir depois do último conteúdo")
+            if latest_tail is not None and tail[kind] < tail[latest_tail]:
+                errors.append(f"{label}: {kind} deve vir antes de {latest_tail}")
+            else:
+                latest_tail = kind
+            if kind in {"custos", "precificacao", "continue_evolucao"} and kind in seen:
+                errors.append(f"{label}: {kind} só pode aparecer uma vez")
+            if kind == "encerramento" and kind not in seen:
+                closing_label = label
+        elif kind == "frase":
+            quotes += 1
+            if quotes > 2:
+                errors.append(f"{label}: frase excede o limite de duas por aula")
+        elif kind != "modulo" and "modulo" not in seen:
+            errors.append(f"{label}: {kind} deve vir depois de um modulo")
+        seen.add(kind)
+
+    for option, required in (("precificacao", ("custos", "precificacao")),
+                             ("parcerias", ("parceria", "continue_evolucao"))):
+        if spec.get(option, True) or seen.intersection(required):
+            for kind in required:
+                if kind not in seen:
+                    errors.append(f"{closing_label}: falta {kind} antes do encerramento")
+    if "encerramento" not in seen:
+        errors.append(f"{closing_label}: falta encerramento no fim da aula")
+    if errors:
+        raise ValueError("esqueleto inválido:\n" + "\n".join(errors))
+
+
+def number_modules(slides):
+    number = 0
+    for i, slide in enumerate(slides, 1):
+        if slide["tipo"] == "modulo":
+            number += 1
+            expected = f"{number:02d}"
+            if "numero" in slide and str(slide["numero"]).zfill(2) != expected:
+                print(f"Aviso, slide {i}: numero do modulo {slide['numero']!r} substituído por {expected}",
+                      file=sys.stderr)
+            slide["numero"] = expected
+
+
+def build(spec, out, base_dir=".", *, layouts=LAYOUTS, enforce_structure=False):
     slides = copy.deepcopy(spec["slides"])
+    script_positions = {id(slide): i for i, slide in enumerate(slides, 1)}
     avulso = spec.get("avulso", False)
     tipos = [x.get("tipo") for x in slides]
     for tipo in tipos:
@@ -991,6 +1056,15 @@ def build(spec, out, base_dir=".", *, layouts=LAYOUTS):
     if not avulso and spec.get("precificacao", True) and "precificacao" not in tipos:
         pos = tipos.index("parceria") if "parceria" in tipos else (tipos.index("encerramento") if "encerramento" in tipos else len(slides))
         slides[pos:pos] = [x for x in copy.deepcopy(PRECIFICACAO_PADRAO) if x["tipo"] not in tipos]
+    if enforce_structure:
+        if not avulso:
+            validate_lesson_structure(slides, script_positions, spec)
+        number_modules(slides)
+
+    PROMPTS.clear()
+    prs = Presentation()
+    prs.slide_width = Inches(W); prs.slide_height = Inches(H)
+    blank = prs.slide_layouts[6]
     total = len(slides)
     preserved = PreservedSlides()
     for n, d in enumerate(slides, 1):

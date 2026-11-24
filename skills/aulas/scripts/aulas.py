@@ -14,7 +14,7 @@ import restyle
 
 def build_deck(spec, output, base_dir, layouts):
     if not any(slide.get("tipo") == "preservado" for slide in spec["slides"]):
-        clinic_deck.build(spec, output, base_dir, layouts=layouts)
+        clinic_deck.build(spec, output, base_dir, layouts=layouts, enforce_structure=True)
         return
 
     layout = layouts["preservado"]
@@ -32,7 +32,7 @@ def build_deck(spec, output, base_dir, layouts):
     # O gerador padrão usa a identidade do mapa para acrescentar o rodapé.
     layouts["preservado"] = marked_layout
     try:
-        clinic_deck.build(spec, output, base_dir, layouts=layouts)
+        clinic_deck.build(spec, output, base_dir, layouts=layouts, enforce_structure=True)
     finally:
         layouts["preservado"] = layout
 

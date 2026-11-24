@@ -84,7 +84,7 @@ def generate(path, out):
 
 def write_script(tmp_path, slides, **fields):
     path = tmp_path / "roteiro.json"
-    spec = {"estilo": "ousado", "parcerias": False, "precificacao": False, "slides": slides, **fields}
+    spec = {"estilo": "ousado", "avulso": True, "slides": slides, **fields}
     path.write_text(json.dumps(spec), encoding="utf-8")
     return path
 
@@ -786,13 +786,19 @@ def test_bold_comparison_columns_make_room_for_wrapped_items(tmp_path):
 def test_bold_animates_standard_layouts(tmp_path):
     example = json.loads((SKILL / "references" / "exemplo_roteiro.json").read_text(encoding="utf-8"))
     fallback = {"tabela", "grafico", "antes_depois", "artigo", "caso_clinico", "referencias"}
-    slides = [slide for slide in example["slides"] if slide["tipo"] in fallback]
-    path = write_script(tmp_path, slides, parcerias=True, precificacao=True)
+    slides = [
+        {"tipo": "capa", "titulo": "Oficina"},
+        {"tipo": "sumario", "itens": ["Exemplos"]},
+        {"tipo": "modulo", "titulo": "Exemplos"},
+        *(slide for slide in example["slides"] if slide["tipo"] in fallback),
+        {"tipo": "encerramento"},
+    ]
+    path = write_script(tmp_path, slides, avulso=False)
     out = tmp_path / "aula.pptx"
     result = generate(path, out)
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     generated = Presentation(out).slides
-    assert len(generated) == len(fallback) + 5
+    assert len(generated) == len(fallback) + 9
     for slide in generated:
         assert_motion(slide)
 
