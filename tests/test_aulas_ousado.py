@@ -667,12 +667,12 @@ def test_bold_text_image_contains_picture_in_available_content(tmp_path, image_s
         assert 2 * photo.left + photo.width == pytest.approx(deck.slide_width, abs=2)
 
 
-@pytest.mark.parametrize("image_size,heading,expected_rows", [
-    ((160, 90), "Leitura e interpretação das informações do diagrama", 1),
-    ((300, 100), "Leitura e interpretação das informações do diagrama", 1),
-    ((160, 90), "Guia de leitura e interpretação das informações do diagrama para toda a turma", 2),
+@pytest.mark.parametrize("image_size,heading,at_floor", [
+    ((160, 90), "Leitura e interpretação das informações do diagrama", False),
+    ((300, 100), "Leitura e interpretação das informações do diagrama", False),
+    ((100, 400), "Guia de leitura e interpretação das informações do diagrama", True),
 ])
-def test_bold_text_image_compacts_header_without_body(tmp_path, monkeypatch, image_size, heading, expected_rows):
+def test_bold_text_image_compacts_header_without_body(tmp_path, monkeypatch, image_size, heading, at_floor):
     monkeypatch.syspath_prepend(str(SKILL / "scripts"))
     from conferir import Theme, check_text
 
@@ -688,22 +688,29 @@ def test_bold_text_image_compacts_header_without_body(tmp_path, monkeypatch, ima
     slide = deck.slides[0]
     labels = {shape.text: shape for shape in slide.shapes if shape.has_text_frame}
     title, kicker = labels[heading], labels["VISÃO GERAL"]
+    assert (kicker.left.inches, kicker.top.inches, kicker.width.inches, kicker.height.inches) == pytest.approx(
+        (0.45, 0.42, 5.0, 0.25), abs=0.02)
+    assert kicker.top < title.top
+    model_kicker = json.loads(FIXTURE.read_text(encoding="utf-8"))[7]["runs"][0]
+    assert run_fingerprint(kicker.text_frame.paragraphs[0].runs[0]) == {**model_kicker, "text": kicker.text}
+    logo = next(shape for shape in slide.shapes if shape.name == "!!logo")
+    assert max(kicker.left + kicker.width, title.left + title.width) <= logo.left
+
     frame = title.text_frame
     margins = frame.margin_left, frame.margin_right, frame.margin_top, frame.margin_bottom
     _, rows = check_text(frame, title, Theme(slide, deck), set(), lambda *args: None,
                          title.width, title.height, margins, title.top, deck.slide_height)
-    assert len(rows) == expected_rows
+    assert len(rows) == 1
+    assert frame.word_wrap is False
     size = frame.paragraphs[0].runs[0].font.size.pt
     assert 18 <= size < 36
-    if expected_rows == 2:
+    if at_floor:
         assert size == 18
-    assert kicker.left + kicker.width < title.left
-    assert title.top <= kicker.top < rows[0][3]
 
     photo = next(shape for shape in slide.shapes if shape.name == "!!foto")
     margin = Inches(0.45)
     useful_width = deck.slide_width - 2 * margin
-    content_top = max(title.top + title.height, kicker.top + kicker.height) + Inches(0.1)
+    content_top = title.top + title.height + Inches(0.1)
     content_bottom = deck.slide_height - margin
     useful_height = content_bottom - content_top
     assert photo.width >= 0.85 * useful_width or photo.height >= 0.80 * useful_height

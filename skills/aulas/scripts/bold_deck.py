@@ -508,8 +508,8 @@ def s_text_image(prs, s, d):
     label = d.get("kicker", "")
     useful_width = W - 2 * M
     title_width = 5.4 if panel and not contain else useful_width
-    title_left, title_top = M, 1.6
-    kicker_top, kicker_width = 1.3, 5
+    title_top, kicker_top = 1.6, 1.3
+    compact = False
     body_top, body_width, body_height = 3.55, 5.0, 1.2
     arrow_x, arrow_top, arrow_bottom = 5.75, 1.0, 4.6
     if panel:
@@ -517,25 +517,21 @@ def s_text_image(prs, s, d):
                 for value in (f"**{heading}**" if heading is not None else "", content) if value]
     if contain:
         body = [value for value in body if plain_text(value).strip()]
-        if body:
-            title_size = text_image_font_size([heading], title_width, 1.8, 36, 18, spacing=0.9, max_rows=2)
-            title_rows = max(1, min(2, content_title_rows(heading, title_width, title_size)))
-        else:
+        compact = not body
+        if compact:
             from conferir import MONTSERRAT_WIDTHS, glyph_width
 
-            title_top = 1.0
-            label_text = plain_text(label).upper()
-            if label_text.strip():
-                label_units = sum(glyph_width(char, MONTSERRAT_WIDTHS["bold"]) for char in label_text)
-                kicker_width = min(kicker_width, 0.06 + label_units * KICKER_SIZE / 72000)
-                title_left += kicker_width + 0.18
-                title_width = W - M - title_left
-            title_units = sum(glyph_width(char, MONTSERRAT_WIDTHS["extrabold"]) for char in heading)
+            kicker_top, title_top = 0.42, 0.62
+            model_logo = logo(s, False)
+            title_width = model_logo.left.inches - M - 0.1
+            title_units = sum(glyph_width(char, MONTSERRAT_WIDTHS["extrabold"])
+                              for char in keep_numeric_expressions(heading))
             single_line_size = int(Inches(title_width - 0.04).pt * 1000 / max(1, title_units))
-            title_rows = 1 if single_line_size >= 18 and len(heading.splitlines()) <= 1 else 2
-            title_size = min(36, single_line_size) if title_rows == 1 else 18
-            first_line_height = 0.04 + title_size * 1.38 / 72
-            kicker_top = title_top + (first_line_height - 0.25) / 2
+            title_size = max(18, min(36, single_line_size))
+            title_rows = 1
+        else:
+            title_size = text_image_font_size([heading], title_width, 1.8, 36, 18, spacing=0.9, max_rows=2)
+            title_rows = max(1, min(2, content_title_rows(heading, title_width, title_size)))
         title_height = 0.04 + title_size * (1.38 + (title_rows - 1) * 0.9 * 1.2) / 72
         body_top = title_top + title_height + 0.1
         body_height = H - M - body_top
@@ -555,12 +551,14 @@ def s_text_image(prs, s, d):
         title_size = text_image_font_size([heading], title_width, 1.8, 40, 18, spacing=0.9, max_rows=2)
         title_height = 0.04 + title_size * (1.38 + 0.9 * 1.2) / 72
 
-    logo(s, False, M, 0.4)
-    kicker(s, label, M, kicker_top, VINHO, w=kicker_width)
-    heading_box = title(s, heading, title_left, title_top, title_width, title_height,
+    if not compact:
+        logo(s, False, M, 0.4)
+    kicker(s, label, M, kicker_top, VINHO)
+    heading_box = title(s, heading, M, title_top, title_width, title_height,
                         color=PRETO, size=title_size, hl=d.get("destaque_titulo"), hlc=VINHO)
     if contain:
         heading_box.text_frame.auto_size = MSO_AUTO_SIZE.NONE
+        heading_box.text_frame.word_wrap = not compact
     an.add(heading_box, eff="up", dur=700, gap=400)
     if panel and d.get("seta"):
         ln = line(s, arrow_x, arrow_top, arrow_x, arrow_bottom, color=VINHO, w=2.5)
