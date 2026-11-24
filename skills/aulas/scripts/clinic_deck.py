@@ -1023,13 +1023,18 @@ def validate_lesson_structure(slides, script_positions, spec):
         raise ValueError("esqueleto inválido:\n" + "\n".join(errors))
 
 
-def number_modules(slides):
+def number_modules(slides, *, standalone):
     number = 0
     for i, slide in enumerate(slides, 1):
         if slide["tipo"] == "modulo":
             number += 1
             expected = f"{number:02d}"
-            if "numero" in slide and str(slide["numero"]).zfill(2) != expected:
+            if standalone:
+                if "numero" in slide:
+                    continue
+                print(f"Aviso, slide {i}: numero do modulo ausente, usando {expected}",
+                      file=sys.stderr)
+            elif "numero" in slide and str(slide["numero"]).zfill(2) != expected:
                 print(f"Aviso, slide {i}: numero do modulo {slide['numero']!r} substituído por {expected}",
                       file=sys.stderr)
             slide["numero"] = expected
@@ -1059,7 +1064,7 @@ def build(spec, out, base_dir=".", *, layouts=LAYOUTS, enforce_structure=False):
     if enforce_structure:
         if not avulso:
             validate_lesson_structure(slides, script_positions, spec)
-        number_modules(slides)
+        number_modules(slides, standalone=avulso)
 
     PROMPTS.clear()
     prs = Presentation()

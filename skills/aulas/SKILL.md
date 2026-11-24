@@ -118,7 +118,7 @@ Os tipos `tabela`, `grafico`, `antes_depois`, `artigo`, `caso_clinico`, `referen
    - Confira a ordem e a integridade dos textos, ajuste o texto sem alterar o sentido e declare o estilo.
    - Escolha primeiro um tipo nativo do modelo. Reserve `preservado` para marcações desenhadas sobre uma foto, tabelas ou composições de três ou mais imagens. Slides só de texto ou de texto com uma ou duas imagens sempre usam um tipo nativo.
    - Rode `gerar` com o roteiro ajustado. O rascunho vem com `"avulso": true` para conservar a seleção sem inserções automáticas.
-3. **Slide avulso ou pontual a corrigir.** Monte um roteiro só com os slides pedidos e use `"avulso": true`. Para correção, parta do roteiro da versão a corrigir ou use `extrair` com a seleção do slide. Se a pessoa pediu o deck inteiro corrigido, mantenha os demais slides no roteiro e gere o deck completo.
+3. **Slide avulso ou pontual a corrigir.** Monte um roteiro só com os slides pedidos e use `"avulso": true`. Informe no roteiro o `numero` de cada módulo avulso. Para correção, parta do roteiro da versão a corrigir ou use `extrair` com a seleção do slide. Se a pessoa pediu o deck inteiro corrigido, mantenha os demais slides no roteiro e gere o deck completo.
 
 `"avulso": true` funciona nos dois estilos e gera só os slides declarados. Inclua capa, encerramento, precificação ou parcerias no roteiro apenas se fizerem parte da seleção pedida.
 
@@ -126,7 +126,7 @@ Os tipos `tabela`, `grafico`, `antes_depois`, `artigo`, `caso_clinico`, `referen
 
 1. **Leia tudo** e identifique o tema, os módulos naturais (introdução, anatomia, materiais, mecanismo, indicações, planejamento, técnica, pós, intercorrências, resultados…) e o que for dado, técnica, caso, alerta ou referência.
 2. **Estrutura padrão:** capa → sumário → para cada módulo: `modulo` + slides de conteúdo → frase de impacto (opcional, no máximo 1 ou 2 por aula) → referências → **Como compor seu preço → Precificação → Galderma → Ilikia → Continue sua evolução** → encerramento.
-   - Nos dois estilos, `gerar` valida o esqueleto antes de criar uma aula completa e aponta cada violação por slide. O gerador numera os módulos pela ordem em que aparecem (01, 02, 03...) e avisa se substituir um `numero` declarado. Use `"avulso": true` para gerar uma seleção sem validar o esqueleto.
+   - Nos dois estilos, `gerar` valida o esqueleto antes de criar uma aula completa e aponta cada violação por slide. Na aula completa, o gerador numera os módulos pela ordem em que aparecem (01, 02, 03...) e avisa se substituir um `numero` declarado. Use `"avulso": true` para gerar uma seleção sem validar o esqueleto.
    - **O esqueleto inclui precificação por padrão.** O layout é fixo e os valores mudam por curso. Preencha `procedimentos` com os procedimentos do curso. Ao declarar `precificacao` no roteiro, declare `custos` logo antes. O gerador exige o par quando a aula inclui precificação. O gerador calcula custo financeiro, imposto e lucro (preço − produto − custo fixo − insumos − taxa% − imposto%). Sem valores no material, os slides entram com "R$" e um traço no lugar do valor; nunca invente preços.
    - Inclua os 3 slides de parceria em aulas completas, salvo pedido explícito para omiti-los. O gerador já os insere sozinho antes do encerramento, com o conteúdo padrão e os QR codes oficiais.
    - Para personalizar uma parceria nesta aula, declare os slides de parceria e de continuação no roteiro com os dados e recursos aprovados.

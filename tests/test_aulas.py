@@ -70,6 +70,30 @@ def test_generate_numbers_modules_by_position(tmp_path, style):
         assert expected in [shape.text for shape in slides[index].shapes if shape.has_text_frame]
 
 
+@pytest.mark.parametrize("style", ["padrao", "ousado"])
+def test_generate_keeps_declared_module_number_in_selection(tmp_path, style):
+    result, out = generate(tmp_path, {"estilo": style, "avulso": True, "slides": [
+        {"tipo": "modulo", "numero": 5, "titulo": "Técnica"},
+    ]})
+    assert result.returncode == 0, result.stderr
+    slide, = Presentation(out).slides
+    assert "05" in [shape.text for shape in slide.shapes if shape.has_text_frame]
+    assert "substituído" not in result.stderr
+
+
+@pytest.mark.parametrize("style", ["padrao", "ousado"])
+def test_generate_warns_when_module_number_is_missing_in_selection(tmp_path, style):
+    result, out = generate(tmp_path, {"estilo": style, "avulso": True, "slides": [
+        {"tipo": "modulo", "numero": "07"}, {"tipo": "texto_imagem"}, {"tipo": "modulo"},
+    ]})
+    assert result.returncode == 0, result.stderr
+    slides = Presentation(out).slides
+    for index, expected in [(0, "07"), (2, "02")]:
+        assert expected in [shape.text for shape in slides[index].shapes if shape.has_text_frame]
+    warning, = result.stderr.splitlines()
+    assert all(value in warning for value in ("Aviso", "slide 3:", "ausente", "02"))
+
+
 def build(tmp_path, spec, name="aula"):
     roteiro = tmp_path / "roteiro.json"
     roteiro.write_text(json.dumps(spec), encoding="utf-8")
