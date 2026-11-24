@@ -2,6 +2,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 from pptx import Presentation
@@ -22,24 +23,30 @@ def generate(tmp_path, spec):
 
 
 @pytest.mark.parametrize("style", ["padrao", "ousado"])
-def test_generate_keeps_numeric_expressions_together(tmp_path, style):
+def test_generate_formats_numeric_expressions_with_supported_glyphs(tmp_path, style):
     topics = [
         "Dose (0,1-0,2 mL) ou (~ 3000 UI / indivíduo)",
         "≈ 2 ml; < 3 U; > 4 SU; ± 5 G",
         "6 mm; 7 cm; 8 mg; 9 %; 10 h; 11 PT",
         "12 **mL**, 13 um e 14 minutos; 15 - 16 mg",
+        "Faixa de 17\u201118 mg",
     ]
     result, out = generate(tmp_path, {"estilo": style, "avulso": True, "slides": [
         {"tipo": "texto_imagem", "titulo": "Medidas", "topicos": topics},
     ]})
     assert result.returncode == 0, result.stderr
+    with ZipFile(out) as deck:
+        for name in deck.namelist():
+            if name.endswith(".xml"):
+                assert "\u2011".encode() not in deck.read(name), name
     slide = Presentation(out).slides[0]
     texts = {shape.text for shape in slide.shapes if shape.has_text_frame}
     assert {
-        "Dose (0,1\u20110,2\u00a0mL) ou (~\u00a03000\u00a0UI / indivíduo)",
+        "Dose (0,1-0,2\u00a0mL) ou (~\u00a03000\u00a0UI / indivíduo)",
         "≈\u00a02\u00a0ml; <\u00a03\u00a0U; >\u00a04\u00a0SU; ±\u00a05\u00a0G",
         "6\u00a0mm; 7\u00a0cm; 8\u00a0mg; 9\u00a0%; 10\u00a0h; 11\u00a0PT",
-        "12\u00a0mL, 13 um e 14 minutos; 15\u00a0\u2011\u00a016\u00a0mg",
+        "12\u00a0mL, 13 um e 14 minutos; 15\u00a0-\u00a016\u00a0mg",
+        "Faixa de 17-18\u00a0mg",
     } <= texts
 
 

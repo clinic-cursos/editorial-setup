@@ -59,7 +59,7 @@ def A(name):
 def keep_numeric_expressions(value):
     """Keep substitutions the same length so they can span styled runs."""
     value = re.sub(r"(?<=\d)[ \u00a0]*[-\u2011][ \u00a0]*(?=\d)",
-                   lambda match: match[0].replace(" ", "\u00a0").replace("-", "\u2011"), value)
+                   lambda match: match[0].replace(" ", "\u00a0").replace("\u2011", "-"), value)
     value = re.sub(r"(?<=\d) +(?=(?:ml|ui|u|su|g|mm|cm|mg|%|h|pt)(?!\w))",
                    lambda match: "\u00a0" * len(match[0]), value, flags=re.IGNORECASE)
     return re.sub(r"(?<=[~≈<>±]) +(?=[+-]?\d)",

@@ -69,7 +69,7 @@ Declare `estilo` no roteiro. Para roteiros antigos sem esse campo, a ferramenta 
 
 Todo slide aceita `notas` (vai para as notas do apresentador). Nos campos com marcação de texto, `**trecho**` aplica negrito quando os delimitadores abrem e fecham um trecho na mesma string. Um `**` sem par aparece literalmente. Para forçar a exibição dos dois asteriscos, use `\*\*` no texto (no JSON, escreva `"\\*\\*"`).
 
-Nos dois estilos, o gerador mantém juntos os números e suas unidades, as faixas numéricas com hífen e os símbolos de aproximação ou comparação com seus valores. Escreva as medidas com os espaços e hífens habituais.
+Nos dois estilos, o gerador usa espaços não separáveis entre números e suas unidades, entre símbolos de aproximação ou comparação e seus valores e nos espaços ao redor do hífen em faixas numéricas. Escreva as medidas com os espaços e hífens habituais.
 
 ## Campos no estilo ousado
 
