@@ -1,3 +1,4 @@
+from colorsys import rgb_to_hls
 import json
 from pathlib import Path
 import subprocess
@@ -39,6 +40,127 @@ def restyle_one(tmp_path, original, style, title="Novo título"):
     return list(Presentation(out).slides[0].shapes)
 
 
+def contrast_ratio(first, second):
+    def luminance(color):
+        channels = [channel / 255 for channel in color]
+        linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+                  for value in channels]
+        return sum(value * weight for value, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
+
+    low, high = sorted(map(luminance, (first, second)))
+    return (high + 0.05) / (low + 0.05)
+
+
+@pytest.mark.parametrize("style", ["padrao", "ousado"])
+def test_preserved_maps_box_and_table_paint_to_model_palette(tmp_path, style):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    box = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(2), Inches(2), Inches(4), Inches(1))
+    box.fill.solid()
+    box.fill.fore_color.rgb = RGBColor.from_string("EEECE1")
+    box.line.color.rgb = RGBColor.from_string("999999")
+    box.text = "Painel"
+    box.text_frame.paragraphs[0].runs[0].font.color.rgb = RGBColor.from_string("FFFFFF")
+    table = slide.shapes.add_table(1, 1, Inches(2), Inches(4), Inches(4), Inches(1))
+    cell = table.table.cell(0, 0)
+    cell.text = "Célula"
+    cell.fill.solid()
+    cell.fill.fore_color.rgb = RGBColor.from_string("999999")
+    cell._tc.tcPr.insert(0, parse_xml(
+        f'<a:lnL {nsdecls("a")}><a:solidFill><a:srgbClr val="EEECE1"/></a:solidFill></a:lnL>'
+    ))
+
+    copied = {shape.name: shape for shape in restyle_one(tmp_path, original, style)}
+    copied_box = copied[box.name]
+    copied_cell = copied[table.name].table.cell(0, 0)
+    assert str(copied_box.fill.fore_color.rgb) == "FAF6F4"
+    assert str(copied_box.line.color.rgb) == "B68B85"
+    assert str(copied_cell.fill.fore_color.rgb) == "B68B85"
+    border = copied_cell._tc.tcPr.find(f"{qn('a:lnL')}/{qn('a:solidFill')}/{qn('a:srgbClr')}")
+    assert border.get("val") == "FAF6F4"
+    for item in (copied_box, copied_cell):
+        foreground = item.text_frame.paragraphs[0].runs[0].font.color.rgb
+        assert contrast_ratio(foreground, item.fill.fore_color.rgb) >= 4.5
+
+
+def test_preserved_keeps_annotations_over_picture(tmp_path):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    image = tmp_path / "foto.png"
+    Image.new("RGB", (20, 20), "white").save(image)
+    group = slide.shapes.add_group_shape()
+    picture = group.shapes.add_picture(str(image), Inches(2), Inches(2), Inches(3))
+    marker = group.shapes.add_shape(MSO_SHAPE.OVAL, Inches(3), Inches(3), Inches(0.12), Inches(0.12))
+    marker.fill.solid()
+    marker.fill.fore_color.rgb = RGBColor.from_string("FFFF00")
+    marker.line.fill.background()
+    line = slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(2), Inches(2), Inches(5), Inches(5))
+    line.line.color.rgb = RGBColor.from_string("FFFF00")
+
+    copied = {shape.name: shape for shape in restyle_one(tmp_path, original, "ousado")}
+    copied_picture, copied_marker = copied[group.name].shapes
+    assert copied_picture.image.blob == picture.image.blob
+    assert str(copied_marker.fill.fore_color.rgb) == "FFFF00"
+    assert str(copied[line.name].line.color.rgb) == "FFFF00"
+    checked = run_cli("conferir", tmp_path / "restyle.pptx", "--estilo", "ousado")
+    assert checked.returncode == 0, checked.stderr or checked.stdout
+    assert "conteúdo preservado com 1 preenchimento fora da paleta" in checked.stdout
+    assert "conteúdo preservado com 1 contorno fora da paleta" in checked.stdout
+
+
+@pytest.mark.parametrize("case", ["yellow", "office-rgb", "office-theme", "white-on-wine", "white-over-wine", "title"])
+def test_preserved_normalizes_text_on_its_surface(tmp_path, case):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[1 if case == "title" else 6])
+    geometry = (Inches(2), Inches(3), Inches(4), Inches(1))
+    wine = RGBColor.from_string("6E2F2C")
+    if case.startswith("white"):
+        rectangle = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, *geometry)
+        rectangle.fill.solid()
+        rectangle.fill.fore_color.rgb = wine
+        shape = rectangle if case == "white-on-wine" else slide.shapes.add_textbox(*geometry)
+    elif case == "title":
+        slide.shapes.title.text = "Título original"
+        shape = slide.placeholders[1]
+        shape._element.ph.set("type", "title")
+        shape.left, shape.top, shape.width, shape.height = geometry
+    else:
+        shape = slide.shapes.add_textbox(*geometry)
+    frame = shape.text_frame
+    frame.auto_size = MSO_AUTO_SIZE.NONE
+    paragraph = frame.paragraphs[0]
+    paragraph.font.bold = True
+    paragraph.font.italic = True
+    run = paragraph.add_run()
+    run.text = "Projeção"
+    run.font.name = "Calibri"
+    run.font.size = Pt(20)
+    yellow = RGBColor.from_string("FFF4A3")
+    if case == "office-theme":
+        run.font.color.theme_color = MSO_THEME_COLOR.DARK_2
+        run.font.color.brightness = 0.4
+    else:
+        source_colors = {"yellow": yellow, "office-rgb": RGBColor.from_string("1F497D"),
+                         "title": RGBColor.from_string("666666")}
+        run.font.color.rgb = source_colors.get(case, RGBColor.from_string("FFFFFF"))
+
+    shapes = {item.name: item for item in restyle_one(tmp_path, original, "ousado")}
+    copied = shapes[shape.name]
+    font = copied.text_frame.paragraphs[0].runs[0].font
+    color = font.color.rgb
+    if case == "yellow":
+        assert 4.5 <= contrast_ratio(color, RGBColor.from_string("FAF6F4")) < 4.6
+        assert rgb_to_hls(*color)[0] == pytest.approx(rgb_to_hls(*yellow)[0], abs=0.003)
+    elif case.startswith("white"):
+        assert str(color) == "FFFFFF"
+        assert shapes[rectangle.name].fill.fore_color.rgb == wine
+    else:
+        assert str(color) == "404040"
+    assert font.name == ("Montserrat ExtraBold" if case == "title" else "Montserrat")
+    assert font.bold and font.italic
+    assert font.size.pt == pytest.approx(20 * copied.width / shape.width, abs=0.005)
+
+
 def picture_fill(slide, image):
     _, rid = slide.part.get_or_add_image_part(str(image))
     slide._element.cSld.insert(0, parse_xml(
@@ -70,8 +192,8 @@ def test_preserved_copies_full_slide_picture_behind_labels(tmp_path, picture_kin
     picture = pictures[0]
     copied_label = next(shape for shape in shapes if shape.has_text_frame and shape.text == label.text)
     assert shapes.index(picture) < shapes.index(copied_label)
-    assert picture.top == pytest.approx(Inches(1.79), abs=1)
-    assert picture.height == pytest.approx(Inches(5.375 - 1.79), abs=1)
+    assert picture.top == pytest.approx(Inches(1.35), abs=1)
+    assert picture.height == pytest.approx(Inches(5.375 - 1.35), abs=1)
     scale = picture.height / original.slide_height
     assert copied_label.left - picture.left == pytest.approx(label.left * scale, abs=2)
     assert copied_label.top - picture.top == pytest.approx(label.top * scale, abs=2)
@@ -111,7 +233,12 @@ def test_preserved_matches_effective_background_contrast(tmp_path, style, panel_
 
     shapes = restyle_one(tmp_path, original, style)
     copied_label = next(shape for shape in shapes if shape.has_text_frame and shape.text == label.text)
-    assert str(copied_label.text_frame.paragraphs[0].runs[0].font.color.rgb) == "FFFFFF"
+    color = copied_label.text_frame.paragraphs[0].runs[0].font.color.rgb
+    if surface != "light":
+        assert str(color) == "FFFFFF"
+    else:
+        background = RGBColor.from_string("FAF6F4" if style == "ousado" else "FFFFFF")
+        assert contrast_ratio(color, background) >= 4.5
     assert all(shape.name != "Retângulo original" for shape in shapes)
     if surface == "layout-image":
         assert all(shape.shape_type != MSO_SHAPE_TYPE.PICTURE or shape.image.blob != image.read_bytes()
@@ -166,7 +293,9 @@ def source_deck(tmp_path):
     styles = parse_xml(style_part.blob)
     styles.append(parse_xml(
         f'<a:tblStyle {nsdecls("a")} styleId="{CUSTOM_TABLE_STYLE}" styleName="Teste">'
-        '<a:wholeTbl><a:tcStyle><a:fill><a:solidFill><a:srgbClr val="9C4C48"/>'
+        '<a:wholeTbl><a:tcStyle><a:tcBdr><a:top><a:ln><a:solidFill>'
+        '<a:srgbClr val="999999"/></a:solidFill></a:ln></a:top></a:tcBdr>'
+        '<a:fill><a:solidFill><a:srgbClr val="9C4C48"/>'
         '</a:solidFill></a:fill></a:tcStyle></a:wholeTbl></a:tblStyle>'
     ))
     style_part.blob = serialize_part_xml(styles)
@@ -211,6 +340,62 @@ def test_extract_retains_text_and_filters_slides(tmp_path, source_deck):
     assert bad.returncode == 2
     assert "6" in bad.stderr
     assert not (tmp_path / "invalido").exists()
+
+
+@pytest.mark.parametrize("extension, image_format", [("png", "PNG"), ("jpg", "JPEG")])
+def test_extract_applies_crop_per_picture(tmp_path, extension, image_format):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    image = tmp_path / f"photo.{extension}"
+    with Image.new("RGB", (96, 64), "blue") as pixels:
+        pixels.paste("red", (12, 8, 60, 56))
+        pixels.save(image)
+    slide.shapes.add_picture(str(image), Inches(1), Inches(1), Inches(3))
+    cropped = slide.shapes.add_picture(str(image), Inches(1), Inches(4), Inches(2), Inches(2))
+    cropped.crop_left, cropped.crop_top = 0.125, 0.125
+    cropped.crop_right, cropped.crop_bottom = 0.375, 0.125
+    source = tmp_path / "original.pptx"
+    original.save(source)
+    folder = tmp_path / "rascunho"
+
+    result = run_cli("extrair", source, folder)
+
+    assert result.returncode == 0, result.stderr
+    draft = json.loads((folder / "roteiro-rascunho.json").read_text(encoding="utf-8"))
+    untouched, cropped = draft["slides"][0]["imagens"]
+    assert (folder / untouched["caminho"]).read_bytes() == image.read_bytes()
+    assert "recortada" not in untouched
+    with Image.open(folder / cropped["caminho"]) as exported:
+        assert exported.size == (48, 48)
+        assert exported.format == image_format
+        red, _, blue = exported.getpixel((24, 24))
+        assert red > 230 and blue < 25
+    assert cropped["recortada"] is True
+
+
+def test_extract_keeps_transparent_margin_for_negative_crop_in_group(tmp_path):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    image = tmp_path / "photo.png"
+    Image.new("RGB", (96, 64), "red").save(image)
+    group = slide.shapes.add_group_shape()
+    picture = group.shapes.add_picture(str(image), Inches(1), Inches(1), Inches(3))
+    picture.crop_left = -0.125
+    picture.crop_right = 0.25
+    source = tmp_path / "original.pptx"
+    original.save(source)
+    folder = tmp_path / "rascunho"
+
+    result = run_cli("extrair", source, folder)
+
+    assert result.returncode == 0, result.stderr
+    draft = json.loads((folder / "roteiro-rascunho.json").read_text(encoding="utf-8"))
+    item, = draft["slides"][0]["imagens"]
+    with Image.open(folder / item["caminho"]) as exported:
+        assert exported.size == (84, 64)
+        assert exported.getpixel((11, 32))[3] == 0
+        assert exported.getpixel((12, 32)) == (255, 0, 0, 255)
+    assert item["recortada"] is True
 
 
 def test_extract_suggests_layouts_from_simple_slide_content(tmp_path):
@@ -445,13 +630,12 @@ def test_preserved_drops_multiline_title_with_nearby_rules(tmp_path, style):
     assert {"Misaligned line", "Distant line", "Thick line", "Diagonal annotation"} <= copied.keys()
 
 
-@pytest.mark.parametrize("style", ["padrao", "ousado"])
-def test_preserved_frame_keeps_divider_below_title(tmp_path, source_deck, style):
+def test_standard_preserved_frame_keeps_divider_below_title(tmp_path, source_deck):
     source, _ = source_deck
     titles = ["Título curto", "INDICAÇÕES ESTÉTICAS\nAVANÇADAS\n\n"]
     script = tmp_path / "roteiro.json"
     script.write_text(json.dumps({
-        "estilo": style, "avulso": True,
+        "estilo": "padrao", "avulso": True,
         "slides": [
             {"tipo": "preservado", "deck": source.name, "slide": 1, "titulo": title, "kicker": "Teste"}
             for title in titles
@@ -464,21 +648,37 @@ def test_preserved_frame_keeps_divider_below_title(tmp_path, source_deck, style)
     original = Presentation(source).slides[0]
     copied_names = {shape.name for shape in list(original.shapes)[4:]}
     for slide, title in zip(Presentation(out).slides, titles, strict=True):
-        expected = title.rstrip().upper() if style == "padrao" else title.rstrip()
+        expected = title.rstrip().upper()
         heading = next(
             shape for shape in slide.shapes
             if shape.has_text_frame and shape.text.rstrip() == expected
         )
         divider = next(
             shape for shape in slide.shapes
-            if shape.name == "!!barra" or (shape.shape_type == MSO_SHAPE_TYPE.LINE and shape.height == 0)
+            if shape.shape_type == MSO_SHAPE_TYPE.LINE and shape.height == 0
         )
         copied = [shape for shape in slide.shapes if shape.name in copied_names]
         if "\n" in expected:
-            assert heading.height >= Inches(0.8 if style == "padrao" else 1.0)
+            assert heading.height >= Inches(0.8)
             assert [paragraph.text for paragraph in heading.text_frame.paragraphs] == expected.splitlines()
         assert heading.top + heading.height < divider.top
         assert min(shape.top for shape in copied) > divider.top + divider.height
+
+
+def test_bold_preserved_reserves_space_for_wrapped_title(tmp_path):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    body = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(2), Inches(1), Inches(1), Inches(3))
+    title = "PLANEJAMENTO E ORGANIZAÇÃO DAS ATIVIDADES PRÁTICAS DO MÓDULO AVANÇADO"
+
+    shapes = restyle_one(tmp_path, original, "ousado", title)
+
+    heading = next(shape for shape in shapes if shape.has_text_frame and shape.text == title)
+    copied = next(shape for shape in shapes if shape.name == body.name)
+    assert heading.top == Inches(0.62)
+    assert heading.width > Inches(6)
+    assert heading.height > Inches(0.6)
+    assert heading.top + heading.height < copied.top
 
 
 @pytest.mark.parametrize("style", ["padrao", "ousado"])
@@ -518,7 +718,10 @@ def test_preserved_objects_and_exact_standalone_slide_count(tmp_path, source_dec
     styles = parse_xml(presentation.part.part_related_by(RT.TABLE_STYLES).blob)
     definitions = [node for node in styles.iter(qn("a:tblStyle")) if node.get("styleId") == table_style_id]
     assert len(definitions) == 1
-    assert definitions[0].find(".//" + qn("a:srgbClr")).get("val") == "9C4C48"
+    assert [node.get("val") for node in definitions[0].iter(qn("a:srgbClr"))] == ["B68B85", "9C4C48"]
+    cell = copied[-1].table.cell(0, 1)
+    assert str(cell.fill.fore_color.rgb) == "9C4C48"
+    assert contrast_ratio(cell.text_frame.paragraphs[0].runs[0].font.color.rgb, cell.fill.fore_color.rgb) >= 4.5
     for shape in copied:
         if shape.shape_type == MSO_SHAPE_TYPE.LINE:
             assert int(shape._element.find(".//" + qn("a:endCxn")).get("id")) == group.shapes[0].shape_id
@@ -532,7 +735,7 @@ def test_preserved_objects_and_exact_standalone_slide_count(tmp_path, source_dec
 
 @pytest.mark.parametrize("style, content_top, content_bottom", [
     ("padrao", 1.4, 5.275),
-    ("ousado", 1.79, 5.375),
+    ("ousado", 1.35, 5.375),
 ])
 @pytest.mark.parametrize("extra_extent", ["table-frame", "background", "empty-shapes"])
 def test_preserved_fits_centered_content(tmp_path, style, content_top, content_bottom, extra_extent):
@@ -642,7 +845,7 @@ def test_preserved_fits_autofit_text_and_keeps_visible_shapes(tmp_path, frame_he
     label = copied[oversized.name]
     assert label.text == oversized.text
     assert copied[placeholder.name].text == placeholder.text
-    assert label.top >= Inches(1.79) - 1
+    assert label.top >= Inches(1.35) - 1
     assert label.top + label.height <= Inches(5.375) + 1
     assert label.height < 0.99 * oversized.height * (copied[filled.name].height / filled.height)
     assert label.text_frame.paragraphs[0].runs[0].font.size > Pt(18)
@@ -663,7 +866,7 @@ def test_preserved_excludes_empty_textbox_inside_group(tmp_path):
 
     copied = next(shape for shape in restyle_one(tmp_path, original, "ousado") if shape.name == group.name)
     assert [shape.name for shape in copied.shapes] == [visible.name]
-    assert copied.height == pytest.approx(Inches(5.375 - 1.79), abs=1)
+    assert copied.height == pytest.approx(Inches(5.375 - 1.35), abs=1)
 
 
 @pytest.mark.parametrize("explicit_size", [True, False])

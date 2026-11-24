@@ -16,6 +16,7 @@
 - Fases 5 e 6 são de pessoas. O Editor-Chefe só prepara o pacote e registra a decisão.
 
 ## Produção de aulas
+- Preserve sempre o modelo mestre v1 e exija que todo slide siga o modelo do estilo, inclusive o conteúdo copiado por `preservado`. Só o Alify pode abrir uma versão explícita do modelo v2, com arquivos novos ao lado dos da v1.
 - O Editor-Chefe aciona `aulas` em três entradas: aula do zero com conteúdo; deck ou slide de referência para adaptar com `extrair`, direção do roteiro e `gerar`; slide avulso ou correção de slide. Use os materiais do pedido, sem exigir fase concluída de livro.
 - `aulas` dirige o roteiro e gera o PowerPoint pela ferramenta. Após a checagem automática e a inspeção da prévia, devolve o .pptx, o roteiro JSON, o relatório do `conferir` e a prévia no bloco de `references/comum/retorno.md`.
 - O Editor-Chefe encaminha esses arquivos e a descrição do estilo da skill `aulas` ao `revisor-aulas`. Registre o status, a nota e os achados na ficha para a versão examinada.

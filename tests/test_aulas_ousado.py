@@ -1,9 +1,10 @@
-"""Para regerar a impressão digital a partir do modelo original:
+"""Para consultar a impressão digital de um PowerPoint sem sobrescrever a da v1:
 
-uv run --locked python tests/test_aulas_ousado.py /var/tmp/aulas-render/in/modelo.pptx > tests/fixtures/aulas/modelo-v1.json
+uv run --locked python tests/test_aulas_ousado.py /var/tmp/aulas-render/in/modelo.pptx
 """
 
 from collections import Counter, defaultdict
+from hashlib import sha256
 import json
 from pathlib import Path
 import subprocess
@@ -83,7 +84,7 @@ def generate(path, out):
 
 def write_script(tmp_path, slides, **fields):
     path = tmp_path / "roteiro.json"
-    spec = {"estilo": "ousado", "parcerias": False, "precificacao": False, "slides": slides, **fields}
+    spec = {"estilo": "ousado", "avulso": True, "slides": slides, **fields}
     path.write_text(json.dumps(spec), encoding="utf-8")
     return path
 
@@ -131,6 +132,16 @@ def test_bold_example_fields_are_documented():
     assert not missing, f"Campos do exemplo ausentes na seção: {missing}"
 
 
+@pytest.mark.parametrize("path,expected", [
+    (FIXTURE, "16cd27dfde15fe5c4d97ff610cfdc5ef8a41a2f1be883c5f4459843ba8b06036"),
+    (MODEL, "3ef1fe1a54b0600299284841a7be8e95e46b66e3568a56a212038e6754d9fc7f"),
+])
+def test_master_v1_files_are_immutable(path, expected):
+    assert sha256(path.read_bytes()).hexdigest() == expected, (
+        f"{path.name}: modelo mestre v1 não muda; para mudar o visual, crie o modelo v2 ao lado"
+    )
+
+
 def test_model_matches_reference(tmp_path):
     out = tmp_path / "modelo.pptx"
     result = generate(MODEL, out)
@@ -173,6 +184,55 @@ def test_model_matches_reference(tmp_path):
     assert not style_mismatches, f"Tipografia (slide, texto, modelo, gerado): {style_mismatches}"
 
 
+@pytest.mark.parametrize("kicker, multiline", [(True, False), (False, False), (True, True)])
+def test_bold_preserved_uses_model_content_frame(tmp_path, kicker, multiline):
+    reference = json.loads(FIXTURE.read_text(encoding="utf-8"))[7]
+    kicker_text = reference["texts"][0]
+    first_run, accent = (run["text"] for run in reference["runs"][1:3])
+    separator = "\n" if multiline else ""
+    original = Presentation()
+    source = original.slides.add_slide(original.slide_layouts[6])
+    body = source.shapes.add_shape(MSO_SHAPE.OVAL, Inches(2), Inches(1), Inches(1), Inches(3))
+    source_path = tmp_path / "original.pptx"
+    original.save(source_path)
+    data = {"tipo": "preservado", "deck": source_path.name, "slide": 1,
+            "titulo": f"{first_run}{separator}**{accent}**"}
+    if kicker:
+        data["kicker"] = kicker_text.lower()
+    out = tmp_path / "preservado.pptx"
+
+    result = generate(write_script(tmp_path, [data], avulso=True), out)
+    assert result.returncode == 0, result.stderr
+    slide = Presentation(out).slides[0]
+    actual = fingerprint(slide)
+    assert actual["background"] == reference["background"]
+    frame = {name: box for name, box in reference["shapes"].items() if name != "!!foto"}
+    assert actual["shapes"] == {name: pytest.approx(box, abs=0.02) for name, box in frame.items()}
+    assert len(slide.shapes) == len(frame) + 2 + kicker
+    assert all(shape.shape_type != MSO_SHAPE_TYPE.LINE for shape in slide.shapes)
+    title_text = f"{first_run}{separator}{accent}"
+    heading = next(shape for shape in slide.shapes if shape.has_text_frame and shape.text == title_text)
+    assert (heading.left.inches, heading.top.inches, heading.width.inches) == pytest.approx(
+        (0.45, 0.62, 6.0), abs=0.02)
+    expected_texts = [title_text]
+    expected_runs = reference["runs"][1:3]
+    if kicker:
+        label = next(shape for shape in slide.shapes if shape.has_text_frame and shape.text == kicker_text)
+        assert (label.left.inches, label.top.inches, label.width.inches, label.height.inches) == pytest.approx(
+            (0.45, 0.42, 5.0, 0.25), abs=0.02)
+        expected_texts.insert(0, kicker_text)
+        expected_runs = reference["runs"][:3]
+    assert actual["texts"] == expected_texts
+    assert actual["runs"] == expected_runs
+    if multiline:
+        assert heading.height.inches > 0.6
+    else:
+        assert heading.height.inches == pytest.approx(0.6, abs=0.02)
+    copied = next(shape for shape in slide.shapes if shape.name == body.name)
+    assert copied.top.inches == pytest.approx(1.35 + max(0, heading.height.inches - 0.6), abs=0.02)
+    assert_motion(slide)
+
+
 @pytest.mark.parametrize("slide,model_size", [
     ({"tipo": "numero"}, 130),
     ({"tipo": "anatomia", "prompt_imagem": "Cena de teste"}, 40),
@@ -198,6 +258,77 @@ def test_bold_number_size_respects_text_width(tmp_path, slide, model_size):
             assert size == model_size
         else:
             assert 0 < size < model_size
+
+
+@pytest.mark.parametrize("value,advance", [("3 a 4", 2.513), ("WWWWW", 5.920)])
+def test_bold_number_fits_inside_arc(tmp_path, value, advance):
+    out = tmp_path / "aula.pptx"
+    result = generate(write_script(tmp_path, [{"tipo": "numero", "valor": value}]), out)
+    assert result.returncode == 0, result.stdout + result.stderr
+    shape = next(shape for shape in Presentation(out).slides[0].shapes
+                 if shape.has_text_frame and shape.text == value)
+    size = shape.text_frame.paragraphs[0].runs[0].font.size.pt
+    left = shape.left.pt + (shape.width.pt - size * advance) / 2
+    # Borda interna esquerda na altura do topo do valor, mais 0,1 pol de folga.
+    assert left >= Inches(3.1279).pt
+
+
+@pytest.mark.parametrize("dimensions,content", [
+    ((240, 160), (0, 16, 240, 144)),
+    ((80, 240), (0, 0, 80, 240)),
+])
+def test_bold_pillars_photo_covers_panel(tmp_path, dimensions, content):
+    photo = Image.new("RGB", dimensions, (254, 254, 254))
+    photo.paste((90, 70, 65), content)
+    photo.save(tmp_path / "foto.png")
+    path = write_script(tmp_path, [{"tipo": "pilares", "imagem": "foto.png"}])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+    deck = Presentation(out)
+    picture = next(shape for shape in deck.slides[0].shapes if shape.name == "!!foto")
+    assert (picture.left, picture.top, picture.width, picture.height) == (
+        0, 0, Inches(4.3), deck.slide_height,
+    )
+    width, height = dimensions
+    left, top, right, bottom = content
+    assert picture.crop_top * height >= top
+    assert picture.crop_bottom * height >= height - bottom
+    assert picture.crop_left - picture.crop_right == pytest.approx((left + right - width) / width)
+    assert picture.crop_top - picture.crop_bottom == pytest.approx((top + bottom - height) / height)
+    cropped_width = width * (1 - picture.crop_left - picture.crop_right)
+    cropped_height = height * (1 - picture.crop_top - picture.crop_bottom)
+    assert cropped_width / cropped_height == pytest.approx(4.3 / 5.625, abs=0.0001)
+
+
+def test_bold_pillars_keeps_dividers_below_item_text(tmp_path):
+    long_body = " ".join(["Detalhe importante para a atividade."] * 4)
+    rows = [{"titulo": "Primeiro", "texto": long_body}, {"titulo": "Próximo", "texto": "Resumo"}]
+    path = write_script(tmp_path, [{"tipo": "pilares", "prompt_imagem": "Cena de teste", "pilares": rows}])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    shapes = Presentation(out).slides[0].shapes
+    body = next(shape for shape in shapes if shape.has_text_frame and shape.text == long_body)
+    divider = next(shape for shape in shapes if shape.shape_type == MSO_SHAPE_TYPE.LINE)
+    following = next(shape for shape in shapes if shape.has_text_frame and shape.text == "PRÓXIMO")
+    assert body.height > Inches(0.5)
+    assert body.top + body.height < divider.top < following.top
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_bold_pillars_grows_info_band(tmp_path):
+    info = "\n".join(f"Informação {i}" for i in range(1, 6))
+    Image.new("RGB", (100, 100), (90, 70, 65)).save(tmp_path / "foto.png")
+    path = write_script(tmp_path, [{"tipo": "pilares", "imagem": "foto.png", "info": info}])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    shapes = Presentation(out).slides[0].shapes
+    label = next(shape for shape in shapes if shape.has_text_frame and shape.text == info)
+    band = next(shape for shape in shapes if shape.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE
+                and shape.left == 0 and shape.width == Inches(4.3))
+    assert band.height > Inches(1)
+    assert band.top < label.top < label.top + label.height < band.top + band.height
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_bold_uses_relative_image_and_slide_text(tmp_path):
@@ -655,13 +786,19 @@ def test_bold_comparison_columns_make_room_for_wrapped_items(tmp_path):
 def test_bold_animates_standard_layouts(tmp_path):
     example = json.loads((SKILL / "references" / "exemplo_roteiro.json").read_text(encoding="utf-8"))
     fallback = {"tabela", "grafico", "antes_depois", "artigo", "caso_clinico", "referencias"}
-    slides = [slide for slide in example["slides"] if slide["tipo"] in fallback]
-    path = write_script(tmp_path, slides, parcerias=True, precificacao=True)
+    slides = [
+        {"tipo": "capa", "titulo": "Oficina"},
+        {"tipo": "sumario", "itens": ["Exemplos"]},
+        {"tipo": "modulo", "titulo": "Exemplos"},
+        *(slide for slide in example["slides"] if slide["tipo"] in fallback),
+        {"tipo": "encerramento"},
+    ]
+    path = write_script(tmp_path, slides, avulso=False)
     out = tmp_path / "aula.pptx"
     result = generate(path, out)
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     generated = Presentation(out).slides
-    assert len(generated) == len(fallback) + 5
+    assert len(generated) == len(fallback) + 9
     for slide in generated:
         assert_motion(slide)
 

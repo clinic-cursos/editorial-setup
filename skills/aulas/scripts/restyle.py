@@ -12,7 +12,8 @@ from typing import NamedTuple
 from unicodedata import category
 from zipfile import BadZipFile
 
-from PIL import Image, ImageStat
+from lxml import etree
+from PIL import Image, ImageStat, JpegImagePlugin, UnidentifiedImageError
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE, PP_PLACEHOLDER
@@ -25,6 +26,7 @@ from pptx.oxml import parse_xml
 from pptx.oxml.ns import qn
 from pptx.oxml.shapes.picture import CT_Picture
 from pptx.shapes.picture import Picture
+from pptx.text.text import Font
 from pptx.util import Inches, Length, Pt
 
 
@@ -32,6 +34,8 @@ REL_PREFIX = qn("r:id").split("}")[0] + "}"
 GROUP = MSO_SHAPE_TYPE.GROUP
 NUMBER = re.compile(r"\d+(?:\s*/\s*\d+)?")
 QUOTE_END = {'"': '"', "'": "'", "“": "”", "‘": "’", "«": "»"}
+PAINT_TAGS = {qn(f"a:{tag}") for tag in ("solidFill", "gradFill", "pattFill", "blipFill", "noFill", "grpFill")}
+CELL_OUTLINES = {qn(f"a:ln{edge}") for edge in ("L", "R", "T", "B", "TlToBr", "BlToTr")}
 
 
 def open_deck(path):
@@ -88,11 +92,11 @@ def relationship_attributes(element):
                 yield node, key, rid
 
 
-def image_parts(shape):
-    for _, _, rid in relationship_attributes(shape._element):
+def image_references(shape):
+    for node, _, rid in relationship_attributes(shape._element):
         rel = shape.part.rels.get(rid)
         if rel is not None and rel.reltype == RT.IMAGE and not rel.is_external:
-            yield rel.target_part
+            yield node, rel.target_part
 
 
 def covers_slide(shape, width, height):
@@ -139,21 +143,35 @@ def is_decoration(shape, width, height):
     return corner and y >= height * 0.9 and h <= height * 0.1 and NUMBER.fullmatch(value.strip())
 
 
-def solid_rectangle_color(shape, theme):
-    properties = shape._element.spPr
-    fill = properties.eg_fillProperties
+def shape_fill(shape, theme):
+    return shape_paint(shape, theme, "fill")
+
+
+def shape_paint(shape, theme, kind):
+    properties = shape._element.find(qn("p:spPr"))
+    if properties is None:
+        return None, None
+    container = properties if kind == "fill" else properties.ln
+    fill = container.eg_fillProperties if container is not None else None
     placeholder = None
     if fill is None:
-        reference = shape._element.find(f"{qn('p:style')}/{qn('a:fillRef')}")
-        styles = theme.theme.find(f".//{qn('a:fillStyleLst')}")
+        reference = shape._element.find(f"{qn('p:style')}/{qn(f'a:{kind}Ref')}")
+        styles = theme.theme.find(f".//{qn(f'a:{kind}StyleLst')}")
         if reference is not None and styles is not None:
             index = int(reference.get("idx", 0))
             if 1 <= index <= len(styles):
                 fill = styles[index - 1]
+                if kind == "ln":
+                    fill = next((node for node in fill if node.tag in PAINT_TAGS), None)
                 placeholder = next(iter(reference), None)
-    if fill is not None and fill.tag == qn("a:solidFill") and len(fill):
-        return solid_color(fill[0], theme, placeholder)
-    return None
+    return fill, placeholder
+
+
+def solid_fill_color(theme, fill, placeholder=None):
+    if fill is None or fill.tag != qn("a:solidFill") or not len(fill):
+        return None
+    color = solid_color(fill[0], theme, placeholder)
+    return color if rgb_channels(color) is not None else None
 
 
 def slide_content(presentation, slide):
@@ -173,7 +191,8 @@ def slide_content(presentation, slide):
             backdrops.append(shape)
         elif (shape.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE and shape.auto_shape_type == MSO_SHAPE.RECTANGLE
               and not shape.text and covers_slide(shape, width, height)):
-            color = solid_rectangle_color(shape, Theme(slide, presentation))
+            theme = Theme(slide, presentation)
+            color = solid_fill_color(theme, *shape_fill(shape, theme))
             if color is None:
                 content.append(shape)
             else:
@@ -221,12 +240,154 @@ def solid_color(node, theme, placeholder=None):
                    for value in hls_to_rgb(hue, min(1, max(0, lightness)), saturation))
 
 
-def is_dark(color):
+def luminance(color):
     channels = rgb_channels(color)
     if channels is None:
-        return False
+        return None
     linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4 for value in channels]
-    return sum(value * weight for value, weight in zip(linear, (0.2126, 0.7152, 0.0722), strict=True)) < 0.179
+    return sum(value * weight for value, weight in zip(linear, (0.2126, 0.7152, 0.0722), strict=True))
+
+
+def is_dark(color):
+    level = luminance(color)
+    return level is not None and level < 0.179
+
+
+def contrast_ratio(color, background):
+    low, high = sorted((luminance(color), luminance(background)))
+    return (high + 0.05) / (low + 0.05)
+
+
+def palette_color(color, swatches):
+    level = luminance(color)
+    saturation = rgb_to_hls(*rgb_channels(color))[2]
+    return min(swatches, key=lambda swatch: abs(luminance(swatch) - level)
+               + 0.1 * abs(rgb_to_hls(*rgb_channels(swatch))[2] - saturation))
+
+
+def recolor_solid(theme, fill, swatches, placeholder=None):
+    color = solid_fill_color(theme, fill, placeholder)
+    if color is None:
+        return None
+    result = deepcopy(fill)
+    if swatches:
+        value = palette_color(color, swatches)
+        transforms = fill[0].findall(qn("a:alpha"))
+    else:
+        value = theme.color(fill[0], placeholder)
+        transforms = fill[0]
+    node = etree.Element(qn("a:srgbClr"), val=value)
+    node.extend(deepcopy(transform) for transform in transforms)
+    result.replace(result[0], node)
+    return result
+
+
+def readable_color(color, background):
+    if background is None or contrast_ratio(color, background) >= 4.5:
+        return color
+    hue, lightness, saturation = rgb_to_hls(*rgb_channels(color))
+    choices = []
+    for endpoint, extreme in ((0, "000000"), (1, "FFFFFF")):
+        if contrast_ratio(extreme, background) < 4.5:
+            continue
+        fails, passes = lightness, endpoint
+        best = extreme
+        for _ in range(12):
+            middle = (fails + passes) / 2
+            candidate = "".join(f"{round(value * 255):02X}" for value in hls_to_rgb(hue, middle, saturation))
+            if contrast_ratio(candidate, background) >= 4.5:
+                passes, best = middle, candidate
+            else:
+                fails = middle
+        choices.append((abs(passes - lightness), best))
+    return min(choices)[1]
+
+
+def slide_surface(slide, theme):
+    for layer in (slide, theme.layout, theme.master):
+        background = layer._element.cSld.bg
+        if background is None:
+            continue
+        if background.bgPr is not None:
+            return solid_fill_color(theme, background.bgPr.eg_fillProperties)
+        colors = list(theme.referenced_fills(background.bgRef))
+        return colors[0] if len(colors) == 1 and rgb_channels(colors[0]) is not None else None
+    return "FFFFFF"
+
+
+def fill_surface(theme, background, fill, placeholder=None):
+    if fill is None or fill.tag in {qn("a:noFill"), qn("a:grpFill")}:
+        return background
+    color = solid_fill_color(theme, fill, placeholder)
+    return visible_color(color, fill[0], background) if color is not None else None
+
+
+def visible_color(color, node, background):
+    alpha = node.find(qn("a:alpha")) if node is not None else None
+    if alpha is None or alpha.get("val") == "100000":
+        return color
+    if background is None:
+        return None
+    opacity = int(alpha.get("val")) / 100000
+    return "".join(f"{round(255 * (front * opacity + back * (1 - opacity))):02X}"
+                   for front, back in zip(rgb_channels(color), rgb_channels(background), strict=True))
+
+
+def table_style(table, theme):
+    properties = table._tbl.tblPr
+    style_id = properties.findtext(qn("a:tableStyleId")) if properties is not None else None
+    return theme.table_styles.get(style_id)
+
+
+def cell_fill(table, cell, row, col, style):
+    properties = cell._tc.tcPr
+    fill = properties.eg_fillProperties if properties is not None else None
+    if fill is not None or style is None:
+        return fill
+    first_row, last_row = table.first_row and row == 0, table.last_row and row == len(table.rows) - 1
+    first_col, last_col = table.first_col and col == 0, table.last_col and col == len(table.columns) - 1
+    regions = []
+    if (first_row or last_row) and (first_col or last_col):
+        regions.append(("n" if first_row else "s") + ("w" if first_col else "e") + "Cell")
+    for applies, region in ((first_row, "firstRow"), (last_row, "lastRow"),
+                            (first_col, "firstCol"), (last_col, "lastCol"),
+                            (table.vert_banding, f"band{1 + (col - table.first_col) % 2}V"),
+                            (table.horz_banding, f"band{1 + (row - table.first_row) % 2}H"),
+                            (True, "wholeTbl")):
+        if applies:
+            regions.append(region)
+    for region in regions:
+        wrapper = style.find(f"{qn('a:' + region)}/{qn('a:tcStyle')}/{qn('a:fill')}")
+        if wrapper is not None and len(wrapper):
+            return wrapper[0]
+    return None
+
+
+def cell_outlines(cell):
+    if cell._tc.tcPr is not None:
+        for line in cell._tc.tcPr:
+            if line.tag in CELL_OUTLINES:
+                yield line
+
+
+def shape_surfaces(shapes, theme, background):
+    layers = []
+    for shape in shapes:
+        if shape._element._nvXxPr.cNvPr.get("hidden") in {"1", "true"}:
+            yield background
+            continue
+        left, top, width, height = shape_frame(shape)
+        x, y = left + width / 2, top + height / 2
+        behind = next((color for box, color in reversed(layers)
+                       if box[0] <= x <= box[2] and box[1] <= y <= box[3]), background)
+        fill, placeholder = shape_fill(shape, theme)
+        surface = fill_surface(theme, behind, fill, placeholder)
+        if shape.shape_type == MSO_SHAPE_TYPE.PICTURE or (fill is not None and fill.tag == qn("a:blipFill")):
+            layers.append((bounds(shape), None))
+        elif (shape.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE and shape.auto_shape_type == MSO_SHAPE.RECTANGLE
+              and not shape.rotation and fill is not None and fill.tag != qn("a:noFill")):
+            layers.append((bounds(shape), surface))
+        yield surface
 
 
 def dark_image_fill(fill, part):
@@ -297,12 +458,10 @@ def frame_bounds(frame, rotation):
 
 
 def has_paint(shape):
-    from conferir import FILL_TAGS
-
     properties = shape._element.spPr
     style = shape._element.find(qn("p:style"))
     for node, reference in ((properties, "fillRef"), (properties.ln, "lnRef")):
-        fill = next((item for item in node if item.tag in FILL_TAGS), None) if node is not None else None
+        fill = next((item for item in node if item.tag in PAINT_TAGS), None) if node is not None else None
         if fill is not None:
             if fill.tag != qn("a:noFill"):
                 return True
@@ -487,6 +646,46 @@ def overlaps(first, second):
     return x1 <= a2 and a1 <= x2 and y1 <= b2 and b1 <= y2
 
 
+def structural_shapes(shapes, slide_area):
+    # Marcações pequenas e linhas sobre imagens podem codificar informação clínica.
+    # A área é a do objeto no slide final, já com a escala dos grupos.
+    def leaves(items, place, area_scale):
+        for shape in items:
+            x, y, width, height = shape_frame(shape)
+            if shape.shape_type != GROUP:
+                yield shape, place(bounds(shape)), width * height * area_scale
+                continue
+            transform = shape._element.xfrm
+            if transform is None or transform.chOff is None or transform.chExt is None:
+                yield from leaves(shape.shapes, place, area_scale)
+                continue
+            origin, extent = transform.chOff, transform.chExt
+            sx, sy = width / extent.cx if extent.cx else 1, height / extent.cy if extent.cy else 1
+
+            def in_group(box):
+                left, top, right, bottom = box
+                frame = (x + (left - origin.x) * sx, y + (top - origin.y) * sy,
+                         (right - left) * sx, (bottom - top) * sy)
+                return place(frame_bounds(rotated_crop(shape, frame), shape.rotation))
+
+            yield from leaves(shape.shapes, in_group, area_scale * sx * sy)
+
+    pictures = []
+    for shape, box, area in leaves(shapes, lambda box: box, 1):
+        if shape._element._nvXxPr.cNvPr.get("hidden") in {"1", "true"}:
+            continue
+        if shape._element.tag == qn("p:pic") or shape._element.find(
+            f"{qn('p:spPr')}/{qn('a:blipFill')}"
+        ) is not None:
+            pictures.append(box)
+        elif shape.shape_type == MSO_SHAPE_TYPE.LINE and any(overlaps(box, image) for image in pictures):
+            continue
+        elif area > slide_area * 0.02 or (
+            (shape.has_text_frame or shape.has_table) and any(value.strip() for value in texts(shape))
+        ):
+            yield shape._element
+
+
 def is_title_rule(shape, title_bounds):
     if shape.shape_type != MSO_SHAPE_TYPE.LINE or shape.line.width > Pt(3):
         return False
@@ -504,7 +703,8 @@ def is_title_rule(shape, title_bounds):
 
 
 def drawing_counts(shapes):
-    images = [(shape.shape_id, bounds(shape)) for shape in shapes if next(image_parts(shape), None) is not None]
+    images = [(shape.shape_id, bounds(shape)) for shape in shapes
+              if next(image_references(shape), None) is not None]
     drawings = overlays = 0
     for shape in shapes:
         if is_drawing(shape):
@@ -529,8 +729,38 @@ def sized_images(shape, scale_x=1, scale_y=1):
         for child in shape.shapes:
             yield from sized_images(child, scale_x, scale_y)
     else:
-        for part in image_parts(shape):
-            yield part, width * scale_x, height * scale_y
+        for node, part in image_references(shape):
+            crop = node.getparent().find(qn("a:srcRect")) if node.tag == qn("a:blip") else None
+            yield part, crop, width * scale_x, height * scale_y
+
+
+def cropped_image(part, crop):
+    if crop is None or not any((crop.l, crop.t, crop.r, crop.b)):
+        return None
+    try:
+        image = Image.open(BytesIO(part.blob), formats=("PNG", "JPEG", "GIF", "BMP", "TIFF", "WEBP"))
+    except UnidentifiedImageError:
+        return None
+    with image:
+        width, height = image.size
+        left, top = round(width * crop.l), round(height * crop.t)
+        right, bottom = round(width * (1 - crop.r)), round(height * (1 - crop.b))
+        box = left, top, right, bottom
+        if box == (0, 0, width, height):
+            return None
+        if right <= left or bottom <= top:
+            raise ValueError("o recorte não contém pixels")
+        padded = left < 0 or top < 0 or right > width or bottom > height
+        output = BytesIO()
+        if image.format == "JPEG" and not padded:
+            image.crop(box).save(output, "JPEG", qtables=image.quantization,
+                                 subsampling=JpegImagePlugin.get_sampling(image),
+                                 icc_profile=image.info.get("icc_profile"))
+            return output.getvalue(), part.partname.ext
+        if padded or image.format != "PNG":
+            image = image.convert("RGBA")
+        image.crop(box).save(output, "PNG")
+        return output.getvalue(), "png"
 
 
 def extract(deck, folder, selection):
@@ -544,7 +774,7 @@ def extract(deck, folder, selection):
         shapes = list(slide.shapes)
         if backdrop is not None:
             shapes.append(backdrop)
-        image_frequency.update({part.sha1 for shape in shapes for part in image_parts(shape)})
+        image_frequency.update({part.sha1 for shape in shapes for _, part in image_references(shape)})
     # Conta a presença em pelo menos 90% do deck inteiro, mesmo com --slides.
     repeated = {digest for digest, count in image_frequency.items() if count > 1 and count * 10 >= total * 9}
     (folder / "img").mkdir(parents=True, exist_ok=True)
@@ -562,16 +792,24 @@ def extract(deck, folder, selection):
         content_ids = {shape.shape_id for shape in content}
         candidates = []
         for shape in ordered:
-            for part, w, h in sized_images(shape):
+            for part, crop, w, h in sized_images(shape):
                 decorative = (shape.shape_id not in content_ids or w < width * 0.06 or h < height * 0.06
                               or part.sha1 in repeated)
-                candidates.append((w * h, part, decorative))
+                candidates.append((w * h, part, crop, decorative))
         # Mantém o nome de cada arquivo na ordem original e ordena apenas a lista do roteiro.
         ranked = sorted(enumerate(candidates, 1), key=lambda item: item[1][0], reverse=True)
-        for index, (_, part, decorative) in ranked:
-            path = f"img/slide-{number}-{index}.{part.partname.ext}"
-            (folder / path).write_bytes(part.blob)
-            images.append({"caminho": path, "decorativa": decorative})
+        for index, (_, part, crop, decorative) in ranked:
+            try:
+                cropped = cropped_image(part, crop)
+            except (OSError, ValueError) as exc:
+                raise ValueError(f"slide {number}, imagem {part.partname}: não foi possível aplicar o recorte: {exc}") from exc
+            blob, extension = cropped if cropped is not None else (part.blob, part.partname.ext)
+            path = f"img/slide-{number}-{index}.{extension}"
+            (folder / path).write_bytes(blob)
+            item = {"caminho": path, "decorativa": decorative}
+            if cropped is not None:
+                item["recortada"] = True
+            images.append(item)
         content_images = [image["caminho"] for image in images if not image["decorativa"]]
         drawings, annotations = drawing_counts(content)
         title_text = title.text if title is not None else ""
@@ -674,6 +912,8 @@ class PreservedSlides:
         return part
 
     def copy(self, target, script, box):
+        from bold_deck import CREME
+        from clinic_deck import ROSE, VINHO, VINHO_ESC
         from conferir import Theme
 
         deck, source = self.source(script.get("deck"), script.get("slide"))
@@ -716,15 +956,26 @@ class PreservedSlides:
             scale = 1
         target_deck = target.part.package.presentation_part.presentation
         target_theme = Theme(target, target_deck)
+        existing = list(target.shapes)
+        background = slide_surface(target, target_theme)
+        swatches = tuple(map(str, (panel_color, VINHO_ESC, VINHO, ROSE, CREME)))
+        slide_area = target_deck.slide_width * target_deck.slide_height
         # Fontes herdadas e novas quebras podem mudar a altura após a escala.
         for _ in range(64):
             dx = x + (w - width * scale) / 2 - left * scale
             dy = y + (h - height * scale) / 2 - top * scale
             positioned = [position_copy(shape, element, frame, scale, dx, dy, target.shapes, target_theme)
                           for shape, element, frame in copies]
-            bottom = max((rect[3] for element in positioned
-                          if (rect := text_bounds(target.shapes._shape_factory(element), target_theme,
-                                                  target_deck.slide_height)) is not None), default=y)
+            targets = [target.shapes._shape_factory(element) for element in positioned]
+            structural = set(structural_shapes(existing + targets, slide_area))
+            for copied in targets:
+                normalize_paint(copied, theme, structural, swatches)
+            surfaces = list(shape_surfaces(existing + targets, target_theme, background))[len(existing):]
+            for (shape, _, _), copied, surface in zip(copies, targets, surfaces, strict=True):
+                normalize_shape_text(shape, copied, theme, target_theme, surface)
+            bottom = max((rect[3] for copied in targets
+                          if (rect := text_bounds(copied, target_theme, target_deck.slide_height)) is not None),
+                         default=y)
             if bottom <= y + h + 1:  # Tolerância de 1 EMU pelo arredondamento do XML.
                 break
             scale *= max(0.5, min(0.98, (h / 2) / (bottom - y - h / 2 + 2)))
@@ -732,8 +983,8 @@ class PreservedSlides:
             raise ValueError(f"o texto do slide {script.get('slide')} não cabe na área de conteúdo")
 
         style_ids = {node.text for element in positioned for node in element.iter(qn("a:tableStyleId")) if node.text}
-        if style_ids:
-            self.copy_table_styles(style_ids, deck.part, target.part.package.presentation_part)
+        if style_ids & theme.table_styles.keys():
+            self.copy_table_styles(style_ids, theme, deck.part, target.part.package.presentation_part, swatches)
         tree = target.shapes._spTree
         next_id = tree.max_shape_id + 1
         ids = {}
@@ -754,12 +1005,9 @@ class PreservedSlides:
             tree.insert_element_before(element, "p:extLst")
         return list(target.shapes)[-len(copies):]
 
-    def copy_table_styles(self, style_ids, source, target):
+    def copy_table_styles(self, style_ids, theme, source, target, swatches):
         # Os GUIDs das tabelas apontam para uma parte da apresentação, fora dos .rels do slide.
-        try:
-            source_part = source.part_related_by(RT.TABLE_STYLES)
-        except KeyError:
-            return
+        source_part = source.part_related_by(RT.TABLE_STYLES)
         target_part = target.part_related_by(RT.TABLE_STYLES)
         target_styles = parse_xml(target_part.blob)
         original_count = len(target_styles)
@@ -767,12 +1015,15 @@ class PreservedSlides:
         missing = style_ids - {node.get("styleId") for node in target_styles.findall(style_tag)}
         if not missing:
             return
-        for style in parse_xml(source_part.blob).findall(style_tag):
-            style_id = style.get("styleId")
-            if style_id in missing:
-                self.relink(style, source_part, target_part)
-                target_styles.append(style)
-                missing.remove(style_id)
+        for style_id in sorted(missing & theme.table_styles.keys()):
+            style = deepcopy(theme.table_styles[style_id])
+            for properties in style.iter(qn("a:tcStyle"), qn("a:tblBg")):
+                for fill in list(properties.iter(qn("a:solidFill"))):
+                    updated = recolor_solid(theme, fill, swatches)
+                    if updated is not None:
+                        fill.getparent().replace(fill, updated)
+            self.relink(style, source_part, target_part)
+            target_styles.append(style)
         if len(target_styles) > original_count:
             target_part.blob = serialize_part_xml(target_styles)
 
@@ -821,6 +1072,92 @@ def set_inherited_text_sizes(shape, theme):
                 sizes = (style.get("sz") for style in theme.defaults(shape, frame, paragraph.level)
                          if style is not None and "sz" in style.attrib)
                 default.set("sz", next(sizes, "1800"))
+
+
+def normalize_paint(shape, theme, structural, swatches):
+    element = shape._element
+    if shape.shape_type == GROUP:
+        for child in shape.shapes:
+            normalize_paint(child, theme, structural, swatches)
+        return
+    colors = swatches if element in structural else ()
+    if shape.has_table:
+        if not colors:
+            return
+        table = shape.table
+        style = table_style(table, theme)
+        for row, table_row in enumerate(table.rows):
+            for col, cell in enumerate(table_row.cells):
+                updated = recolor_solid(theme, cell_fill(table, cell, row, col, style), colors)
+                if updated is not None:
+                    fill = cell._tc.get_or_add_tcPr().get_or_change_to_solidFill()
+                    fill.getparent().replace(fill, updated)
+                for line in cell_outlines(cell):
+                    fill = line.find(qn("a:solidFill"))
+                    updated = recolor_solid(theme, fill, colors)
+                    if updated is not None:
+                        line.replace(fill, updated)
+    elif element.tag != qn("p:pic"):
+        for kind in ("fill", "ln"):
+            fill, placeholder = shape_paint(shape, theme, kind)
+            if not colors and (placeholder is None and fill is not None and len(fill)
+                               and fill[0].tag == qn("a:srgbClr")):
+                continue
+            updated = recolor_solid(theme, fill, colors, placeholder)
+            if updated is not None:
+                properties = element.spPr if kind == "fill" else element.spPr.get_or_add_ln()
+                direct = properties.get_or_change_to_solidFill()
+                direct.getparent().replace(direct, updated)
+
+
+def normalize_shape_text(source, target, source_theme, target_theme, surface):
+    if target.shape_type == GROUP:
+        originals = {shape.shape_id: shape for shape in source.shapes}
+        for child, background in zip(target.shapes, shape_surfaces(target.shapes, target_theme, surface), strict=True):
+            normalize_shape_text(originals[child.shape_id], child, source_theme, target_theme, background)
+    elif target.has_table:
+        for original, cell in zip(source.table.iter_cells(), target.table.iter_cells(), strict=True):
+            if not cell.is_spanned:
+                fill = cell._tc.tcPr.eg_fillProperties if cell._tc.tcPr is not None else None
+                background = fill_surface(target_theme, surface, fill)
+                normalize_text(source, original.text_frame, cell.text_frame, source_theme, background)
+    elif target.has_text_frame:
+        normalize_text(source, source.text_frame, target.text_frame, source_theme, surface)
+
+
+def normalize_text(shape, source, target, theme, background):
+    from clinic_deck import CINZA_CLARO, FONTE, FONTE_FORTE, TEXTO
+    from conferir import text_color_node, text_defaults
+
+    title = shape.is_placeholder and shape.placeholder_format.type in {
+        PP_PLACEHOLDER.TITLE, PP_PLACEHOLDER.CENTER_TITLE, PP_PLACEHOLDER.VERTICAL_TITLE,
+    }
+    style_color = str(CINZA_CLARO if background is not None and is_dark(background) else TEXTO)
+    for original, paragraph in zip(source.paragraphs, target.paragraphs, strict=True):
+        defaults = text_defaults(original, shape, source, theme)
+        original_runs = (node for node in original._p if node.findtext(qn("a:t"), ""))
+        copied_runs = (node for node in paragraph._p if node.findtext(qn("a:t"), ""))
+        for source_node, node in zip(original_runs, copied_runs, strict=True):
+            styles = [style for style in (source_node.find(qn("a:rPr")), *defaults) if style is not None]
+            bold, italic = (next((style.get(key) in {"1", "true"} for style in styles if key in style.attrib), False)
+                            for key in ("b", "i"))
+            color_node = text_color_node(styles, shape)
+            base = theme.color(color_node) if color_node is not None else "000000"
+            color = solid_color(color_node, theme) if color_node is not None else base
+            neutral = color != "FFFFFF" and color[0:2] == color[2:4] == color[4:6]
+            if rgb_channels(color) is None or base == "1F497D" or neutral:
+                color = style_color
+            font = Font(node.get_or_add_rPr())
+            font.name = FONTE_FORTE if title and bold else FONTE
+            font.bold, font.italic = bold, italic
+            for script in ("ea", "cs"):
+                existing = font._rPr.find(qn(f"a:{script}"))
+                if existing is not None:
+                    existing.set("typeface", font.name)
+            fill = font._rPr.eg_fillProperties
+            if fill is not None:
+                font._rPr.remove(fill)
+            font.color.rgb = RGBColor.from_string(readable_color(color, background))
 
 
 def scale_details(element, scale):

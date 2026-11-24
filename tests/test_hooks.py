@@ -3,6 +3,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 HOOKS = Path(__file__).resolve().parent.parent / "hooks"
 
 
@@ -59,6 +61,37 @@ def test_guard_allows_new_version(tmp_path):
     outside = tmp_path.parent / "solto"
     outside.mkdir(exist_ok=True)
     assert decision(run("editorial_guard.py", write(outside / "originais" / "a.txt", outside))) == {}
+
+
+@pytest.mark.parametrize("tool_name", ["Write", "Edit"])
+@pytest.mark.parametrize("path", [
+    "tests/fixtures/aulas/modelo-v1.json",
+    "skills/aulas/references/modelo_hof_roteiro.json",
+    "skills/aulas/assets/fundo_foto.jpg",
+    "skills/aulas/assets/parcerias/logo_ilikia.png",
+])
+def test_guard_blocks_master_v1(tmp_path, tool_name, path):
+    repo = tmp_path / "editorial-setup"
+    target = repo / path if tool_name == "Write" else path
+    proc = run("editorial_guard.py", write(target, repo, tool=tool_name))
+    assert proc.returncode == 0
+    assert decision(proc).get("hookSpecificOutput") == {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": "modelo mestre v1 não muda; para mudar o visual, crie o modelo v2 ao lado",
+    }
+
+
+@pytest.mark.parametrize("path", [
+    "tests/fixtures/aulas/modelo-v2.json",
+    "skills/aulas/references/modelo_hof_roteiro_v2.json",
+    "skills/aulas/assets-v2/fundo_foto.jpg",
+    "other-skills/aulas/assets/fundo_foto.jpg",
+])
+def test_guard_allows_files_outside_master_v1(tmp_path, path):
+    proc = run("editorial_guard.py", write(path, tmp_path, tool="Edit"))
+    assert proc.returncode == 0
+    assert decision(proc) == {}
 
 
 def msg(text, active=False, agent="clinic-editorial:diagramador"):
