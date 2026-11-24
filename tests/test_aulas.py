@@ -172,6 +172,7 @@ def test_example_script_builds_pptx(tmp_path):
     # the two pricing slides share a header, so tell them apart by title
     titles = [[sh.text_frame.text for sh in s.shapes if sh.has_text_frame and sh.text_frame.text][1] for s in slides]
     assert titles[14:16] == ["Como compor seu preço", "Aumente seu lucro com técnicas de venda"]
+    assert all("Claude" not in note.text for slide in slides for note in slide.notes_slide.notes_text_frame.paragraphs)
 
 
 def test_prompts_markdown_written(tmp_path):

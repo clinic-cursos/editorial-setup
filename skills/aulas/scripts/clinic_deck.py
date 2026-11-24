@@ -876,7 +876,7 @@ def layout_precificacao(prs, s, d):
                 f.color.rgb = TEXTO if j else PRETO; f.bold = (j == 0)
     text(s, M, H - 0.36, W - 2 * M, 0.25, d.get("nota", "Valores de referência — edite na tabela conforme sua região e seus custos."),
          size=7, color=CINZA, italic=True)
-    notes(s, "Para recalcular custo financeiro, imposto e lucro com outros valores, peça ao Claude ou ajuste à mão: "
+    notes(s, "Para recalcular custo financeiro, imposto e lucro com outros valores, ajuste a tabela: "
              f"lucro = preço − produto − custo fixo − insumos − {tx}% − {tp}% do preço.")
 
 
