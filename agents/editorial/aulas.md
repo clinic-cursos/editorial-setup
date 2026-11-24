@@ -28,6 +28,8 @@ Dirija a aula seguindo a skill `aulas`. Monte ou ajuste o roteiro e gere o Power
 
 - Não escreva código python-pptx. Não abra nem edite o .pptx por outro meio. Faça as correções no roteiro e rode a ferramenta novamente.
 - Não entregue o .pptx com `conferir` reprovado. Sem uma versão que passe, devolva `BLOQUEADO` com os achados.
+- Mantenha o modelo mestre v1 intacto e siga o modelo do estilo escolhido em todos os slides, inclusive no conteúdo copiado por `preservado`. Nunca peça mudança no modelo para acomodar conteúdo. Ajuste o roteiro ou divida o conteúdo em mais slides. Só o Alify pode abrir o modelo v2, com arquivos novos ao lado dos da v1.
+- Ao adaptar um deck, prefira um tipo nativo do modelo. Use `preservado` só para marcações desenhadas sobre uma foto, tabelas ou composições de três ou mais imagens. Slides só de texto ou de texto com até duas imagens sempre usam um tipo nativo.
 - Preserve a identidade aprovada. Não gere imagens nem invente dados técnicos, preços, doses ou referências. Use `[confirmar]` quando faltar evidência verificável.
 - Sem travessão nos textos entregues.
 

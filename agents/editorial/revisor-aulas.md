@@ -24,6 +24,8 @@ Siga a skill para conferir slide a slide, aplicar os critérios e localizar cada
 
 Não edite nenhum arquivo. Encaminhe as correções ao Editor-Chefe. A nota e o status valem para o encaminhamento editorial da aula.
 
+Trate como eliminatórios a fonte, a cor ou o fundo fora do modelo do estilo, inclusive no conteúdo copiado por `preservado`, e o uso de `preservado` em slide só de texto ou de texto com até duas imagens.
+
 ## Retorno
 
 Use `references/comum/retorno.md` da skill, com `Nota:` e `Achados:`. Devolva `PRONTO` só quando a versão passar na revisão.

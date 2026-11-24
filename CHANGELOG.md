@@ -1,5 +1,13 @@
 # Histórico de versões
 
+## 0.2.4
+
+- O hook protege a impressão digital, o roteiro e os recursos visuais do modelo mestre v1. Os testes fixam os hashes dos dois arquivos JSON. Só o Alify pode abrir o modelo v2, com arquivos novos ao lado dos da v1.
+- A adaptação prefere tipos nativos e reserva `preservado` para marcações sobre foto, tabelas e composições de três ou mais imagens. O revisor reprova desvios de fonte, cor ou fundo, inclusive no conteúdo copiado, e o uso de `preservado` em slides só de texto ou de texto com até duas imagens.
+- O `extrair` mantém o recorte original das imagens PNG e JPEG e sinaliza as imagens recortadas no roteiro.
+- O texto de `preservado` usa Montserrat e ganha contraste sobre fundos sólidos conhecidos. Os preenchimentos e contornos sujeitos à normalização adotam a paleta do estilo.
+- No estilo ousado, `numero` ajusta o valor para caber dentro do arco, e `pilares` recorta a foto para preencher o painel.
+
 ## 0.2.3
 
 - Nas listas sem painel de imagem do estilo ousado, passo a passo, alerta, pilares e texto com imagem, a letra cresce até ocupar a área útil; em duas colunas, mantém o tamanho do modelo.

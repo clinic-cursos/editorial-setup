@@ -1,9 +1,10 @@
-"""Para regerar a impressão digital a partir do modelo original:
+"""Para consultar a impressão digital de um PowerPoint sem sobrescrever a da v1:
 
-uv run --locked python tests/test_aulas_ousado.py /var/tmp/aulas-render/in/modelo.pptx > tests/fixtures/aulas/modelo-v1.json
+uv run --locked python tests/test_aulas_ousado.py /var/tmp/aulas-render/in/modelo.pptx
 """
 
 from collections import Counter, defaultdict
+from hashlib import sha256
 import json
 from pathlib import Path
 import subprocess
@@ -129,6 +130,16 @@ def test_bold_example_fields_are_documented():
     example = json.loads(BOLD_EXAMPLE.read_text(encoding="utf-8"))
     missing = sorted(field for field in field_names(example) if f"`{field}`" not in section)
     assert not missing, f"Campos do exemplo ausentes na seção: {missing}"
+
+
+@pytest.mark.parametrize("path,expected", [
+    (FIXTURE, "16cd27dfde15fe5c4d97ff610cfdc5ef8a41a2f1be883c5f4459843ba8b06036"),
+    (MODEL, "3ef1fe1a54b0600299284841a7be8e95e46b66e3568a56a212038e6754d9fc7f"),
+])
+def test_master_v1_files_are_immutable(path, expected):
+    assert sha256(path.read_bytes()).hexdigest() == expected, (
+        f"{path.name}: modelo mestre v1 não muda; para mudar o visual, crie o modelo v2 ao lado"
+    )
 
 
 def test_model_matches_reference(tmp_path):

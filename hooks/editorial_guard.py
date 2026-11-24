@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""PreToolUse: nega escrita em originais/ e em versão aprovada de um projeto com ficha.md. Falha aberto."""
+"""PreToolUse guard for the v1 master, project originals and approved versions."""
 import json
 import os
 import sys
 
 MSG = "versão aprovada não muda; gere uma versão nova"
+MASTER_V1_MESSAGE = "modelo mestre v1 não muda; para mudar o visual, crie o modelo v2 ao lado"
+MASTER_V1_FILES = (
+    "/tests/fixtures/aulas/modelo-v1.json",
+    "/skills/aulas/references/modelo_hof_roteiro.json",
+)
 
 
 def project_root(path):
@@ -33,7 +38,12 @@ def check(data):
     target = (data.get("tool_input") or {}).get("file_path")
     if not target:
         return None
-    path = os.path.realpath(os.path.join(data.get("cwd") or os.getcwd(), target))
+    target = os.path.join(data.get("cwd") or os.getcwd(), target)
+    path = os.path.realpath(target)
+    for candidate in (os.path.abspath(target), path):
+        candidate = candidate.replace(os.sep, "/")
+        if candidate.endswith(MASTER_V1_FILES) or "/skills/aulas/assets/" in candidate:
+            return MASTER_V1_MESSAGE
     root = project_root(path)
     if root is None:
         return None

@@ -13,6 +13,14 @@ Público: profissionais da estética em formação (biomédicos, dentistas, enfe
 
 ## Estilos
 
+### Modelo mestre
+
+O modelo mestre v1 é permanente. Todos os slides seguem o modelo do estilo escolhido, inclusive o conteúdo copiado por `preservado`. No estilo `ousado`, siga a fonte, a paleta, os fundos e as composições do modelo mestre v1. Se o conteúdo não couber, ajuste o roteiro ou divida o conteúdo em mais slides.
+
+Só o Alify pode abrir uma nova versão explícita do modelo. Para o modelo v2, crie arquivos novos ao lado dos arquivos da v1 e mantenha a v1 intacta e disponível.
+
+### Escolha do estilo
+
 Declare `estilo` no roteiro. Para roteiros antigos sem esse campo, a ferramenta usa `padrao`. Um pedido para "refazer no design system novo" usa `ousado`. Se a pessoa pedir explicitamente o estilo padrão, use `padrao`.
 
 - **`padrao`**: formato 16:9, tipografia Montserrat, tarja escura ou cabeçalho editorial e a identidade descrita abaixo. Sem transição Morph nem animações de entrada.
@@ -85,8 +93,6 @@ Cada slide precisa de `tipo`. Todos aceitam `notas`, texto opcional para o apres
 | `encerramento` | `titulo`, `mensagem`, `contatos` (lista de textos, um por linha), `qr` (caminho da imagem), `qr_legenda` (só com `qr` preenchido, padrão "Material de apoio"), `selo`. | Título de uma linha, mensagem de até duas e até três contatos. Legenda e selo de uma linha cada. | Foto de fundo da casa. Sem `qr` ou com `null`, nada é reservado para o QR. Caminho inválido gera um espaço com o rótulo "QR code". |
 | `preservado` | `deck` (caminho de um PowerPoint existente) e `slide` (inteiro a partir de 1, dentro do deck) são obrigatórios. `titulo` e `kicker` compõem o cabeçalho. | Até duas linhas de título e uma de kicker. A composição original é redimensionada para caber sob o cabeçalho, sem copiar o título identificado nem as decorações reconhecidas. | Sem quadro. Usa as imagens presentes nas formas copiadas. |
 
-O modelo mestre v1 rege todos os slides, inclusive os do tipo `preservado`. Para mudar o modelo, publique uma versão explícita com arquivos novos ao lado dos da v1 e mantenha os arquivos da v1 disponíveis.
-
 Em `preservado`, os preenchimentos e contornos sólidos de formas com texto ou com área superior a 2% do slide final adotam o tom mais próximo do estilo em luminância e saturação. A regra inclui as células quando a tabela atende a esse critério. Tons claros vão para o creme, médios para o rosé e escuros para noite, preto ou vinho. O texto editável usa Montserrat com contraste de pelo menos 4,5:1 sobre fundo sólido conhecido. Imagens, formas sem texto de até 2% do slide e linhas sobre imagens mantêm suas cores para preservar o significado clínico de pontos, setas e outras marcações.
 
 Em `sumario`, `duas_colunas`, `comparativo` e nas variantes com painel de `pilares`, `passo_a_passo` e `alerta`, as caixas crescem conforme a estimativa de linhas e deslocam os itens seguintes. Se a lista exceder a área útil, o gerador reduz a fonte do corpo em passos de até 1 pt até o piso de 8 pt. Os tamanhos iniciais dos itens de `duas_colunas`, `comparativo` e `pilares` com painel são os do modelo, de 11, 9,5 e 9,5 pt, respectivamente. Se ainda faltar espaço no piso, o texto excedente permanece editável fora do slide e o `conferir` reprova. Reduza o texto ou divida o conteúdo entre slides.
@@ -108,7 +114,10 @@ Os tipos `tabela`, `grafico`, `antes_depois`, `artigo`, `caso_clinico`, `referen
 ## Escolha a entrada
 
 1. **Aula do zero com conteúdo.** Leia os materiais e monte o roteiro JSON seguindo a seção abaixo. Rode `gerar`.
-2. **Deck ou slide de referência.** Rode `extrair` no PowerPoint recebido. Use `--slides` para selecionar números ou intervalos. A ferramenta grava `roteiro-rascunho.json` e a pasta `img/`. As imagens PNG e JPEG saem com o recorte do slide original e recebem `"recortada": true` no rascunho quando o recorte é aplicado. No rascunho, cada item de `imagens` traz `caminho` e `decorativa`. Use a lista diretamente nos tipos que recebem `imagens`, como `caso_clinico`, nos dois estilos. O gerador aceita também caminhos em texto, resolve caminhos relativos à pasta do roteiro e ignora itens com `"decorativa": true`. Dirija o roteiro: confira a ordem e a integridade dos textos, escolha o tipo de cada slide, ajuste o texto sem alterar o sentido e declare o estilo. Use `preservado` para manter composições complexas, como marcações desenhadas sobre uma foto. Rode `gerar` com o roteiro ajustado. O rascunho vem com `"avulso": true` para conservar a seleção sem inserções automáticas.
+2. **Deck ou slide de referência.** Rode `extrair` no PowerPoint recebido. Use `--slides` para selecionar números ou intervalos. A ferramenta grava `roteiro-rascunho.json` e a pasta `img/`. As imagens PNG e JPEG saem com o recorte do slide original e recebem `"recortada": true` no rascunho quando o recorte é aplicado. No rascunho, cada item de `imagens` traz `caminho` e `decorativa`. Use a lista diretamente nos tipos que recebem `imagens`, como `caso_clinico`, nos dois estilos. O gerador aceita também caminhos em texto, resolve caminhos relativos à pasta do roteiro e ignora itens com `"decorativa": true`.
+   - Confira a ordem e a integridade dos textos, ajuste o texto sem alterar o sentido e declare o estilo.
+   - Escolha primeiro um tipo nativo do modelo. Reserve `preservado` para marcações desenhadas sobre uma foto, tabelas ou composições de três ou mais imagens. Slides só de texto ou de texto com uma ou duas imagens sempre usam um tipo nativo.
+   - Rode `gerar` com o roteiro ajustado. O rascunho vem com `"avulso": true` para conservar a seleção sem inserções automáticas.
 3. **Slide avulso ou pontual a corrigir.** Monte um roteiro só com os slides pedidos e use `"avulso": true`. Para correção, parta do roteiro da versão a corrigir ou use `extrair` com a seleção do slide. Se a pessoa pediu o deck inteiro corrigido, mantenha os demais slides no roteiro e gere o deck completo.
 
 `"avulso": true` funciona nos dois estilos e gera só os slides declarados. Inclua capa, encerramento, precificação ou parcerias no roteiro apenas se fizerem parte da seleção pedida.
