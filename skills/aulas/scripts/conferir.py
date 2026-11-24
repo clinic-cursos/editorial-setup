@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 from collections import Counter
+from functools import cached_property
 from itertools import combinations
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -15,23 +16,24 @@ from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
+from pptx.oxml import parse_xml
 from pptx.oxml.ns import qn
 from pptx.util import Emu, Inches, Pt
 
 import bold_deck
 import clinic_deck
 from restyle import (
-    bounds, cell_surface, contrast_ratio, open_deck, rgb_channels, shape_surfaces,
-    slide_surface, solid_color, visible_color,
+    PAINT_TAGS, bounds, cell_fill, cell_outlines, contrast_ratio, fill_surface, open_deck,
+    rgb_channels, shape_paint, shape_surfaces, slide_surface, solid_color, solid_fill_color,
+    structural_shapes, table_style, visible_color,
 )
 
 
 PRESERVED_WARNING_LABELS = {
     "bounds": ("forma fora dos limites do slide", "formas fora dos limites do slide"),
-    "contrast": ("texto de baixo contraste", "textos de baixo contraste"),
     "fill_color": ("preenchimento fora da paleta", "preenchimentos fora da paleta"),
-    "font": ("fonte fora da família", "fontes fora da família"),
     "marker": ("marcador editorial pendente", "marcadores editoriais pendentes"),
+    "outline_color": ("contorno fora da paleta", "contornos fora da paleta"),
     "overflow": ("estouro de texto", "estouros de texto"),
     "text_color": ("cor de texto fora da paleta", "cores de texto fora da paleta"),
 }
@@ -53,7 +55,6 @@ BOUNDS_TOLERANCE = 10  # EMU, arredondamento de coordenadas de formas livres
 MARKER = re.compile(r"\[exemplo|\[confirmar\]", re.IGNORECASE)
 MARKER_ONLY = re.compile(r"\[(?:exemplo[^\]]*|confirmar)\]", re.IGNORECASE)
 PRESERVED_EXTENSION = "{A046E92C-840E-4D35-9C5C-4A96E281F065}"
-FILL_TAGS = {qn("a:" + name) for name in ("solidFill", "gradFill", "pattFill", "blipFill", "noFill", "grpFill")}
 
 # Métricas verticais da Montserrat em unidades por em.
 CAP_HEIGHT = 0.7
@@ -149,6 +150,7 @@ def legacy_arc(shape, box):
 
 class Theme:
     def __init__(self, slide, presentation):
+        self.presentation_part = presentation.part
         self.layout = slide.slide_layout
         master = self.layout.slide_master
         self.master = master
@@ -160,6 +162,14 @@ class Theme:
             override = element.find(f"{qn('p:clrMapOvr')}/{qn('a:overrideClrMapping')}")
             if override is not None:
                 self.color_map.update(override.attrib)
+
+    @cached_property
+    def table_styles(self):
+        try:
+            part = self.presentation_part.part_related_by(RT.TABLE_STYLES)
+        except KeyError:
+            return {}
+        return {style.get("styleId"): style for style in parse_xml(part.blob).findall(qn("a:tblStyle"))}
 
     def font(self, font):
         if font in ("+mn-lt", "+mj-lt"):
@@ -236,12 +246,26 @@ def fill_colors(properties, theme, placeholder=None):
 
 
 def check_fill(properties, theme, palette, add, reference=None):
-    if properties is not None and any(node.tag in FILL_TAGS for node in properties):
+    if properties is not None and any(node.tag in PAINT_TAGS for node in properties):
         colors = fill_colors(properties, theme)
     else:
         colors = theme.referenced_fills(reference)
     for color in sorted(set(colors) - palette):
         add("fill_color", f"Preenchimento {color} fora da paleta.")
+
+
+def check_preserved_paint(fill, theme, palette, add, strict, *, placeholder=None, outline=False):
+    if fill is None:
+        return
+    if fill.tag == qn("a:solidFill"):
+        solid = solid_fill_color(theme, fill, placeholder)
+        colors = [solid] if solid is not None else fill_colors([fill], theme, placeholder)
+    else:
+        colors = fill_colors([fill], theme, placeholder)
+    rule, label = ("outline_color", "Contorno") if outline else ("fill_color", "Preenchimento")
+    severity = "error" if strict and fill.tag == qn("a:solidFill") else "warning"
+    for color in sorted(set(colors) - palette):
+        add(rule, f"{label} {color} fora da paleta.", severity)
 
 
 def text_defaults(paragraph, shape, frame, theme):
@@ -259,7 +283,7 @@ def text_color_node(styles, shape):
 
 
 def check_text(frame, shape, theme, palette, add, width, height, margins, top, slide_bottom, *,
-               grows=False, background=None):
+               grows=False, background=None, allow_quote_font=True):
     text = frame.text.strip()
     if not text:
         return 0, []
@@ -275,7 +299,7 @@ def check_text(frame, shape, theme, palette, add, width, height, margins, top, s
     autofit = frame._bodyPr.normAutofit
     scale = autofit.fontScale / 100 if autofit is not None else 1
     family = clinic_deck.FONTE.casefold()
-    is_quote = text == bold_deck.QUOTE_MARK
+    is_quote = allow_quote_font and text == bold_deck.QUOTE_MARK
     for paragraph in frame.paragraphs:
         alignment = {PP_ALIGN.CENTER: 0.5, PP_ALIGN.RIGHT: 1}.get(paragraph.alignment, 0)
         defaults = text_defaults(paragraph, shape, frame, theme)
@@ -367,34 +391,51 @@ def check_text(frame, shape, theme, palette, add, width, height, margins, top, s
     ]
 
 
-def check_table(shape, theme, palette, add, slide_bottom, background, preserved):
+def check_table(shape, theme, palette, add, slide_bottom, background, preserved, strict):
     table = shape.table
+    style = table_style(table, theme) if preserved else None
+    if style is not None:
+        for borders in style.iter(qn("a:tcBdr")):
+            for fill in borders.iter(qn("a:solidFill")):
+                check_preserved_paint(fill, theme, palette, add, strict, outline=True)
     heights = [row.height for row in table.rows]
     top = shape.top
     for row, table_row in enumerate(table.rows):
         for col, cell in enumerate(table_row.cells):
+            fill = cell_fill(table, cell, row, col, style) if preserved else None
+            if preserved:
+                check_preserved_paint(fill, theme, palette, add, strict)
+                for line in cell_outlines(cell):
+                    for paint in line:
+                        check_preserved_paint(paint, theme, palette, add, strict, outline=True)
             if cell.is_spanned:
                 continue
             width = sum(table.columns[i].width for i in range(col, col + cell.span_width))
             last_row = row + cell.span_height - 1
             height = sum(heights[row:last_row + 1])
-            check_fill(cell._tc.tcPr, theme, palette, add)
+            if not preserved:
+                check_fill(cell._tc.tcPr, theme, palette, add)
             margins = (cell.margin_left, cell.margin_right, cell.margin_top, cell.margin_bottom)
-            surface = cell_surface(cell, theme, background) if preserved else None
+            surface = fill_surface(theme, background, fill) if preserved else None
             needed, _ = check_text(cell.text_frame, shape, theme, palette, add, width, height, margins,
-                                   top, slide_bottom, grows=True, background=surface)
+                                   top, slide_bottom, grows=True, background=surface,
+                                   allow_quote_font=not preserved)
             # A altura gravada é mínima. O crescimento da célula desloca as linhas seguintes.
             heights[last_row] += max(0, needed - height)
         top += heights[row]
 
 
-def check_shape(shape, theme, palette, add, slide_bottom, text_boxes, preserved=False, background=None):
+def check_shape(shape, theme, palette, add, slide_bottom, text_boxes, structural, preserved=False, background=None):
     if shape._element._nvXxPr.cNvPr.get("hidden") in {"1", "true"}:
         return
     preserved = preserved or is_preserved(shape)
+    strict = shape._element in structural
 
     def finding(rule, message, severity="error"):
-        add(rule, message, severity, shape.name, preserved=preserved)
+        if preserved and rule == "contrast":
+            severity = "error"
+        rejects = rule in {"font", "contrast", "fill_color", "outline_color"} and severity == "error"
+        add(rule, message, severity, shape.name, preserved=preserved and not rejects)
 
     if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
         transform = shape._element.grpSpPr.xfrm
@@ -404,7 +445,7 @@ def check_shape(shape, theme, palette, add, slide_bottom, text_boxes, preserved=
         child_boxes = []
         surfaces = shape_surfaces(shape.shapes, theme, background)
         for child, surface in zip(shape.shapes, surfaces, strict=True):
-            check_shape(child, theme, palette, add, slide_bottom, child_boxes, preserved, surface)
+            check_shape(child, theme, palette, add, slide_bottom, child_boxes, structural, preserved, surface)
         # A comparação usa retângulos alinhados aos eixos do slide.
         if (child_boxes and child_origin is not None and child_extent is not None
             and child_extent.cx and child_extent.cy and not (shape.rotation or transform.flipH or transform.flipV)):
@@ -418,13 +459,20 @@ def check_shape(shape, theme, palette, add, slide_bottom, text_boxes, preserved=
                     for x1, y1, x2, y2 in rows
                 ]))
     elif not shape.has_chart and shape._element.tag != qn("p:pic"):
-        reference = shape._element.find(f"{qn('p:style')}/{qn('a:fillRef')}")
-        check_fill(shape._element.find(qn("p:spPr")), theme, palette, finding, reference)
+        if preserved:
+            for kind in ("fill", "ln"):
+                paint, placeholder = shape_paint(shape, theme, kind)
+                check_preserved_paint(paint, theme, palette, finding, strict, placeholder=placeholder,
+                                      outline=kind == "ln")
+        else:
+            reference = shape._element.find(f"{qn('p:style')}/{qn('a:fillRef')}")
+            check_fill(shape._element.find(qn("p:spPr")), theme, palette, finding, reference)
         if shape.has_text_frame:
             frame = shape.text_frame
             margins = (frame.margin_left, frame.margin_right, frame.margin_top, frame.margin_bottom)
             needed, rows = check_text(frame, shape, theme, palette, finding, shape.width, shape.height,
-                                      margins, shape.top, slide_bottom, background=background if preserved else None)
+                                      margins, shape.top, slide_bottom, background=background if preserved else None,
+                                      allow_quote_font=not preserved)
             if rows and not preserved and not shape.rotation:
                 if (len(rows) > 1 and needed > shape.height
                     and frame.auto_size == MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT):
@@ -436,7 +484,7 @@ def check_shape(shape, theme, palette, add, slide_bottom, text_boxes, preserved=
                             rows[i] = (x1, y1, x2, bottom)
                 text_boxes.append((shape, shape.top, rows))
         if shape.has_table:
-            check_table(shape, theme, palette, finding, slide_bottom, background, preserved)
+            check_table(shape, theme, palette, finding, slide_bottom, background, preserved, strict)
 
 
 def inspect(path, style):
@@ -467,6 +515,7 @@ def inspect(path, style):
             if timing is None or not any(target.get("spid") in ids for target in timing.iter(qn("p:spTgt"))):
                 add("animation", "Animação de forma ausente.")
         text_boxes = []
+        structural = set(structural_shapes(slide.shapes, deck.slide_width * deck.slide_height))
         surfaces = shape_surfaces(slide.shapes, theme, slide_surface(slide, theme))
         for shape, surface in zip(slide.shapes, surfaces, strict=True):
             box = bounds(shape)
@@ -477,7 +526,7 @@ def inspect(path, style):
                 and not legacy_arc(shape, box)):
                 add("bounds", "Forma fora dos limites do slide.", shape=shape.name,
                     preserved=is_preserved(shape))
-            check_shape(shape, theme, palette, add, deck.slide_height, text_boxes, background=surface)
+            check_shape(shape, theme, palette, add, deck.slide_height, text_boxes, structural, background=surface)
         text_boxes.sort(key=lambda box: box[1])
         for (upper, _, upper_rows), (lower, _, lower_rows) in combinations(text_boxes, 2):
             if any(

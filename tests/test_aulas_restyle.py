@@ -51,6 +51,63 @@ def contrast_ratio(first, second):
     return (high + 0.05) / (low + 0.05)
 
 
+@pytest.mark.parametrize("style", ["padrao", "ousado"])
+def test_preserved_maps_box_and_table_paint_to_model_palette(tmp_path, style):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    box = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(2), Inches(2), Inches(4), Inches(1))
+    box.fill.solid()
+    box.fill.fore_color.rgb = RGBColor.from_string("EEECE1")
+    box.line.color.rgb = RGBColor.from_string("999999")
+    box.text = "Painel"
+    box.text_frame.paragraphs[0].runs[0].font.color.rgb = RGBColor.from_string("FFFFFF")
+    table = slide.shapes.add_table(1, 1, Inches(2), Inches(4), Inches(4), Inches(1))
+    cell = table.table.cell(0, 0)
+    cell.text = "Célula"
+    cell.fill.solid()
+    cell.fill.fore_color.rgb = RGBColor.from_string("999999")
+    cell._tc.tcPr.insert(0, parse_xml(
+        f'<a:lnL {nsdecls("a")}><a:solidFill><a:srgbClr val="EEECE1"/></a:solidFill></a:lnL>'
+    ))
+
+    copied = {shape.name: shape for shape in restyle_one(tmp_path, original, style)}
+    copied_box = copied[box.name]
+    copied_cell = copied[table.name].table.cell(0, 0)
+    assert str(copied_box.fill.fore_color.rgb) == "FAF6F4"
+    assert str(copied_box.line.color.rgb) == "B68B85"
+    assert str(copied_cell.fill.fore_color.rgb) == "B68B85"
+    border = copied_cell._tc.tcPr.find(f"{qn('a:lnL')}/{qn('a:solidFill')}/{qn('a:srgbClr')}")
+    assert border.get("val") == "FAF6F4"
+    for item in (copied_box, copied_cell):
+        foreground = item.text_frame.paragraphs[0].runs[0].font.color.rgb
+        assert contrast_ratio(foreground, item.fill.fore_color.rgb) >= 4.5
+
+
+def test_preserved_keeps_annotations_over_picture(tmp_path):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    image = tmp_path / "foto.png"
+    Image.new("RGB", (20, 20), "white").save(image)
+    group = slide.shapes.add_group_shape()
+    picture = group.shapes.add_picture(str(image), Inches(2), Inches(2), Inches(3))
+    marker = group.shapes.add_shape(MSO_SHAPE.OVAL, Inches(3), Inches(3), Inches(0.12), Inches(0.12))
+    marker.fill.solid()
+    marker.fill.fore_color.rgb = RGBColor.from_string("FFFF00")
+    marker.line.fill.background()
+    line = slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(2), Inches(2), Inches(5), Inches(5))
+    line.line.color.rgb = RGBColor.from_string("FFFF00")
+
+    copied = {shape.name: shape for shape in restyle_one(tmp_path, original, "ousado")}
+    copied_picture, copied_marker = copied[group.name].shapes
+    assert copied_picture.image.blob == picture.image.blob
+    assert str(copied_marker.fill.fore_color.rgb) == "FFFF00"
+    assert str(copied[line.name].line.color.rgb) == "FFFF00"
+    checked = run_cli("conferir", tmp_path / "restyle.pptx", "--estilo", "ousado")
+    assert checked.returncode == 0, checked.stderr or checked.stdout
+    assert "conteúdo preservado com 1 preenchimento fora da paleta" in checked.stdout
+    assert "conteúdo preservado com 1 contorno fora da paleta" in checked.stdout
+
+
 @pytest.mark.parametrize("case", ["yellow", "office-rgb", "office-theme", "white-on-wine", "white-over-wine", "title"])
 def test_preserved_normalizes_text_on_its_surface(tmp_path, case):
     original = Presentation()
@@ -236,7 +293,9 @@ def source_deck(tmp_path):
     styles = parse_xml(style_part.blob)
     styles.append(parse_xml(
         f'<a:tblStyle {nsdecls("a")} styleId="{CUSTOM_TABLE_STYLE}" styleName="Teste">'
-        '<a:wholeTbl><a:tcStyle><a:fill><a:solidFill><a:srgbClr val="9C4C48"/>'
+        '<a:wholeTbl><a:tcStyle><a:tcBdr><a:top><a:ln><a:solidFill>'
+        '<a:srgbClr val="999999"/></a:solidFill></a:ln></a:top></a:tcBdr>'
+        '<a:fill><a:solidFill><a:srgbClr val="9C4C48"/>'
         '</a:solidFill></a:fill></a:tcStyle></a:wholeTbl></a:tblStyle>'
     ))
     style_part.blob = serialize_part_xml(styles)
@@ -644,7 +703,10 @@ def test_preserved_objects_and_exact_standalone_slide_count(tmp_path, source_dec
     styles = parse_xml(presentation.part.part_related_by(RT.TABLE_STYLES).blob)
     definitions = [node for node in styles.iter(qn("a:tblStyle")) if node.get("styleId") == table_style_id]
     assert len(definitions) == 1
-    assert definitions[0].find(".//" + qn("a:srgbClr")).get("val") == "9C4C48"
+    assert [node.get("val") for node in definitions[0].iter(qn("a:srgbClr"))] == ["B68B85", "9C4C48"]
+    cell = copied[-1].table.cell(0, 1)
+    assert str(cell.fill.fore_color.rgb) == "9C4C48"
+    assert contrast_ratio(cell.text_frame.paragraphs[0].runs[0].font.color.rgb, cell.fill.fore_color.rgb) >= 4.5
     for shape in copied:
         if shape.shape_type == MSO_SHAPE_TYPE.LINE:
             assert int(shape._element.find(".//" + qn("a:endCxn")).get("id")) == group.shapes[0].shape_id

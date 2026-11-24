@@ -6,7 +6,7 @@ import sys
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
-from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
 from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.util import Inches, Pt
 import pytest
@@ -268,6 +268,44 @@ def test_table_rows_grow_into_the_remaining_slide_space(tmp_path):
     assert "borda inferior do slide" in overflows[0]["message"]
 
 
+@pytest.mark.parametrize("violation", ["font", "quote_font", "fill_color", "contrast"])
+def test_rejects_preserved_content_outside_model(tmp_path, violation):
+    source = Presentation()
+    slide = source.slides.add_slide(source.slide_layouts[6])
+    box = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(2), Inches(2), Inches(4), Inches(1))
+    box.fill.solid()
+    box.fill.fore_color.rgb = RGBColor.from_string("FAF6F4")
+    if violation != "fill_color":
+        box.text = "“" if violation == "quote_font" else "Conteúdo original"
+    original = tmp_path / "original.pptx"
+    source.save(original)
+    script = write_script(tmp_path, "padrao", [
+        {"tipo": "preservado", "deck": original.name, "slide": 1, "titulo": "Título"},
+    ])
+    deck = tmp_path / "preservado.pptx"
+    generated = run_cli("gerar", script, deck, "--sem-conferir")
+    assert generated.returncode == 0, generated.stderr or generated.stdout
+    presentation = Presentation(deck)
+    copied = next(shape for shape in presentation.slides[0].shapes if shape.name == box.name)
+    if violation == "fill_color":
+        copied.fill.fore_color.rgb = RGBColor.from_string("EEECE1")
+    else:
+        run = copied.text_frame.paragraphs[0].runs[0]
+        if violation in {"font", "quote_font"}:
+            run.font.name = "Georgia" if violation == "quote_font" else "Calibri"
+        else:
+            run.font.color.rgb = RGBColor.from_string("FFFFFF")
+    presentation.save(deck)
+
+    result = run_cli("conferir", deck, "--json")
+    assert result.returncode == 1, result.stderr or result.stdout
+    report = json.loads(result.stdout)
+    assert report["errors"] == 1
+    assert [(item["shape"], item["rule"], item["severity"]) for item in report["findings"]] == [
+        (box.name, "font" if violation == "quote_font" else violation, "error"),
+    ]
+
+
 def test_preserved_warnings_are_grouped_by_slide_and_rule(tmp_path):
     source = Presentation()
     slide = source.slides.add_slide(source.slide_layouts[6])
@@ -299,11 +337,11 @@ def test_preserved_warnings_are_grouped_by_slide_and_rule(tmp_path):
         for child in group.shapes:
             paragraph = child.text_frame.paragraphs[0]
             paragraph.runs[0].font.name = "Montserrat"
-            paragraph.runs[0].font.color.rgb = RGBColor.from_string("FFDD00")
+            paragraph.runs[0].font.color.rgb = RGBColor.from_string("333300")
             duplicate = paragraph.add_run()
             duplicate.text = "M"
             duplicate.font.name = "Montserrat"
-            duplicate.font.color.rgb = RGBColor.from_string("FFFF00")
+            duplicate.font.color.rgb = RGBColor.from_string("333300")
     box = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(4), Inches(1))
     box.name = "Nota editorial"
     run = box.text_frame.paragraphs[0].add_run()
@@ -317,21 +355,21 @@ def test_preserved_warnings_are_grouped_by_slide_and_rule(tmp_path):
     lines = result.stdout.splitlines()
     assert "Slide 1 (Nota editorial) | Aviso: Marcador editorial pendente." in lines
     for number in (1, 2):
-        for label in ("textos de baixo contraste", "estouros de texto"):
+        for label in ("cores de texto fora da paleta", "estouros de texto"):
             assert lines.count(f"Slide {number} | Aviso: conteúdo preservado com 2 {label}.") == 1
-    assert "1 aviso(s), 16 aviso(s) em conteúdo preservado" in lines[0]
-    assert len(lines[1:]) == 7
+    assert "1 aviso(s), 8 aviso(s) em conteúdo preservado" in lines[0]
+    assert len(lines[1:]) == 5
 
     result = run_cli("conferir", deck, "--json")
     assert result.returncode == 0, result.stderr or result.stdout
     report = json.loads(result.stdout)
-    assert (report["errors"], report["warnings"], report["preserved_warnings"]) == (0, 1, 16)
+    assert (report["errors"], report["warnings"], report["preserved_warnings"]) == (0, 1, 8)
     assert [(item["shape"], item["rule"]) for item in report["findings"]] == [("Nota editorial", "marker")]
     details = report["preserved_findings"]
-    assert len(details) == 16
+    assert len(details) == 8
     assert {(item["slide"], item["shape"], item["rule"], item["severity"]) for item in details} == {
         (slide, f"Conteúdo original {shape}", rule, "warning")
-        for slide in (1, 2) for shape in (1, 2) for rule in ("contrast", "text_color", "overflow")
+        for slide in (1, 2) for shape in (1, 2) for rule in ("text_color", "overflow")
     }
     assert all(item["message"] for item in details)
 
