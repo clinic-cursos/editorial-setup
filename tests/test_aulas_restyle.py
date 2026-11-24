@@ -916,6 +916,48 @@ def test_preserved_excludes_empty_textbox_inside_group(tmp_path):
     assert copied.height == pytest.approx(Inches(5.375 - 1.35), abs=1)
 
 
+@pytest.mark.parametrize("mode", ["fixed", "auto", "grouped", "inherited", "tolerated"])
+def test_preserved_fits_two_line_label(tmp_path, mode):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    reference = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(1), Inches(2), Inches(1), Inches(3))
+    fixed = mode in {"fixed", "inherited", "tolerated"}
+    label = slide.shapes.add_textbox(Inches(2), Inches(3), Inches(3), Pt(46 if mode == "tolerated" else 42))
+    frame = label.text_frame
+    frame.margin_top = frame.margin_bottom = 0
+    frame.auto_size = MSO_AUTO_SIZE.NONE if fixed else MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
+    frame.text = "Rótulo sintético\nSegunda linha"
+    for paragraph in frame.paragraphs:
+        font = paragraph.font if mode == "inherited" else paragraph.runs[0].font
+        font.size = Pt(20)
+    if mode == "grouped":
+        group = slide.shapes.add_group_shape([label])
+
+    copied = {shape.name: shape for shape in restyle_one(tmp_path, original, "ousado")}
+    if mode == "grouped":
+        copied_label = copied[group.name].shapes[0]
+        scale = 1
+    else:
+        copied_label = copied[label.name]
+        scale = copied[reference.name].height / reference.height
+    paragraph = copied_label.text_frame.paragraphs[0]
+    size = (paragraph.runs[0].font.size or paragraph.font.size).pt
+    assert copied_label.text == label.text
+    if mode == "tolerated":
+        assert size == pytest.approx(20 * scale, abs=0.005)
+        assert copied_label.height < Pt(2 * size * 1.219)
+        return
+    assert copied_label.height >= Pt(2 * size * 1.219)
+    if fixed:
+        assert copied_label.height == pytest.approx(label.height * scale, abs=1)
+        steps = (round(20 * scale, 2) - size) / 0.5
+        assert steps == pytest.approx(round(steps))
+        assert steps >= 1
+        assert 2 * (size + 0.5) * 1.219 > copied_label.height.pt
+    else:
+        assert size == pytest.approx(20 * scale, abs=0.005)
+
+
 @pytest.mark.parametrize("explicit_size", [True, False])
 def test_preserved_reserves_height_for_six_autofit_lines(tmp_path, explicit_size):
     original = Presentation()

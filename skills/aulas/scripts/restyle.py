@@ -553,20 +553,15 @@ def text_bounds(shape, theme, slide_height, *, original=False):
     x, y, width, height = shape_frame(shape)
     if shape.shape_type == GROUP:
         transform = shape._element.xfrm
-        if transform is None:
+        if transform is None or transform.chOff is None or transform.chExt is None:
             return None
-        origin, extent = transform.chOff, transform.chExt
         boxes = [box for child in shape.shapes
                  if (box := text_bounds(child, theme, slide_height, original=original)) is not None]
-        if not boxes or origin is None or extent is None:
+        if not boxes:
             return None
-        scale_x = width / extent.cx if extent.cx else 1
-        scale_y = height / extent.cy if extent.cy else 1
         left, top = min(box[0] for box in boxes), min(box[1] for box in boxes)
         right, bottom = max(box[2] for box in boxes), max(box[3] for box in boxes)
-        frame = (x + (left - origin.x) * scale_x, y + (top - origin.y) * scale_y,
-                 (right - left) * scale_x, (bottom - top) * scale_y)
-        return frame_bounds(rotated_crop(shape, frame), shape.rotation)
+        return group_bounds(shape, (left, top, right, bottom))
     if shape.has_text_frame and shape.text.strip():
         frame = shape.text_frame
         fixed = frame.auto_size in (None, MSO_AUTO_SIZE.NONE)
@@ -646,6 +641,19 @@ def overlaps(first, second):
     return x1 <= a2 and a1 <= x2 and y1 <= b2 and b1 <= y2
 
 
+def group_bounds(shape, box):
+    transform = shape._element.xfrm
+    if transform is None or transform.chOff is None or transform.chExt is None:
+        return box
+    origin, extent = transform.chOff, transform.chExt
+    x, y, width, height = shape_frame(shape)
+    sx, sy = width / extent.cx if extent.cx else 1, height / extent.cy if extent.cy else 1
+    left, top, right, bottom = box
+    frame = (x + (left - origin.x) * sx, y + (top - origin.y) * sy,
+             (right - left) * sx, (bottom - top) * sy)
+    return frame_bounds(rotated_crop(shape, frame), shape.rotation)
+
+
 def slide_shape_roles(shapes, slide_area):
     # Marcações desenhadas podem codificar informação clínica.
     # A área é a do objeto no slide final, já com a escala dos grupos.
@@ -653,7 +661,7 @@ def slide_shape_roles(shapes, slide_area):
         for shape in items:
             if shape._element._nvXxPr.cNvPr.get("hidden") in {"1", "true"}:
                 continue
-            x, y, width, height = shape_frame(shape)
+            width, height = shape_size(shape)
             if shape.shape_type != GROUP:
                 yield shape, place(bounds(shape)), width * height * area_scale
                 continue
@@ -661,14 +669,11 @@ def slide_shape_roles(shapes, slide_area):
             if transform is None or transform.chOff is None or transform.chExt is None:
                 yield from leaves(shape.shapes, place, area_scale)
                 continue
-            origin, extent = transform.chOff, transform.chExt
+            extent = transform.chExt
             sx, sy = width / extent.cx if extent.cx else 1, height / extent.cy if extent.cy else 1
 
             def in_group(box):
-                left, top, right, bottom = box
-                frame = (x + (left - origin.x) * sx, y + (top - origin.y) * sy,
-                         (right - left) * sx, (bottom - top) * sy)
-                return place(frame_bounds(rotated_crop(shape, frame), shape.rotation))
+                return place(group_bounds(shape, box))
 
             yield from leaves(shape.shapes, in_group, area_scale * sx * sy)
 
@@ -998,6 +1003,7 @@ class PreservedSlides:
             surfaces = list(shape_surfaces(existing + targets, target_theme, background))[len(existing):]
             for (shape, _, _), copied, surface in zip(copies, targets, surfaces, strict=True):
                 normalize_shape_text(shape, copied, theme, target_theme, surface, palette, annotations)
+                fit_preserved_text(copied, target_theme, (x, y, x + w, y + h))
             bottom = max((rect[3] for copied in targets
                           if (rect := text_bounds(copied, target_theme, target_deck.slide_height)) is not None),
                          default=y)
@@ -1083,6 +1089,53 @@ def position_copy(shape, element, frame, scale, dx, dy, target_shapes, theme):
             set_inherited_text_sizes(target_shapes._shape_factory(element), theme)
         scale_details(element, scale)
     return element
+
+
+def fit_preserved_text(shape, theme, area, place=lambda box: box):
+    from conferir import TEXT_OVERFLOW_RATIO, check_text, text_defaults
+
+    if shape.shape_type == GROUP:
+        for child in shape.shapes:
+            fit_preserved_text(child, theme, area, lambda box: place(group_bounds(shape, box)))
+        return
+    if not shape.has_text_frame or not shape.text.strip():
+        return
+    frame = shape.text_frame
+    margins = frame.margin_left, frame.margin_right, frame.margin_top, frame.margin_bottom
+    vertical_margin = margins[2] + margins[3]
+
+    def needed_height():
+        height, _ = check_text(frame, shape, theme, set(), lambda *args: None,
+                               shape.width, shape.height, margins, shape.top, area[3])
+        return height
+
+    needed = needed_height()
+    if needed - vertical_margin <= max(0, shape.height - vertical_margin) * TEXT_OVERFLOW_RATIO:
+        return
+    if frame.auto_size == MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT:
+        left, top, right, bottom = place(bounds(shape, (shape.width, needed)))
+        if left >= area[0] - 1 and top >= area[1] - 1 and right <= area[2] + 1 and bottom <= area[3] + 1:
+            shape.height = needed
+            return
+        frame.auto_size = MSO_AUTO_SIZE.NONE
+
+    sizes = []
+    for paragraph in frame.paragraphs:
+        defaults = text_defaults(paragraph, shape, frame, theme)
+        inherited = next((int(style.get("sz")) for style in defaults
+                          if style is not None and "sz" in style.attrib), 1800)
+        default = paragraph._p.get_or_add_pPr().get_or_add_defRPr()
+        sizes.append((default, inherited))
+        for node in paragraph._p:
+            properties = node.find(qn("a:rPr"))
+            if properties is not None and "sz" in properties.attrib:
+                sizes.append((properties, int(properties.get("sz"))))
+    limits = [(properties, size, max(100, (size * 7 + 9) // 10)) for properties, size in sizes]
+    for reduction in range(50, max(size - floor for _, size, floor in limits) + 50, 50):
+        for properties, size, floor in limits:
+            properties.set("sz", str(max(floor, size - reduction)))
+        if needed_height() <= shape.height:
+            break
 
 
 def set_inherited_text_sizes(shape, theme):

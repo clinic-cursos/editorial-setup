@@ -362,6 +362,37 @@ def test_checks_preserved_annotation_colors(tmp_path, kind, color, legend, monke
         assert ("1F497D" if color == "dk2" else color) in errors[0]["message"]
 
 
+def test_rejects_preserved_label_that_still_overflows_at_font_floor(tmp_path):
+    source = Presentation()
+    slide = source.slides.add_slide(source.slide_layouts[6])
+    label = slide.shapes.add_textbox(Inches(2), Inches(3), Inches(3), Pt(16))
+    frame = label.text_frame
+    frame.margin_top = frame.margin_bottom = 0
+    frame.auto_size = MSO_AUTO_SIZE.NONE
+    frame.text = "Rótulo sintético\nSegunda linha"
+    for paragraph in frame.paragraphs:
+        paragraph.runs[0].font.size = Pt(20)
+    original = tmp_path / "original.pptx"
+    source.save(original)
+    script = write_script(tmp_path, "padrao", [
+        {"tipo": "preservado", "deck": original.name, "slide": 1, "titulo": "Título"},
+    ])
+    deck = tmp_path / "preservado.pptx"
+    result = run_cli("gerar", script, deck, "--sem-conferir")
+    assert result.returncode == 0, result.stderr or result.stdout
+
+    result = run_cli("conferir", deck, "--json")
+    assert result.returncode == 1, result.stderr or result.stdout
+    report = json.loads(result.stdout)
+    assert [(item["shape"], item["rule"], item["severity"]) for item in report["findings"]] == [
+        (label.name, "overflow", "error"),
+    ]
+    copied = next(shape for shape in Presentation(deck).slides[0].shapes if shape.name == label.name)
+    initial = round(20 * copied.width / label.width, 2)
+    for paragraph in copied.text_frame.paragraphs:
+        assert paragraph.runs[0].font.size.pt == pytest.approx(initial * 0.7, abs=0.01)
+
+
 def test_preserved_warnings_are_grouped_by_slide_and_rule(tmp_path):
     source = Presentation()
     slide = source.slides.add_slide(source.slide_layouts[6])
@@ -369,6 +400,7 @@ def test_preserved_warnings_are_grouped_by_slide_and_rule(tmp_path):
     for number in (1, 2):
         box = slide.shapes.add_textbox(Inches(number), Inches(2), Inches(1), Inches(1))
         box.name = f"Conteúdo original {number}"
+        box.text_frame.word_wrap = False
         run = box.text_frame.paragraphs[0].add_run()
         run.text = "M" * 100
         run.font.name = "Arial"

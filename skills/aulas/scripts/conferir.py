@@ -55,6 +55,7 @@ BOUNDS_TOLERANCE = 10  # EMU, arredondamento de coordenadas de formas livres
 MARKER = re.compile(r"\[exemplo|\[confirmar\]", re.IGNORECASE)
 MARKER_ONLY = re.compile(r"\[(?:exemplo[^\]]*|confirmar)\]", re.IGNORECASE)
 PRESERVED_EXTENSION = "{A046E92C-840E-4D35-9C5C-4A96E281F065}"
+TEXT_OVERFLOW_RATIO = 1.10
 
 # Métricas verticais da Montserrat em unidades por em.
 CAP_HEIGHT = 0.7
@@ -306,7 +307,7 @@ def text_color_node(styles, shape):
 
 
 def check_text(frame, shape, theme, palette, add, width, height, margins, top, slide_bottom, *,
-               grows=False, background=None, allow_quote_font=True, annotations=None):
+               grows=False, background=None, allow_quote_font=True, annotations=None, preserved=False):
     text = frame.text.strip()
     if not text:
         return 0, []
@@ -414,12 +415,16 @@ def check_text(frame, shape, theme, palette, add, width, height, margins, top, s
     reasons = []
     if wide_word:
         reasons.append("Palavra ou linha sem quebra excede a largura útil da caixa.")
-    if not grows and text_bottom > max(0, available_height) * 1.10:
+    height_overflow = not grows and text_bottom > max(0, available_height) * TEXT_OVERFLOW_RATIO
+    if height_overflow:
         reasons.append("Texto excede a altura da caixa fixa em mais de 10%.")
     if Emu(slide_bottom - top - margins[2]).pt < offset + text_bottom:
         reasons.append("Texto ultrapassa a borda inferior do slide.")
     if reasons:
-        severity = "warning" if MARKER_ONLY.fullmatch(text) else "error"
+        if preserved:
+            severity = "error" if height_overflow else "warning"
+        else:
+            severity = "warning" if MARKER_ONLY.fullmatch(text) else "error"
         add("overflow", "Texto provavelmente estourado. " + " ".join(reasons), severity)
     left = shape.left + margins[0]
     line_top = top + margins[2] + Pt(offset)
@@ -457,7 +462,8 @@ def check_table(shape, theme, palette, add, slide_bottom, background, preserved,
             surface = fill_surface(theme, background, fill) if preserved else None
             needed, _ = check_text(cell.text_frame, shape, theme, palette, add, width, height, margins,
                                    top, slide_bottom, grows=True, background=surface,
-                                   allow_quote_font=not preserved, annotations=annotations if preserved else None)
+                                   allow_quote_font=not preserved, annotations=annotations if preserved else None,
+                                   preserved=preserved)
             # A altura gravada é mínima. O crescimento da célula desloca as linhas seguintes.
             heights[last_row] += max(0, needed - height)
         top += heights[row]
@@ -473,7 +479,7 @@ def check_shape(shape, theme, palette, add, slide_bottom, text_boxes, structural
     def finding(rule, message, severity="error"):
         if preserved and rule == "contrast":
             severity = "error"
-        rejects = rule in {"font", "contrast", "fill_color", "outline_color", "text_color"} and severity == "error"
+        rejects = rule in {"font", "contrast", "fill_color", "outline_color", "text_color", "overflow"} and severity == "error"
         add(rule, message, severity, shape.name, preserved=preserved and not rejects)
 
     if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
@@ -512,7 +518,8 @@ def check_shape(shape, theme, palette, add, slide_bottom, text_boxes, structural
             margins = (frame.margin_left, frame.margin_right, frame.margin_top, frame.margin_bottom)
             needed, rows = check_text(frame, shape, theme, palette, finding, shape.width, shape.height,
                                       margins, shape.top, slide_bottom, background=background if preserved else None,
-                                      allow_quote_font=not preserved, annotations=annotations if preserved else None)
+                                      allow_quote_font=not preserved, annotations=annotations if preserved else None,
+                                      preserved=preserved)
             if rows and not preserved and not shape.rotation:
                 if (len(rows) > 1 and needed > shape.height
                     and frame.auto_size == MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT):
