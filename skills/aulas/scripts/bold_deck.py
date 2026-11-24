@@ -10,14 +10,14 @@ from lxml import etree
 from PIL import Image
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
-from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
 from pptx.oxml.ns import qn
 from pptx.util import Inches
 
 from clinic_deck import (
     A, ALERTA, BRANCO, CINZA, CINZA_CLARO, FONTE, FONTE_FORTE, H, LAYOUTS, M,
     PRETO, ROSE, ROSE_CLARO, TEXTO, VINHO, VINHO_ESC, W, _alpha, _parse_bold,
-    arc, badge, image, line, rect, text,
+    arc, badge, image, keep_numeric_expressions, line, plain_text, rect, text,
 )
 from restyle import PreservedFrame
 
@@ -26,6 +26,7 @@ NOITE2 = RGBColor(0x2A, 0x1A, 0x19)
 CREME = RGBColor(0xFA, 0xF6, 0xF4)
 QUOTE_FONT = "Georgia"
 QUOTE_MARK = "“"
+KICKER_SIZE = 8.5
 MIN_LIST_BODY_SIZE = 8
 MAX_TEXT_ONLY_BODY_SIZE = 18
 TEXT_ONLY_ITEM_TITLE_SCALE = 1.2
@@ -126,7 +127,7 @@ def logo(s, white=True, x=None, y=0.32, h=0.42):
 
 
 def kicker(s, t, x, y, color=ROSE, w=5):
-    return text(s, x, y, w, 0.25, t, size=8.5, color=color, bold=True, caps=True)
+    return text(s, x, y, w, 0.25, t, size=KICKER_SIZE, color=color, bold=True, caps=True)
 
 
 def title(s, t, x, y, w, h, color=BRANCO, size=34, hl=None, hlc=ROSE):
@@ -144,14 +145,24 @@ def has_image_panel(d):
     return bool(d.get("imagem") or d.get("prompt_imagem"))
 
 
-def photo(s, d, x, y, w, h, *, dark=False, prompt_height=None, contain=False):
+def photo(s, d, x, y, w, h, *, dark=False, prompt_height=None, contain=False, avoid_logo=None):
     if not has_image_panel(d):
         raise ValueError(f"{d['tipo']} exige imagem ou prompt_imagem no slide {d.get('titulo', '')!r}")
     path = d.get("imagem")
+    if avoid_logo is not None:
+        margin = Inches(0.1)
+        safe_right = avoid_logo.left - margin
+        safe_top = avoid_logo.top + avoid_logo.height + margin
+        safe_width = safe_right / Inches(1) - x
     if contain and path and Path(path).exists():
         with Image.open(path) as source:
             width, height = source.size
         scale = min(w / width, h / height)
+        if (avoid_logo is not None
+                and Inches(y + (h - height * scale) / 2) < safe_top
+                and Inches(x + (w + width * scale) / 2) > safe_right):
+            w = safe_width
+            scale = min(w / width, h / height)
         width *= scale
         height *= scale
         picture = s.shapes.add_picture(
@@ -160,6 +171,8 @@ def photo(s, d, x, y, w, h, *, dark=False, prompt_height=None, contain=False):
         )
         return name(picture, "!!foto")
 
+    if avoid_logo is not None:
+        w = safe_width
     label = {
         "prompt": d.get("prompt_imagem") or d.get("legenda") or d.get("titulo") or "Imagem do slide",
         "titulo": d.get("titulo", ""),
@@ -174,11 +187,6 @@ def photo(s, d, x, y, w, h, *, dark=False, prompt_height=None, contain=False):
             box.name = f"Texto do prompt {i}"
     shape.height = Inches(h)
     return name(shape, "!!foto")
-
-
-def accent_runs(value, color):
-    return [(part, {"bold": True, "color": color} if i % 2 else {})
-            for i, part in enumerate(value.split("**")) if part]
 
 
 def crop_pillar_photo(picture, path):
@@ -224,7 +232,7 @@ def s_agenda(prs, s, d):
     items = d.get("itens", [])
     an.add(text(s, M, 1.5, 2.8, 1.2, str(len(items)), size=88, color=BRANCO, font=FONTE_FORTE, bold=True), eff="up")
     an.add(text(s, M, 2.85, 2.6, 0.5, d.get("resumo", ""), size=12, color=BRANCO))
-    text(s, M, 3.45, 2.7, 0.8, [accent_runs(row, ROSE) for row in d.get("info", "").splitlines()],
+    text(s, M, 3.45, 2.7, 0.8, [_parse_bold(row, ROSE) for row in d.get("info", "").splitlines()],
          size=9.5, color=CINZA_CLARO)
     rows = max(6, (len(items) + 1) // 2)
     stride = max(0.5, 4.2 / rows)
@@ -288,7 +296,7 @@ def s_pillars(prs, s, d):
     badge_width = 2.9
     badge_left = W - M - badge_width
     info_value = d.get("info", "")
-    info = [accent_runs(row, ROSE) for row in info_value.splitlines()]
+    info = [_parse_bold(row, ROSE) for row in info_value.splitlines()]
     if panel:
         picture = photo(s, d, 0, 0, 4.3, H, dark=True, prompt_height=H - 1)
         if picture.shape_type == MSO_SHAPE_TYPE.PICTURE:
@@ -364,9 +372,11 @@ def s_pillars(prs, s, d):
 def measured_words(line):
     # Estimate Montserrat widths in em with room for wide glyphs, independent of
     # installed fonts.
-    return [(sum(1 if ch in "MWmw" else 0.85 if ch.isupper() else 0.75 for ch in word),
+    line = keep_numeric_expressions(line)
+    return [(sum(0.35 if ch == "\u00a0" else 1 if ch in "MWmw" else 0.85 if ch.isupper() else 0.75
+                 for ch in word),
              len(gap) * 0.35)
-            for word, gap in re.findall(r"(\S+)(\s*)", line)]
+            for word, gap in re.findall(r"((?:\S|\u00a0)+)((?:(?!\u00a0)\s)*)", line)]
 
 
 def wrapped_rows(words, available):
@@ -400,10 +410,6 @@ def text_image_font_size(paragraphs, width, height, model_size, min_size, spacin
             return size
     # Preserve overflowing text at the floor so the editorial check can flag it.
     return min_size
-
-
-def plain_text(value):
-    return str(value).replace("**", "")
 
 
 def list_text_height(paragraphs, width, body_size):
@@ -489,7 +495,8 @@ def s_text_image(prs, s, d):
     rows = [(None, d.get("texto", ""))]
     for topic in d.get("topicos", []):
         if isinstance(topic, dict):
-            rows.append((str(topic.get("titulo", "")), topic.get("texto", "")))
+            topic_title = topic.get("titulo")
+            rows.append((str(topic_title).strip() if topic_title is not None else "", topic.get("texto", "")))
         else:
             rows.append((None, topic))
     rows.append((None, d.get("destaque", "")))
@@ -499,20 +506,36 @@ def s_text_image(prs, s, d):
     panel = has_image_panel(d)
     contain = panel and image_mode == "conter"
     heading = d.get("titulo", "")
+    label = d.get("kicker", "")
     useful_width = W - 2 * M
     title_width = 5.4 if panel and not contain else useful_width
+    title_top, kicker_top = 1.6, 1.3
+    compact = False
     body_top, body_width, body_height = 3.55, 5.0, 1.2
     arrow_x, arrow_top, arrow_bottom = 5.75, 1.0, 4.6
     if panel:
         body = [value for heading, content in rows
-                for value in (f"**{heading}**" if heading is not None else "", content) if value]
+                for value in (f"**{heading}**" if heading else "", content) if value]
     if contain:
-        title_size = text_image_font_size([heading], title_width, 1.8, 36, 18, spacing=0.9, max_rows=2)
-        title_rows = max(1, min(2, content_title_rows(heading, title_width, title_size)))
-        title_height = 0.04 + title_size * (1.38 + (title_rows - 1) * 0.9 * 1.2) / 72
-        body_top = 1.6 + title_height + 0.1
-        body_height = H - M - body_top
         body = [value for value in body if plain_text(value).strip()]
+        compact = not body
+        if compact:
+            from conferir import MONTSERRAT_WIDTHS, glyph_width
+
+            kicker_top, title_top = 0.42, 0.62
+            model_logo = logo(s, False)
+            title_width = model_logo.left.inches - M - 0.1
+            title_units = sum(glyph_width(char, MONTSERRAT_WIDTHS["extrabold"])
+                              for char in keep_numeric_expressions(heading))
+            single_line_size = int(Inches(title_width - 0.04).pt * 1000 / max(1, title_units))
+            title_size = max(18, min(36, single_line_size))
+            title_rows = 1
+        else:
+            title_size = text_image_font_size([heading], title_width, 1.8, 36, 18, spacing=0.9, max_rows=2)
+            title_rows = max(1, min(2, content_title_rows(heading, title_width, title_size)))
+        title_height = 0.04 + title_size * (1.38 + (title_rows - 1) * 0.9 * 1.2) / 72
+        body_top = title_top + title_height + 0.1
+        body_height = H - M - body_top
         image_left = M
         gutter = 0.36
         if body:
@@ -529,10 +552,15 @@ def s_text_image(prs, s, d):
         title_size = text_image_font_size([heading], title_width, 1.8, 40, 18, spacing=0.9, max_rows=2)
         title_height = 0.04 + title_size * (1.38 + 0.9 * 1.2) / 72
 
-    logo(s, False, M, 0.4)
-    kicker(s, d.get("kicker", ""), M, 1.3, VINHO)
-    an.add(title(s, heading, M, 1.6, title_width, title_height, color=PRETO, size=title_size,
-                 hl=d.get("destaque_titulo"), hlc=VINHO), eff="up", dur=700, gap=400)
+    if not compact:
+        logo(s, False, M, 0.4)
+    kicker(s, label, M, kicker_top, VINHO)
+    heading_box = title(s, heading, M, title_top, title_width, title_height,
+                        color=PRETO, size=title_size, hl=d.get("destaque_titulo"), hlc=VINHO)
+    if contain:
+        heading_box.text_frame.auto_size = MSO_AUTO_SIZE.NONE
+        heading_box.text_frame.word_wrap = not compact
+    an.add(heading_box, eff="up", dur=700, gap=400)
     if panel and d.get("seta"):
         ln = line(s, arrow_x, arrow_top, arrow_x, arrow_bottom, color=VINHO, w=2.5)
         tri = rect(s, arrow_x - 0.13, arrow_bottom - 0.05, 0.26, 0.22,
@@ -737,7 +765,8 @@ def s_anatomy(prs, s, d):
     kicker(s, d.get("kicker", ""), 4.0, 0.42, VINHO)
     heading = title(s, d.get("titulo", ""), 4.0, 0.62, 5, 0.7, color=PRETO, size=32)
     structures = d.get("marcacoes", [])
-    labels = "  ·  ".join(f"**{item.get('nome', '')}**" for item in structures)
+    labels = "  ·  ".join(f"**{label}**" for item in structures
+                         if (label := item.get("nome")) is not None and str(label).strip())
     text(s, 4.0, 1.28, 5, 0.3, labels, size=9)
     details = d.get("passos") or [item["desc"] for item in structures if item.get("desc")]
     width = 3.1 if d.get("indicador") else 5.1
@@ -768,8 +797,12 @@ def s_comparison(prs, s, d):
 
     an = Anim(s)
     bg(s, NOITE)
-    photo(s, d, 0, 0, W, 2.7, dark=True, contain=image_mode == "conter")
-    logo(s, True)
+    if image_mode == "conter":
+        brand = logo(s, True)
+        photo(s, d, 0, 0, W, 2.7, dark=True, contain=True, avoid_logo=brand)
+    else:
+        photo(s, d, 0, 0, W, 2.7, dark=True)
+        logo(s, True)
     heading = title(s, d.get("titulo", ""), M, 2.85, 6, 0.6, size=24, hl=d.get("destaque_titulo"))
     bottom = H - 0.42 if d.get("nota") else H
     for k, col in enumerate(d.get("colunas", [])):
@@ -780,7 +813,7 @@ def s_comparison(prs, s, d):
         size, boxes = fit_list([[(plain_text(item), None)] for item in its], width=4.3,
                                tops=tops, bottom=bottom, base_height=0.3, body_size=9.5)
         for it, (y, height) in zip(its, boxes):
-            segs = accent_runs(it, BRANCO)
+            segs = _parse_bold(it, BRANCO)
             an.add(text(s, x, y, 4.3, height, [segs], size=size, color=CINZA_CLARO), gap=90, eff="left")
     if d.get("nota"):
         r = rect(s, 0, H - 0.42, W, 0.42, fill=VINHO)
@@ -879,7 +912,7 @@ def light_content_header(s, heading_text, label):
         # Keep the previous width for long titles that need both lines.
         title_width = W - 2 * M - 1
     title_height = content_title_height(rows, title_size)
-    title_lines = [accent_runs(value, VINHO) for value in title_text.splitlines()]
+    title_lines = [_parse_bold(value) for value in title_text.splitlines()]
     heading = text(s, M, 0.62, title_width, title_height, title_lines, size=title_size,
                    color=PRETO, font=FONTE_FORTE, bold=True, spacing=0.9)
     content_top = 1.35 + (title_height - 0.6)

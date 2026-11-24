@@ -150,6 +150,7 @@ def test_model_matches_reference(tmp_path):
     slides = Presentation(out).slides
     assert len(slides) == len(reference) == 16
     style_mismatches = []
+    breakable = str.maketrans("\u00a0", " ")
     for number, (slide, expected) in enumerate(zip(slides, reference, strict=True), 1):
         prompts = [shape for shape in slide.shapes if shape.name.startswith("Texto do prompt ")]
         omitted = ()
@@ -168,6 +169,11 @@ def test_model_matches_reference(tmp_path):
         assert actual["shapes"].keys() == expected["shapes"].keys(), number
         for name, geometry in expected["shapes"].items():
             assert actual["shapes"][name] == pytest.approx(geometry, abs=0.02), (number, name)
+        # O espaço não separável muda a quebra de linha e preserva o texto visível.
+        for snapshot in (actual, expected):
+            snapshot["texts"] = [value.translate(breakable) for value in snapshot["texts"]]
+            for run in snapshot["runs"]:
+                run["text"] = run["text"].translate(breakable)
         assert Counter(actual["texts"]) == Counter(expected["texts"]), number
         actual_texts = Counter(run["text"] for run in actual["runs"])
         expected_texts = Counter(run["text"] for run in expected["runs"])
@@ -530,6 +536,26 @@ def test_bold_required_image_panel_needs_image_or_prompt(tmp_path, kind):
     assert not out.exists()
 
 
+@pytest.mark.parametrize("kind,fields,expected", [
+    ("texto_imagem", {"imagem_modo": "sangrar", "topicos": [{"texto": "Só texto"}, "Outro item"]},
+     ["Só texto\nOutro item"]),
+    ("anatomia", {"marcacoes": [{"desc": "Só texto"}, {"nome": "Rótulo", "desc": "Outro item"}]},
+     ["Só texto", "Outro item", "Rótulo"]),
+    ("comparativo", {"colunas": [{"itens": ["Só texto", "Outro item"]}]},
+     ["Só texto", "Outro item"]),
+])
+def test_bold_optional_item_titles_do_not_emit_empty_markers(tmp_path, kind, fields, expected):
+    Image.new("RGB", (100, 200)).save(tmp_path / "diagrama.png")
+    path = write_script(tmp_path, [{"tipo": kind, "titulo": "Diagrama", "imagem": "diagrama.png", **fields}])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    texts = [shape.text for shape in Presentation(out).slides[0].shapes if shape.has_text_frame]
+    assert all("**" not in value for value in texts), texts
+    assert all(value in texts for value in expected), texts
+
+
 @pytest.mark.parametrize("heading", [
     "Envelhecimento",
     "TECNOLOGIA DE FABRICAÇÃO DOS NEUROMODULADORES",
@@ -661,6 +687,75 @@ def test_bold_text_image_contains_picture_in_available_content(tmp_path, image_s
         assert 2 * photo.left + photo.width == pytest.approx(deck.slide_width, abs=2)
 
 
+@pytest.mark.parametrize("image_size,heading,at_floor", [
+    ((160, 90), "Leitura e interpretação das informações do diagrama", False),
+    ((300, 100), "Leitura e interpretação das informações do diagrama", False),
+    ((100, 400), "Guia de leitura e interpretação das informações do diagrama", True),
+])
+def test_bold_text_image_compacts_header_without_body(tmp_path, monkeypatch, image_size, heading, at_floor):
+    monkeypatch.syspath_prepend(str(SKILL / "scripts"))
+    from conferir import Theme, check_text
+
+    Image.new("RGB", image_size).save(tmp_path / "diagrama.png")
+    path = write_script(tmp_path, [{
+        "tipo": "texto_imagem", "titulo": heading, "kicker": "Visão geral",
+        "imagem": "diagrama.png", "imagem_modo": "conter",
+    }])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+    deck = Presentation(out)
+    slide = deck.slides[0]
+    labels = {shape.text: shape for shape in slide.shapes if shape.has_text_frame}
+    title, kicker = labels[heading], labels["VISÃO GERAL"]
+    assert (kicker.left.inches, kicker.top.inches, kicker.width.inches, kicker.height.inches) == pytest.approx(
+        (0.45, 0.42, 5.0, 0.25), abs=0.02)
+    assert kicker.top < title.top
+    model_kicker = json.loads(FIXTURE.read_text(encoding="utf-8"))[7]["runs"][0]
+    assert run_fingerprint(kicker.text_frame.paragraphs[0].runs[0]) == {**model_kicker, "text": kicker.text}
+    logo = next(shape for shape in slide.shapes if shape.name == "!!logo")
+    assert max(kicker.left + kicker.width, title.left + title.width) <= logo.left
+
+    frame = title.text_frame
+    margins = frame.margin_left, frame.margin_right, frame.margin_top, frame.margin_bottom
+    _, rows = check_text(frame, title, Theme(slide, deck), set(), lambda *args: None,
+                         title.width, title.height, margins, title.top, deck.slide_height)
+    assert len(rows) == 1
+    assert frame.word_wrap is False
+    size = frame.paragraphs[0].runs[0].font.size.pt
+    assert 18 <= size < 36
+    if at_floor:
+        assert size == 18
+
+    photo = next(shape for shape in slide.shapes if shape.name == "!!foto")
+    margin = Inches(0.45)
+    useful_width = deck.slide_width - 2 * margin
+    content_top = title.top + title.height + Inches(0.1)
+    content_bottom = deck.slide_height - margin
+    useful_height = content_bottom - content_top
+    assert photo.width >= 0.85 * useful_width or photo.height >= 0.80 * useful_height
+    assert photo.width / photo.height == pytest.approx(image_size[0] / image_size[1], abs=1e-5)
+    assert photo.width == pytest.approx(min(useful_width, useful_height * image_size[0] / image_size[1]), abs=3)
+    assert 2 * photo.left + photo.width == pytest.approx(deck.slide_width, abs=3)
+    assert 2 * photo.top + photo.height == pytest.approx(content_top + content_bottom, abs=3)
+
+
+@pytest.mark.parametrize("body", ["", "Texto de apoio"])
+def test_bold_text_image_reports_title_that_exceeds_two_lines(tmp_path, body):
+    heading = " ".join(["Organização da oficina"] * 15)
+    Image.new("RGB", (160, 90)).save(tmp_path / "diagrama.png")
+    path = write_script(tmp_path, [{
+        "tipo": "texto_imagem", "titulo": heading, "texto": body,
+        "imagem": "diagrama.png", "imagem_modo": "conter",
+    }])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "Texto provavelmente estourado" in result.stdout
+    slide = Presentation(out).slides[0]
+    assert any(shape.has_text_frame and shape.text == heading for shape in slide.shapes)
+
+
 @pytest.mark.parametrize("heading,lines", [
     ("Revisão em dupla", 1),
     ("Preparação da leitura para a revisão em dupla", 2),
@@ -771,6 +866,34 @@ def test_bold_comparison_image_mode(tmp_path, mode):
         assert photo.left == 0
         assert photo.width == deck.slide_width
     assert photo.top == 0
+
+
+@pytest.mark.parametrize("kind,image_size", [
+    ("comparativo", (500, 100)),
+    ("comparativo", (900, 100)),
+    ("comparativo", None),
+    ("texto_imagem", (500, 100)),
+])
+def test_bold_contained_image_clears_logo(tmp_path, kind, image_size):
+    if image_size:
+        Image.new("RGB", image_size, "white").save(tmp_path / "diagrama.png")
+        panel = {"imagem": "diagrama.png"}
+    else:
+        panel = {"prompt_imagem": "Material de leitura"}
+    path = write_script(tmp_path, [{
+        "tipo": kind, "titulo": "Diagrama", "imagem_modo": "conter", **panel,
+    }])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    shapes = Presentation(out).slides[0].shapes
+    photo = next(shape for shape in shapes if shape.name == "!!foto")
+    logo = next(shape for shape in shapes if shape.name == "!!logo")
+    margin = Inches(0.1)
+    assert photo.top >= logo.top + logo.height + margin or photo.left + photo.width <= logo.left - margin
+    if image_size:
+        assert photo.width / photo.height == pytest.approx(image_size[0] / image_size[1], abs=1e-5)
 
 
 def test_bold_comparison_columns_make_room_for_wrapped_items(tmp_path):

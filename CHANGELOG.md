@@ -1,5 +1,13 @@
 # Histórico de versões
 
+## 0.2.7
+
+- No `texto_imagem` em `conter` sem corpo, o título fica em uma linha, o kicker mantém a posição do modelo e a imagem ocupa a maior área livre.
+- A imagem em `conter` fica fora da área do logo.
+- Números e suas unidades ficam juntos na mesma linha. Faixas numéricas com espaços também ficam juntas.
+- `**` sem par permanece visível como texto, e `\*\*` exibe os dois asteriscos literalmente.
+- Tópicos sem título e marcações de anatomia sem nome deixam de exibir asteriscos extras.
+
 ## 0.2.6
 
 - O estilo ousado mantém a moldura do modelo nos tipos de fallback.
