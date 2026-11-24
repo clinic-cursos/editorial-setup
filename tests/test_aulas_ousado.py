@@ -627,25 +627,38 @@ def test_bold_list_fits_items_or_keeps_overflow_for_review(tmp_path, kind, botto
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-@pytest.mark.parametrize("image_size", [(400, 100), (100, 400)])
-def test_bold_text_image_contains_picture_inside_panel(tmp_path, image_size):
+@pytest.mark.parametrize("image_size,topics,min_width", [
+    ((300, 100), [], 0.90),
+    ((100, 400), [], 0),
+    ((300, 100), ["Primeiro item.", "Segundo item."], 0.55),
+])
+def test_bold_text_image_contains_picture_in_available_content(tmp_path, image_size, topics, min_width):
     Image.new("RGB", image_size).save(tmp_path / "diagrama.png")
     path = write_script(tmp_path, [{
         "tipo": "texto_imagem", "titulo": "Diagrama", "imagem": "diagrama.png", "imagem_modo": "conter",
+        "topicos": topics,
     }])
     out = tmp_path / "aula.pptx"
     result = generate(path, out)
     assert result.returncode == 0, result.stdout + result.stderr
     deck = Presentation(out)
-    photo = next(shape for shape in deck.slides[0].shapes if shape.name == "!!foto")
+    shapes = deck.slides[0].shapes
+    photo = next(shape for shape in shapes if shape.name == "!!foto")
     assert photo.shape_type == MSO_SHAPE_TYPE.PICTURE
     assert photo.width / photo.height == pytest.approx(image_size[0] / image_size[1], abs=1e-5)
     assert (photo.crop_left, photo.crop_right, photo.crop_top, photo.crop_bottom) == (0, 0, 0, 0)
-    panel_left = deck.slide_width - Inches(3)
-    assert panel_left <= photo.left <= photo.left + photo.width <= deck.slide_width
-    assert 0 <= photo.top <= photo.top + photo.height <= deck.slide_height
-    assert 2 * photo.left + photo.width == pytest.approx(panel_left + deck.slide_width, abs=2)
-    assert 2 * photo.top + photo.height == pytest.approx(deck.slide_height, abs=2)
+    margin = Inches(0.45)
+    useful_width = deck.slide_width - 2 * margin
+    assert photo.width >= min_width * useful_width
+    heading = next(shape for shape in shapes if shape.has_text_frame and shape.text == "Diagrama")
+    assert margin <= photo.left < photo.left + photo.width <= deck.slide_width - margin
+    assert heading.top + heading.height <= photo.top < photo.top + photo.height <= deck.slide_height - margin
+    if topics:
+        body = next(shape for shape in shapes if shape.has_text_frame and shape.text.splitlines() == topics)
+        assert body.width <= 0.40 * useful_width
+        assert body.left + body.width < photo.left
+    else:
+        assert 2 * photo.left + photo.width == pytest.approx(deck.slide_width, abs=2)
 
 
 @pytest.mark.parametrize("heading,lines", [

@@ -469,34 +469,23 @@ def fit_text_only_list(rows, *, width, top, bottom, split_title=False):
     return size, boxes
 
 
+def text_image_body_width(paragraphs, max_width, height, size):
+    widest_word = max(word for paragraph in paragraphs for word, _ in measured_words(paragraph))
+    min_width = 0.04 + widest_word * size / 72
+    items = [(paragraph, None) for paragraph in paragraphs]
+    # Look for the narrowest column in tenths of an inch at the regular body size.
+    for tenths in range(1, int(max_width * 10) + 1):
+        width = tenths / 10
+        if width >= min_width and list_text_height(items, width, size) <= height:
+            return width
+    return max_width
+
+
 def s_text_image(prs, s, d):
     image_mode = d.get("imagem_modo", "sangrar")
     if image_mode not in ("sangrar", "conter"):
         raise ValueError("imagem_modo de texto_imagem deve ser sangrar ou conter")
 
-    an = Anim(s)
-    bg(s, CREME)
-    panel = has_image_panel(d)
-    if panel:
-        photo(s, d, W - 3, 0, 3, H, contain=image_mode == "conter")
-    logo(s, False, M, 0.4)
-    kicker(s, d.get("kicker", ""), M, 1.3, VINHO)
-    heading = d.get("titulo", "")
-    title_width = 5.4 if panel else W - 2 * M
-    if panel:
-        title_height = 1.8
-        title_size = text_image_font_size([heading], title_width, title_height, 46, 18, spacing=0.9)
-    else:
-        title_size = text_image_font_size([heading], title_width, 1.8, 40, 18, spacing=0.9, max_rows=2)
-        title_height = 0.04 + title_size * (1.38 + 0.9 * 1.2) / 72
-    an.add(title(s, heading, M, 1.6, title_width, title_height, color=PRETO, size=title_size,
-                 hl=d.get("destaque_titulo"), hlc=VINHO), eff="up", dur=700, gap=400)
-    if panel and d.get("seta"):
-        ln = line(s, 5.75, 1.0, 5.75, 4.6, color=VINHO, w=2.5)
-        tri = rect(s, 5.62, 4.55, 0.26, 0.22, fill=VINHO, shape=MSO_SHAPE.ISOSCELES_TRIANGLE)
-        tri.rotation = 180
-        an.add(ln, gap=0, dur=900)
-        an.add(tri, gap=300)
     rows = [(None, d.get("texto", ""))]
     for topic in d.get("topicos", []):
         if isinstance(topic, dict):
@@ -504,11 +493,58 @@ def s_text_image(prs, s, d):
         else:
             rows.append((None, topic))
     rows.append((None, d.get("destaque", "")))
+
+    an = Anim(s)
+    bg(s, CREME)
+    panel = has_image_panel(d)
+    contain = panel and image_mode == "conter"
+    heading = d.get("titulo", "")
+    useful_width = W - 2 * M
+    title_width = 5.4 if panel and not contain else useful_width
+    body_top, body_width, body_height = 3.55, 5.0, 1.2
+    arrow_x, arrow_top, arrow_bottom = 5.75, 1.0, 4.6
     if panel:
         body = [value for heading, content in rows
                 for value in (f"**{heading}**" if heading is not None else "", content) if value]
-        body_size = text_image_font_size([plain_text(row) for row in body], 5.0, 1.2, 11, 8, spacing=1.1)
-        an.add(text(s, M, 3.55, 5.0, 1.2, body, size=body_size, color=TEXTO), eff="up")
+    if contain:
+        title_size = text_image_font_size([heading], title_width, 1.8, 36, 18, spacing=0.9, max_rows=2)
+        title_rows = max(1, min(2, content_title_rows(heading, title_width, title_size)))
+        title_height = 0.04 + title_size * (1.38 + (title_rows - 1) * 0.9 * 1.2) / 72
+        body_top = 1.6 + title_height + 0.1
+        body_height = H - M - body_top
+        body = [value for value in body if plain_text(value).strip()]
+        image_left = M
+        gutter = 0.36
+        if body:
+            body_width = text_image_body_width([plain_text(value) for value in body],
+                                               0.40 * useful_width, body_height, 11)
+            image_left += body_width + gutter
+        photo(s, d, image_left, body_top, W - M - image_left, body_height, contain=True)
+        arrow_x, arrow_top, arrow_bottom = image_left - gutter / 2, body_top, H - M - 0.17
+    elif panel:
+        photo(s, d, W - 3, 0, 3, H)
+        title_height = 1.8
+        title_size = text_image_font_size([heading], title_width, title_height, 46, 18, spacing=0.9)
+    else:
+        title_size = text_image_font_size([heading], title_width, 1.8, 40, 18, spacing=0.9, max_rows=2)
+        title_height = 0.04 + title_size * (1.38 + 0.9 * 1.2) / 72
+
+    logo(s, False, M, 0.4)
+    kicker(s, d.get("kicker", ""), M, 1.3, VINHO)
+    an.add(title(s, heading, M, 1.6, title_width, title_height, color=PRETO, size=title_size,
+                 hl=d.get("destaque_titulo"), hlc=VINHO), eff="up", dur=700, gap=400)
+    if panel and d.get("seta"):
+        ln = line(s, arrow_x, arrow_top, arrow_x, arrow_bottom, color=VINHO, w=2.5)
+        tri = rect(s, arrow_x - 0.13, arrow_bottom - 0.05, 0.26, 0.22,
+                   fill=VINHO, shape=MSO_SHAPE.ISOSCELES_TRIANGLE)
+        tri.rotation = 180
+        an.add(ln, gap=0, dur=900)
+        an.add(tri, gap=300)
+    if panel:
+        if body or not contain:
+            body_size = text_image_font_size([plain_text(value) for value in body],
+                                             body_width, body_height, 11, 8, spacing=1.1)
+            an.add(text(s, M, body_top, body_width, body_height, body, size=body_size, color=TEXTO), eff="up")
     else:
         rows = [(heading, content) for heading, content in rows if heading or content]
         size, boxes = fit_text_only_list([(plain_text(heading or ""), plain_text(content or ""))
