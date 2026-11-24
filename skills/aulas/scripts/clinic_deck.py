@@ -447,11 +447,23 @@ def layout_passo_a_passo(prs, s, d):
              anchor=MSO_ANCHOR.MIDDLE)
 
 
-def layout_antes_depois(prs, s, d):
+def content_start(s, d, top, content_header, *, default_title="", default_kicker=None):
+    """Draw the header and return the first available body position in inches."""
+    title = d.get("titulo", default_title)
+    if content_header is not None:
+        return content_header(s, str(title), d.get("kicker", default_kicker))
+    if default_kicker is None:
+        header(s, title)
+    else:
+        header_editorial(s, title, d.get("kicker", default_kicker))
+    return top
+
+
+def layout_antes_depois(prs, s, d, *, content_header=None):
     """Antes e depois. campos: titulo, antes, depois (caminhos), rotulo_antes,
     rotulo_depois, legenda (produto/técnica/tempo)"""
-    header(s, d.get("titulo", ""))
-    w = (W - 2 * M - 0.2) / 2; y = 0.9; h = 3.95
+    y = content_start(s, d, 0.9, content_header)
+    w = (W - 2 * M - 0.2) / 2; h = 3.95 - (y - 0.9)
     for k, (key, lab) in enumerate([("antes", d.get("rotulo_antes", "Antes")),
                                      ("depois", d.get("rotulo_depois", "Depois"))]):
         x = M + k * (w + 0.2)
@@ -464,13 +476,16 @@ def layout_antes_depois(prs, s, d):
              align=PP_ALIGN.CENTER)
 
 
-def layout_artigo(prs, s, d):
+def layout_artigo(prs, s, d, *, content_header=None):
     """Print de artigo com destaque na conclusão.
     campos: titulo, imagem (print), referencia, conclusao, comentario"""
-    header_editorial(s, d.get("titulo", "Análise de artigo"), d.get("kicker", "Evidência científica"))
-    image(s, d.get("imagem"), M, 1.1, 4.3, 3.95, "print do artigo (título + abstract)")
-    rect(s, M, 1.1, 4.3, 3.95, line=CINZA_CLARO, lw=0.75)
-    bx, by, bw, bh = 5.1, 1.2, 4.45, 2.35
+    y = content_start(s, d, 1.1, content_header, default_title="Análise de artigo",
+                      default_kicker="Evidência científica")
+    offset = y - 1.1
+    image(s, d.get("imagem"), M, y, 4.3, 3.95 - offset, "print do artigo (título + abstract)")
+    rect(s, M, y, 4.3, 3.95 - offset, line=CINZA_CLARO, lw=0.75)
+    bx, by, bh = 5.1, 1.2 + offset, 2.35 - offset
+    bw = 4.37 if content_header is not None else 4.45
     rect(s, bx, by, bw, bh, fill=ROSE_CLARO)
     bracket(s, bx - 0.08, by - 0.08, bw + 0.16, bh + 0.16, color=VINHO)
     text(s, bx + 0.25, by + 0.18, bw - 0.5, 0.25, "CONCLUSÃO", size=8, color=VINHO, bold=True)
@@ -480,14 +495,16 @@ def layout_artigo(prs, s, d):
         text(s, bx, 3.75, bw, 0.9,
              [[("Na prática clínica: ", {"bold": True, "color": VINHO}), (d["comentario"], {})]], size=9.5)
     if d.get("referencia"):
-        text(s, bx, H - 0.6, bw, 0.4, d["referencia"], size=7, color=CINZA)
+        reference_top = H - (0.65 if content_header is not None else 0.6)
+        text(s, bx, reference_top, bw, 0.4, d["referencia"], size=7, color=CINZA)
 
 
-def layout_grafico(prs, s, d):
+def layout_grafico(prs, s, d, *, content_header=None):
     """Gráficos e infográficos. campos: titulo, tipo_grafico ('barra'|'coluna'|'linha'|
     'pizza'), categorias[], series[{nome, valores[]}], destaque{valor, texto},
     fonte"""
-    header(s, d.get("titulo", ""))
+    y = content_start(s, d, 0.9, content_header)
+    offset = y - 0.9
     tipo = {"barra": XL_CHART_TYPE.BAR_CLUSTERED, "coluna": XL_CHART_TYPE.COLUMN_CLUSTERED,
             "linha": XL_CHART_TYPE.LINE_MARKERS, "pizza": XL_CHART_TYPE.DOUGHNUT}[d.get("tipo_grafico", "coluna")]
     cd = CategoryChartData(); cd.categories = d.get("categorias", [])
@@ -495,7 +512,7 @@ def layout_grafico(prs, s, d):
         cd.add_series(se["nome"], se["valores"])
     has_kpi = bool(d.get("destaque"))
     cw = 6.1 if has_kpi else W - 2 * M
-    gf = s.shapes.add_chart(tipo, Inches(M), Inches(0.9), Inches(cw), Inches(4.15), cd)
+    gf = s.shapes.add_chart(tipo, Inches(M), Inches(y), Inches(cw), Inches(4.15 - offset), cd)
     ch = gf.chart
     ch.font.name = FONTE; ch.font.size = Pt(9); ch.font.color.rgb = TEXTO
     pal = [VINHO, ROSE, CINZA, VINHO_ESC]
@@ -527,23 +544,26 @@ def layout_grafico(prs, s, d):
             ch.legend.position = XL_LEGEND_POSITION.TOP; ch.legend.include_in_layout = False
     if has_kpi:
         k = d["destaque"]; kx = 6.85
-        rect(s, kx, 1.15, 2.7, 3.2, fill=VINHO)
-        dots(s, kx + 0.25, 1.35, color=ROSE)
-        text(s, kx + 0.2, 1.75, 2.3, 1.0, k.get("valor", ""), size=40, color=BRANCO,
+        rect(s, kx, 1.15 + offset, 2.7, 3.2, fill=VINHO)
+        dots(s, kx + 0.25, 1.35 + offset, color=ROSE)
+        text(s, kx + 0.2, 1.75 + offset, 2.3, 1.0, k.get("valor", ""), size=40, color=BRANCO,
              font=FONTE_FORTE, bold=True)
-        text(s, kx + 0.2, 2.8, 2.3, 1.4, k.get("texto", ""), size=10, color=BRANCO)
+        text(s, kx + 0.2, 2.8 + offset, 2.3, 1.4, k.get("texto", ""), size=10, color=BRANCO)
     if d.get("fonte"):
         text(s, M, H - 0.5, W - 2 * M, 0.2, "Fonte: " + d["fonte"], size=7, color=CINZA)
 
 
-def layout_tabela(prs, s, d):
+def layout_tabela(prs, s, d, *, content_header=None):
     """Comparativo em tabela. campos: titulo, colunas[], linhas[[...]],
     destacar_coluna (índice), nota"""
-    header(s, d.get("titulo", ""))
+    y = content_start(s, d, 0.95, content_header)
     cols = d.get("colunas", []); rows = d.get("linhas", [])
     nr, nc = len(rows) + 1, len(cols)
     th = min(4.1, 0.42 * nr)
-    gt = s.shapes.add_table(nr, nc, Inches(M), Inches(0.95), Inches(W - 2 * M), Inches(th))
+    if content_header is not None:
+        note_space = 0.42 if d.get("nota") else 0
+        th = min(th, H - 0.25 - y - note_space)
+    gt = s.shapes.add_table(nr, nc, Inches(M), Inches(y), Inches(W - 2 * M), Inches(th))
     tbl = gt.table
     tblPr = gt._element.graphic.graphicData.tbl.tblPr
     sid = tblPr.find(qn("a:tableStyleId"))
@@ -575,15 +595,16 @@ def layout_tabela(prs, s, d):
                 f.color.rgb = TEXTO
                 if j == hl: f.bold = True; f.color.rgb = VINHO_ESC
     if d.get("nota"):
-        text(s, M, 0.95 + th + 0.12, W - 2 * M, 0.3, d["nota"], size=8, color=CINZA, italic=True)
+        text(s, M, y + th + 0.12, W - 2 * M, 0.3, d["nota"], size=8, color=CINZA, italic=True)
 
 
-def layout_caso_clinico(prs, s, d):
+def layout_caso_clinico(prs, s, d, *, content_header=None):
     """Caso clínico. campos: titulo, paciente{idade, sexo, queixa},
     avaliacao, plano, resultado, imagens[] (até 3), legenda"""
-    header_editorial(s, d.get("titulo", "Caso clínico"), d.get("kicker", "Caso clínico"))
-    x, y, w = M, 1.1, 3.9
-    rect(s, x, y, w, 3.95, fill=ROSE_CLARO)
+    y = content_start(s, d, 1.1, content_header, default_title="Caso clínico", default_kicker="Caso clínico")
+    offset = y - 1.1
+    x, w = M, 3.9
+    rect(s, x, y, w, 3.95 - offset, fill=ROSE_CLARO)
     rect(s, x, y, w, 0.05, fill=VINHO)
     pac = d.get("paciente", {})
     yy = y + 0.2
@@ -601,13 +622,13 @@ def layout_caso_clinico(prs, s, d):
         if not val:
             continue
         text(s, x + 0.2, yy, w - 0.4, 0.2, lab, size=7.5, color=VINHO, bold=True, caps=True)
-        tb = text(s, x + 0.2, yy + 0.2, w - 0.4, 0.62, _parse_bold(val), size=9)
-        yy += 0.85
+        text(s, x + 0.2, yy + 0.2, w - 0.4, 0.62 - offset / 4, _parse_bold(val), size=9)
+        yy += 0.85 - offset / 4
     imgs = d.get("imagens") or [None, None]
     n = len(imgs); gx = 4.55; gw = W - M - gx
     iw = (gw - 0.12 * (n - 1)) / n
     for i, im in enumerate(imgs):
-        image(s, im, gx + i * (iw + 0.12), 1.1, iw, 3.6, ["pré", "pós", "controle"][i % 3])
+        image(s, im, gx + i * (iw + 0.12), y, iw, 3.6 - offset, ["pré", "pós", "controle"][i % 3])
     if d.get("legenda"):
         text(s, gx, 4.8, gw, 0.25, d["legenda"], size=8, color=CINZA, align=PP_ALIGN.CENTER)
 
@@ -661,18 +682,18 @@ def layout_frase(prs, s, d):
     s.shapes.add_picture(A(logo), Inches(W - M - 0.7), Inches(H - 0.75), height=Inches(0.5))
 
 
-def layout_referencias(prs, s, d):
+def layout_referencias(prs, s, d, *, content_header=None):
     """Referências bibliográficas. campos: titulo, refs[]"""
-    header(s, d.get("titulo", "Referências"))
+    top = content_start(s, d, 0.95, content_header, default_title="Referências")
     refs = d.get("refs", [])
     two = len(refs) > 6
     per = (len(refs) + 1) // 2 if two else len(refs)
     cw = (W - 2 * M - 0.3) / 2 if two else W - 2 * M
     size = 8 if two else 9
-    step = min(0.62, 4.1 / max(per, 1))
+    step = min(0.62, (4.1 - (top - 0.95)) / max(per, 1))
     for i, r in enumerate(refs):
         col, row = divmod(i, per) if two else (0, i)
-        x = M + col * (cw + 0.3); y = 0.95 + row * step
+        x = M + col * (cw + 0.3); y = top + row * step
         text(s, x, y, 0.35, step, f"{i+1}.", size=size, color=VINHO, bold=True)
         text(s, x + 0.32, y, cw - 0.35, step, r, size=size, color=TEXTO, spacing=1.0)
 

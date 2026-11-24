@@ -832,11 +832,11 @@ def s_closing(prs, s, d):
     morph(s); an.build()
 
 
-def s_preserved(prs, s, d, preserved):
+def light_content_header(s, heading_text, label):
     light_content_frame(s)
-    if d.get("kicker"):
-        kicker(s, d["kicker"], M, 0.42, VINHO)
-    title_text = d.get("titulo", "").rstrip()
+    if label:
+        kicker(s, label, M, 0.42, VINHO)
+    title_text = heading_text.rstrip()
     title_width, title_size = 6, 26
     rows = content_title_rows(plain_text(title_text), title_width, title_size)
     if rows > 2:
@@ -847,6 +847,11 @@ def s_preserved(prs, s, d, preserved):
     heading = text(s, M, 0.62, title_width, title_height, title_lines, size=title_size,
                    color=PRETO, font=FONTE_FORTE, bold=True, spacing=0.9)
     content_top = 1.35 + (title_height - 0.6)
+    return heading, content_top
+
+
+def s_preserved(prs, s, d, preserved):
+    heading, content_top = light_content_header(s, d.get("titulo", ""), d.get("kicker"))
     frame = PreservedFrame(Inches(M), Inches(content_top), Inches(W - 2 * M), Inches(H - 0.25 - content_top), NOITE)
     objects = preserved.copy(s, {**d, "titulo": heading.text}, frame)
     animation = Anim(s)
@@ -857,7 +862,15 @@ def s_preserved(prs, s, d, preserved):
 
 
 def s_from_layout(prs, s, d):
-    """Usa o layout padrão com Morph e entrada suave do conteúdo."""
+    def content_header(slide, heading, label):
+        return light_content_header(slide, heading, label)[1]
+
+    LAYOUTS[d["tipo"]](prs, s, d, content_header=content_header)
+    animate_layout(s, list(s.shapes)[3:])
+
+
+def s_from_julie_layout(prs, s, d):
+    """Mantém a composição aprovada dos slides de negócio e parceria."""
     LAYOUTS[d["tipo"]](prs, s, d)
     shapes = list(s.shapes)
     first = shapes[0]
@@ -878,8 +891,12 @@ def s_from_layout(prs, s, d):
         existing_logo = next(shape for shape in reversed(shapes) if shape.shape_type == MSO_SHAPE_TYPE.FREEFORM)
     if existing_logo is not None:
         name(existing_logo, "!!logo")
+    animate_layout(s, shapes[1:])
+
+
+def animate_layout(s, shapes):
     an = Anim(s)
-    for sh in shapes[1:]:
+    for sh in shapes:
         if sh.has_text_frame or sh.has_table or sh.shape_type in (MSO_SHAPE_TYPE.PICTURE, MSO_SHAPE_TYPE.CHART):
             an.add(sh, gap=40)
     morph(s); an.build()
@@ -887,6 +904,7 @@ def s_from_layout(prs, s, d):
 
 BOLD_LAYOUTS = {
     **dict.fromkeys(LAYOUTS, s_from_layout),
+    **dict.fromkeys(("custos", "precificacao", "parceria", "continue_evolucao"), s_from_julie_layout),
     "capa": s_cover,
     "sumario": s_agenda,
     "modulo": s_section,

@@ -803,6 +803,59 @@ def test_bold_animates_standard_layouts(tmp_path):
         assert_motion(slide)
 
 
+@pytest.mark.parametrize("kind, content", [
+    ("antes_depois", "ANTES"),
+    ("tabela", MSO_SHAPE_TYPE.TABLE),
+    ("grafico", MSO_SHAPE_TYPE.CHART),
+    ("artigo", "CONCLUSÃO"),
+    ("caso_clinico", "AVALIAÇÃO"),
+    ("referencias", "1."),
+])
+@pytest.mark.parametrize("separator", ["", "\n"])
+def test_bold_fallback_uses_model_content_frame(tmp_path, kind, content, separator):
+    reference = json.loads(FIXTURE.read_text(encoding="utf-8"))[7]
+    kicker, first_run, accent = (run["text"] for run in reference["runs"][:3])
+    example = json.loads((SKILL / "references" / "exemplo_roteiro.json").read_text(encoding="utf-8"))
+    data = next(slide for slide in example["slides"] if slide["tipo"] == kind)
+    data.update(titulo=f"{first_run}{separator}**{accent}**", kicker=kicker.lower())
+    if kind == "antes_depois":
+        Image.new("RGB", (64, 48), "blue").save(tmp_path / "sintetica.png")
+        data.update(antes="sintetica.png", depois="sintetica.png",
+                    rotulo_antes="Antes", rotulo_depois="Depois")
+    out = tmp_path / "fallback.pptx"
+
+    result = generate(write_script(tmp_path, [data]), out)
+    assert result.returncode == 0, result.stderr
+    slide = Presentation(out).slides[0]
+    actual = fingerprint(slide)
+    frame = {name: box for name, box in reference["shapes"].items() if name != "!!foto"}
+    assert actual["background"] == reference["background"]
+    assert actual["shapes"] == {name: pytest.approx(box, abs=0.02) for name, box in frame.items()}
+    assert actual["runs"][:3] == reference["runs"][:3]
+
+    label, heading = slide.shapes[3], slide.shapes[4]
+    assert label.text == kicker
+    assert (label.left.inches, label.top.inches) == pytest.approx((0.45, 0.42), abs=0.02)
+    assert heading.text == f"{first_run}{separator}{accent}"
+    assert (heading.left.inches, heading.top.inches, heading.width.inches) == pytest.approx(
+        (0.45, 0.62, 6.0), abs=0.02)
+    assert (heading.height.inches > 0.6) == bool(separator)
+    body = list(slide.shapes)[5:]
+    content_top = 1.35 + max(0, heading.height.inches - 0.6)
+    assert all(content_top - 0.02 <= shape.top.inches for shape in body)
+    assert all(shape.top + shape.height <= Inches(5.375) for shape in body)
+    assert all(shape.left.inches >= 0.43 and (shape.left + shape.width) <= Inches(9.57)
+               for shape in body)
+    if isinstance(content, str):
+        assert any(shape.has_text_frame and shape.text == content for shape in body)
+    else:
+        assert any(shape.shape_type == content for shape in body)
+    if kind == "antes_depois":
+        assert sum(shape.shape_type == MSO_SHAPE_TYPE.PICTURE for shape in body) == 2
+        assert any(shape.has_text_frame and shape.text == "DEPOIS" for shape in body)
+    assert_motion(slide)
+
+
 def test_switching_to_bold_keeps_shared_content_fields(tmp_path):
     path = write_script(tmp_path, [
         {"tipo": "modulo", "titulo": "Módulo", "selo": "Material de apoio"},
