@@ -661,6 +661,68 @@ def test_bold_text_image_contains_picture_in_available_content(tmp_path, image_s
         assert 2 * photo.left + photo.width == pytest.approx(deck.slide_width, abs=2)
 
 
+@pytest.mark.parametrize("image_size,heading,expected_rows", [
+    ((160, 90), "Leitura e interpretação das informações do diagrama", 1),
+    ((300, 100), "Leitura e interpretação das informações do diagrama", 1),
+    ((160, 90), "Guia de leitura e interpretação das informações do diagrama para toda a turma", 2),
+])
+def test_bold_text_image_compacts_header_without_body(tmp_path, monkeypatch, image_size, heading, expected_rows):
+    monkeypatch.syspath_prepend(str(SKILL / "scripts"))
+    from conferir import Theme, check_text
+
+    Image.new("RGB", image_size).save(tmp_path / "diagrama.png")
+    path = write_script(tmp_path, [{
+        "tipo": "texto_imagem", "titulo": heading, "kicker": "Visão geral",
+        "imagem": "diagrama.png", "imagem_modo": "conter",
+    }])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+    deck = Presentation(out)
+    slide = deck.slides[0]
+    labels = {shape.text: shape for shape in slide.shapes if shape.has_text_frame}
+    title, kicker = labels[heading], labels["VISÃO GERAL"]
+    frame = title.text_frame
+    margins = frame.margin_left, frame.margin_right, frame.margin_top, frame.margin_bottom
+    _, rows = check_text(frame, title, Theme(slide, deck), set(), lambda *args: None,
+                         title.width, title.height, margins, title.top, deck.slide_height)
+    assert len(rows) == expected_rows
+    size = frame.paragraphs[0].runs[0].font.size.pt
+    assert 18 <= size < 36
+    if expected_rows == 2:
+        assert size == 18
+    assert kicker.left + kicker.width < title.left
+    assert title.top <= kicker.top < rows[0][3]
+
+    photo = next(shape for shape in slide.shapes if shape.name == "!!foto")
+    margin = Inches(0.45)
+    useful_width = deck.slide_width - 2 * margin
+    content_top = max(title.top + title.height, kicker.top + kicker.height) + Inches(0.1)
+    content_bottom = deck.slide_height - margin
+    useful_height = content_bottom - content_top
+    assert photo.width >= 0.85 * useful_width or photo.height >= 0.80 * useful_height
+    assert photo.width / photo.height == pytest.approx(image_size[0] / image_size[1], abs=1e-5)
+    assert photo.width == pytest.approx(min(useful_width, useful_height * image_size[0] / image_size[1]), abs=3)
+    assert 2 * photo.left + photo.width == pytest.approx(deck.slide_width, abs=3)
+    assert 2 * photo.top + photo.height == pytest.approx(content_top + content_bottom, abs=3)
+
+
+@pytest.mark.parametrize("body", ["", "Texto de apoio"])
+def test_bold_text_image_reports_title_that_exceeds_two_lines(tmp_path, body):
+    heading = " ".join(["Organização da oficina"] * 15)
+    Image.new("RGB", (160, 90)).save(tmp_path / "diagrama.png")
+    path = write_script(tmp_path, [{
+        "tipo": "texto_imagem", "titulo": heading, "texto": body,
+        "imagem": "diagrama.png", "imagem_modo": "conter",
+    }])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "Texto provavelmente estourado" in result.stdout
+    slide = Presentation(out).slides[0]
+    assert any(shape.has_text_frame and shape.text == heading for shape in slide.shapes)
+
+
 @pytest.mark.parametrize("heading,lines", [
     ("Revisão em dupla", 1),
     ("Preparação da leitura para a revisão em dupla", 2),

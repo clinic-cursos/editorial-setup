@@ -10,7 +10,7 @@ from lxml import etree
 from PIL import Image
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
-from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
 from pptx.oxml.ns import qn
 from pptx.util import Inches
 
@@ -26,6 +26,7 @@ NOITE2 = RGBColor(0x2A, 0x1A, 0x19)
 CREME = RGBColor(0xFA, 0xF6, 0xF4)
 QUOTE_FONT = "Georgia"
 QUOTE_MARK = "“"
+KICKER_SIZE = 8.5
 MIN_LIST_BODY_SIZE = 8
 MAX_TEXT_ONLY_BODY_SIZE = 18
 TEXT_ONLY_ITEM_TITLE_SCALE = 1.2
@@ -126,7 +127,7 @@ def logo(s, white=True, x=None, y=0.32, h=0.42):
 
 
 def kicker(s, t, x, y, color=ROSE, w=5):
-    return text(s, x, y, w, 0.25, t, size=8.5, color=color, bold=True, caps=True)
+    return text(s, x, y, w, 0.25, t, size=KICKER_SIZE, color=color, bold=True, caps=True)
 
 
 def title(s, t, x, y, w, h, color=BRANCO, size=34, hl=None, hlc=ROSE):
@@ -499,20 +500,40 @@ def s_text_image(prs, s, d):
     panel = has_image_panel(d)
     contain = panel and image_mode == "conter"
     heading = d.get("titulo", "")
+    label = d.get("kicker", "")
     useful_width = W - 2 * M
     title_width = 5.4 if panel and not contain else useful_width
+    title_left, title_top = M, 1.6
+    kicker_top, kicker_width = 1.3, 5
     body_top, body_width, body_height = 3.55, 5.0, 1.2
     arrow_x, arrow_top, arrow_bottom = 5.75, 1.0, 4.6
     if panel:
         body = [value for heading, content in rows
                 for value in (f"**{heading}**" if heading is not None else "", content) if value]
     if contain:
-        title_size = text_image_font_size([heading], title_width, 1.8, 36, 18, spacing=0.9, max_rows=2)
-        title_rows = max(1, min(2, content_title_rows(heading, title_width, title_size)))
-        title_height = 0.04 + title_size * (1.38 + (title_rows - 1) * 0.9 * 1.2) / 72
-        body_top = 1.6 + title_height + 0.1
-        body_height = H - M - body_top
         body = [value for value in body if plain_text(value).strip()]
+        if body:
+            title_size = text_image_font_size([heading], title_width, 1.8, 36, 18, spacing=0.9, max_rows=2)
+            title_rows = max(1, min(2, content_title_rows(heading, title_width, title_size)))
+        else:
+            from conferir import MONTSERRAT_WIDTHS, glyph_width
+
+            title_top = 1.0
+            label_text = plain_text(label).upper()
+            if label_text.strip():
+                label_units = sum(glyph_width(char, MONTSERRAT_WIDTHS["bold"]) for char in label_text)
+                kicker_width = min(kicker_width, 0.06 + label_units * KICKER_SIZE / 72000)
+                title_left += kicker_width + 0.18
+                title_width = W - M - title_left
+            title_units = sum(glyph_width(char, MONTSERRAT_WIDTHS["extrabold"]) for char in heading)
+            single_line_size = int(Inches(title_width - 0.04).pt * 1000 / max(1, title_units))
+            title_rows = 1 if single_line_size >= 18 and len(heading.splitlines()) <= 1 else 2
+            title_size = min(36, single_line_size) if title_rows == 1 else 18
+            first_line_height = 0.04 + title_size * 1.38 / 72
+            kicker_top = title_top + (first_line_height - 0.25) / 2
+        title_height = 0.04 + title_size * (1.38 + (title_rows - 1) * 0.9 * 1.2) / 72
+        body_top = title_top + title_height + 0.1
+        body_height = H - M - body_top
         image_left = M
         gutter = 0.36
         if body:
@@ -530,9 +551,12 @@ def s_text_image(prs, s, d):
         title_height = 0.04 + title_size * (1.38 + 0.9 * 1.2) / 72
 
     logo(s, False, M, 0.4)
-    kicker(s, d.get("kicker", ""), M, 1.3, VINHO)
-    an.add(title(s, heading, M, 1.6, title_width, title_height, color=PRETO, size=title_size,
-                 hl=d.get("destaque_titulo"), hlc=VINHO), eff="up", dur=700, gap=400)
+    kicker(s, label, M, kicker_top, VINHO, w=kicker_width)
+    heading_box = title(s, heading, title_left, title_top, title_width, title_height,
+                        color=PRETO, size=title_size, hl=d.get("destaque_titulo"), hlc=VINHO)
+    if contain:
+        heading_box.text_frame.auto_size = MSO_AUTO_SIZE.NONE
+    an.add(heading_box, eff="up", dur=700, gap=400)
     if panel and d.get("seta"):
         ln = line(s, arrow_x, arrow_top, arrow_x, arrow_bottom, color=VINHO, w=2.5)
         tri = rect(s, arrow_x - 0.13, arrow_bottom - 0.05, 0.26, 0.22,
