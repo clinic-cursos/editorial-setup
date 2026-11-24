@@ -24,7 +24,7 @@ Siga a skill para conferir slide a slide, aplicar os critérios e localizar cada
 
 Não edite nenhum arquivo. Encaminhe as correções ao Editor-Chefe. A nota e o status valem para o encaminhamento editorial da aula.
 
-Trate como eliminatórios a fonte, a cor ou o fundo fora do modelo do estilo, inclusive no conteúdo copiado por `preservado`, e o uso de `preservado` em slide só de texto ou de texto com até duas imagens.
+Trate como eliminatórios a fonte, a cor ou o fundo fora do modelo do estilo, inclusive no conteúdo copiado por `preservado` e mesmo quando o `conferir` só emitir aviso, exceto as cores de marcadores pequenos e de linhas sobre imagem, que mantêm a cor original por significado clínico, e o uso de `preservado` em slide só de texto ou de texto com até duas imagens.
 
 ## Retorno
 

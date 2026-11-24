@@ -2,6 +2,9 @@
 
 ## 0.2.4
 
+- O slide `preservado` recebe a mesma moldura do slide 8 do modelo mestre v1.
+- O `gerar` valida o esqueleto da aula completa, aponta cada violação por slide e numera os módulos pela posição; com `"avulso": true`, dispensa essa validação.
+- No slide avulso, o `gerar` mantém o `numero` declarado para o módulo.
 - O hook protege a impressão digital, o roteiro e os recursos visuais do modelo mestre v1. Os testes fixam os hashes dos dois arquivos JSON. Só o Alify pode abrir o modelo v2, com arquivos novos ao lado dos da v1.
 - A adaptação prefere tipos nativos e reserva `preservado` para marcações sobre foto, tabelas e composições de três ou mais imagens. O revisor reprova desvios de fonte, cor ou fundo, inclusive no conteúdo copiado, e o uso de `preservado` em slides só de texto ou de texto com até duas imagens.
 - O `extrair` mantém o recorte original das imagens PNG e JPEG e sinaliza as imagens recortadas no roteiro.
