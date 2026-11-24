@@ -835,6 +835,34 @@ def test_bold_comparison_image_mode(tmp_path, mode):
     assert photo.top == 0
 
 
+@pytest.mark.parametrize("kind,image_size", [
+    ("comparativo", (500, 100)),
+    ("comparativo", (900, 100)),
+    ("comparativo", None),
+    ("texto_imagem", (500, 100)),
+])
+def test_bold_contained_image_clears_logo(tmp_path, kind, image_size):
+    if image_size:
+        Image.new("RGB", image_size, "white").save(tmp_path / "diagrama.png")
+        panel = {"imagem": "diagrama.png"}
+    else:
+        panel = {"prompt_imagem": "Material de leitura"}
+    path = write_script(tmp_path, [{
+        "tipo": kind, "titulo": "Diagrama", "imagem_modo": "conter", **panel,
+    }])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    shapes = Presentation(out).slides[0].shapes
+    photo = next(shape for shape in shapes if shape.name == "!!foto")
+    logo = next(shape for shape in shapes if shape.name == "!!logo")
+    margin = Inches(0.1)
+    assert photo.top >= logo.top + logo.height + margin or photo.left + photo.width <= logo.left - margin
+    if image_size:
+        assert photo.width / photo.height == pytest.approx(image_size[0] / image_size[1], abs=1e-5)
+
+
 def test_bold_comparison_columns_make_room_for_wrapped_items(tmp_path):
     first_items = [
         "Confira **o título e a ordem dos tópicos** antes da discussão em dupla.",

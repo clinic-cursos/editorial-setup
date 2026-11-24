@@ -145,14 +145,24 @@ def has_image_panel(d):
     return bool(d.get("imagem") or d.get("prompt_imagem"))
 
 
-def photo(s, d, x, y, w, h, *, dark=False, prompt_height=None, contain=False):
+def photo(s, d, x, y, w, h, *, dark=False, prompt_height=None, contain=False, avoid_logo=None):
     if not has_image_panel(d):
         raise ValueError(f"{d['tipo']} exige imagem ou prompt_imagem no slide {d.get('titulo', '')!r}")
     path = d.get("imagem")
+    if avoid_logo is not None:
+        margin = Inches(0.1)
+        safe_right = avoid_logo.left - margin
+        safe_top = avoid_logo.top + avoid_logo.height + margin
+        safe_width = safe_right / Inches(1) - x
     if contain and path and Path(path).exists():
         with Image.open(path) as source:
             width, height = source.size
         scale = min(w / width, h / height)
+        if (avoid_logo is not None
+                and Inches(y + (h - height * scale) / 2) < safe_top
+                and Inches(x + (w + width * scale) / 2) > safe_right):
+            w = safe_width
+            scale = min(w / width, h / height)
         width *= scale
         height *= scale
         picture = s.shapes.add_picture(
@@ -161,6 +171,8 @@ def photo(s, d, x, y, w, h, *, dark=False, prompt_height=None, contain=False):
         )
         return name(picture, "!!foto")
 
+    if avoid_logo is not None:
+        w = safe_width
     label = {
         "prompt": d.get("prompt_imagem") or d.get("legenda") or d.get("titulo") or "Imagem do slide",
         "titulo": d.get("titulo", ""),
@@ -792,8 +804,12 @@ def s_comparison(prs, s, d):
 
     an = Anim(s)
     bg(s, NOITE)
-    photo(s, d, 0, 0, W, 2.7, dark=True, contain=image_mode == "conter")
-    logo(s, True)
+    if image_mode == "conter":
+        brand = logo(s, True)
+        photo(s, d, 0, 0, W, 2.7, dark=True, contain=True, avoid_logo=brand)
+    else:
+        photo(s, d, 0, 0, W, 2.7, dark=True)
+        logo(s, True)
     heading = title(s, d.get("titulo", ""), M, 2.85, 6, 0.6, size=24, hl=d.get("destaque_titulo"))
     bottom = H - 0.42 if d.get("nota") else H
     for k, col in enumerate(d.get("colunas", [])):
