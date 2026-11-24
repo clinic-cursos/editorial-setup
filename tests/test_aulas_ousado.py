@@ -627,25 +627,38 @@ def test_bold_list_fits_items_or_keeps_overflow_for_review(tmp_path, kind, botto
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-@pytest.mark.parametrize("image_size", [(400, 100), (100, 400)])
-def test_bold_text_image_contains_picture_inside_panel(tmp_path, image_size):
+@pytest.mark.parametrize("image_size,topics,min_width", [
+    ((300, 100), [], 0.90),
+    ((100, 400), [], 0),
+    ((300, 100), ["Primeiro item.", "Segundo item."], 0.55),
+])
+def test_bold_text_image_contains_picture_in_available_content(tmp_path, image_size, topics, min_width):
     Image.new("RGB", image_size).save(tmp_path / "diagrama.png")
     path = write_script(tmp_path, [{
         "tipo": "texto_imagem", "titulo": "Diagrama", "imagem": "diagrama.png", "imagem_modo": "conter",
+        "topicos": topics,
     }])
     out = tmp_path / "aula.pptx"
     result = generate(path, out)
     assert result.returncode == 0, result.stdout + result.stderr
     deck = Presentation(out)
-    photo = next(shape for shape in deck.slides[0].shapes if shape.name == "!!foto")
+    shapes = deck.slides[0].shapes
+    photo = next(shape for shape in shapes if shape.name == "!!foto")
     assert photo.shape_type == MSO_SHAPE_TYPE.PICTURE
     assert photo.width / photo.height == pytest.approx(image_size[0] / image_size[1], abs=1e-5)
     assert (photo.crop_left, photo.crop_right, photo.crop_top, photo.crop_bottom) == (0, 0, 0, 0)
-    panel_left = deck.slide_width - Inches(3)
-    assert panel_left <= photo.left <= photo.left + photo.width <= deck.slide_width
-    assert 0 <= photo.top <= photo.top + photo.height <= deck.slide_height
-    assert 2 * photo.left + photo.width == pytest.approx(panel_left + deck.slide_width, abs=2)
-    assert 2 * photo.top + photo.height == pytest.approx(deck.slide_height, abs=2)
+    margin = Inches(0.45)
+    useful_width = deck.slide_width - 2 * margin
+    assert photo.width >= min_width * useful_width
+    heading = next(shape for shape in shapes if shape.has_text_frame and shape.text == "Diagrama")
+    assert margin <= photo.left < photo.left + photo.width <= deck.slide_width - margin
+    assert heading.top + heading.height <= photo.top < photo.top + photo.height <= deck.slide_height - margin
+    if topics:
+        body = next(shape for shape in shapes if shape.has_text_frame and shape.text.splitlines() == topics)
+        assert body.width <= 0.40 * useful_width
+        assert body.left + body.width < photo.left
+    else:
+        assert 2 * photo.left + photo.width == pytest.approx(deck.slide_width, abs=2)
 
 
 @pytest.mark.parametrize("heading,lines", [
@@ -801,6 +814,59 @@ def test_bold_animates_standard_layouts(tmp_path):
     assert len(generated) == len(fallback) + 9
     for slide in generated:
         assert_motion(slide)
+
+
+@pytest.mark.parametrize("kind, content", [
+    ("antes_depois", "ANTES"),
+    ("tabela", MSO_SHAPE_TYPE.TABLE),
+    ("grafico", MSO_SHAPE_TYPE.CHART),
+    ("artigo", "CONCLUSÃO"),
+    ("caso_clinico", "AVALIAÇÃO"),
+    ("referencias", "1."),
+])
+@pytest.mark.parametrize("separator", ["", "\n"])
+def test_bold_fallback_uses_model_content_frame(tmp_path, kind, content, separator):
+    reference = json.loads(FIXTURE.read_text(encoding="utf-8"))[7]
+    kicker, first_run, accent = (run["text"] for run in reference["runs"][:3])
+    example = json.loads((SKILL / "references" / "exemplo_roteiro.json").read_text(encoding="utf-8"))
+    data = next(slide for slide in example["slides"] if slide["tipo"] == kind)
+    data.update(titulo=f"{first_run}{separator}**{accent}**", kicker=kicker.lower())
+    if kind == "antes_depois":
+        Image.new("RGB", (64, 48), "blue").save(tmp_path / "sintetica.png")
+        data.update(antes="sintetica.png", depois="sintetica.png",
+                    rotulo_antes="Antes", rotulo_depois="Depois")
+    out = tmp_path / "fallback.pptx"
+
+    result = generate(write_script(tmp_path, [data]), out)
+    assert result.returncode == 0, result.stderr
+    slide = Presentation(out).slides[0]
+    actual = fingerprint(slide)
+    frame = {name: box for name, box in reference["shapes"].items() if name != "!!foto"}
+    assert actual["background"] == reference["background"]
+    assert actual["shapes"] == {name: pytest.approx(box, abs=0.02) for name, box in frame.items()}
+    assert actual["runs"][:3] == reference["runs"][:3]
+
+    label, heading = slide.shapes[3], slide.shapes[4]
+    assert label.text == kicker
+    assert (label.left.inches, label.top.inches) == pytest.approx((0.45, 0.42), abs=0.02)
+    assert heading.text == f"{first_run}{separator}{accent}"
+    assert (heading.left.inches, heading.top.inches, heading.width.inches) == pytest.approx(
+        (0.45, 0.62, 6.0), abs=0.02)
+    assert (heading.height.inches > 0.6) == bool(separator)
+    body = list(slide.shapes)[5:]
+    content_top = 1.35 + max(0, heading.height.inches - 0.6)
+    assert all(content_top - 0.02 <= shape.top.inches for shape in body)
+    assert all(shape.top + shape.height <= Inches(5.375) for shape in body)
+    assert all(shape.left.inches >= 0.43 and (shape.left + shape.width) <= Inches(9.57)
+               for shape in body)
+    if isinstance(content, str):
+        assert any(shape.has_text_frame and shape.text == content for shape in body)
+    else:
+        assert any(shape.shape_type == content for shape in body)
+    if kind == "antes_depois":
+        assert sum(shape.shape_type == MSO_SHAPE_TYPE.PICTURE for shape in body) == 2
+        assert any(shape.has_text_frame and shape.text == "DEPOIS" for shape in body)
+    assert_motion(slide)
 
 
 def test_switching_to_bold_keeps_shared_content_fields(tmp_path):

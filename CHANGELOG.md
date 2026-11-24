@@ -1,5 +1,10 @@
 # Histórico de versões
 
+## 0.2.6
+
+- O estilo ousado mantém a moldura do modelo nos tipos de fallback.
+- A imagem do `texto_imagem` no modo `conter` ocupa o espaço livre.
+
 ## 0.2.5
 
 - A exceção clínica do `preservado` mantém as cores de marcadores pequenos e de marcações sobre imagem, inclusive ilustração anatômica. A legenda cromática mantém no texto e nos marcadores de lista a cor da marcação do mesmo slide, com ajuste de contraste quando necessário. O `conferir` reprova cores de texto fora da paleta sem correspondência com uma marcação.
