@@ -536,6 +536,26 @@ def test_bold_required_image_panel_needs_image_or_prompt(tmp_path, kind):
     assert not out.exists()
 
 
+@pytest.mark.parametrize("kind,fields,expected", [
+    ("texto_imagem", {"imagem_modo": "sangrar", "topicos": [{"texto": "Só texto"}, "Outro item"]},
+     ["Só texto\nOutro item"]),
+    ("anatomia", {"marcacoes": [{"desc": "Só texto"}, {"nome": "Rótulo", "desc": "Outro item"}]},
+     ["Só texto", "Outro item", "Rótulo"]),
+    ("comparativo", {"colunas": [{"itens": ["Só texto", "Outro item"]}]},
+     ["Só texto", "Outro item"]),
+])
+def test_bold_optional_item_titles_do_not_emit_empty_markers(tmp_path, kind, fields, expected):
+    Image.new("RGB", (100, 200)).save(tmp_path / "diagrama.png")
+    path = write_script(tmp_path, [{"tipo": kind, "titulo": "Diagrama", "imagem": "diagrama.png", **fields}])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    texts = [shape.text for shape in Presentation(out).slides[0].shapes if shape.has_text_frame]
+    assert all("**" not in value for value in texts), texts
+    assert all(value in texts for value in expected), texts
+
+
 @pytest.mark.parametrize("heading", [
     "Envelhecimento",
     "TECNOLOGIA DE FABRICAÇÃO DOS NEUROMODULADORES",

@@ -2,9 +2,11 @@
 
 ## 0.2.7
 
-- O cabeçalho compacto mantém o espaçamento correto.
-- A imagem grande no `texto_imagem` em `conter` ocupa o espaço livre.
-- O logo não fica sob a imagem, os espaços em medidas e faixas numéricas são não separáveis e `**` permanece literal.
+- No `texto_imagem` em `conter` sem corpo, o título fica em uma linha, o kicker mantém a posição do modelo e a imagem ocupa a maior área livre.
+- A imagem em `conter` fica fora da área do logo.
+- Números e suas unidades ficam juntos na mesma linha. Faixas numéricas com espaços também ficam juntas.
+- `**` sem par permanece visível como texto, e `\*\*` exibe os dois asteriscos literalmente.
+- Tópicos sem título e marcações de anatomia sem nome deixam de exibir asteriscos extras.
 
 ## 0.2.6
 

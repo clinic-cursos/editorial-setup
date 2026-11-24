@@ -495,7 +495,8 @@ def s_text_image(prs, s, d):
     rows = [(None, d.get("texto", ""))]
     for topic in d.get("topicos", []):
         if isinstance(topic, dict):
-            rows.append((str(topic.get("titulo", "")), topic.get("texto", "")))
+            topic_title = topic.get("titulo")
+            rows.append((str(topic_title).strip() if topic_title is not None else "", topic.get("texto", "")))
         else:
             rows.append((None, topic))
     rows.append((None, d.get("destaque", "")))
@@ -514,7 +515,7 @@ def s_text_image(prs, s, d):
     arrow_x, arrow_top, arrow_bottom = 5.75, 1.0, 4.6
     if panel:
         body = [value for heading, content in rows
-                for value in (f"**{heading}**" if heading is not None else "", content) if value]
+                for value in (f"**{heading}**" if heading else "", content) if value]
     if contain:
         body = [value for value in body if plain_text(value).strip()]
         compact = not body
@@ -764,7 +765,8 @@ def s_anatomy(prs, s, d):
     kicker(s, d.get("kicker", ""), 4.0, 0.42, VINHO)
     heading = title(s, d.get("titulo", ""), 4.0, 0.62, 5, 0.7, color=PRETO, size=32)
     structures = d.get("marcacoes", [])
-    labels = "  ·  ".join(f"**{item.get('nome', '')}**" for item in structures)
+    labels = "  ·  ".join(f"**{label}**" for item in structures
+                         if (label := item.get("nome")) is not None and str(label).strip())
     text(s, 4.0, 1.28, 5, 0.3, labels, size=9)
     details = d.get("passos") or [item["desc"] for item in structures if item.get("desc")]
     width = 3.1 if d.get("indicador") else 5.1
