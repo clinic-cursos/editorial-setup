@@ -1,5 +1,11 @@
 # Histórico de versões
 
+## 0.2.7
+
+- O cabeçalho compacto mantém o espaçamento correto.
+- A imagem grande no `texto_imagem` em `conter` ocupa o espaço livre.
+- O logo não fica sob a imagem, os números não quebram e `**` permanece literal.
+
 ## 0.2.6
 
 - O estilo ousado mantém a moldura do modelo nos tipos de fallback.
