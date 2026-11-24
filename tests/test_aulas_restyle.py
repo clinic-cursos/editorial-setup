@@ -192,8 +192,8 @@ def test_preserved_copies_full_slide_picture_behind_labels(tmp_path, picture_kin
     picture = pictures[0]
     copied_label = next(shape for shape in shapes if shape.has_text_frame and shape.text == label.text)
     assert shapes.index(picture) < shapes.index(copied_label)
-    assert picture.top == pytest.approx(Inches(1.79), abs=1)
-    assert picture.height == pytest.approx(Inches(5.375 - 1.79), abs=1)
+    assert picture.top == pytest.approx(Inches(1.35), abs=1)
+    assert picture.height == pytest.approx(Inches(5.375 - 1.35), abs=1)
     scale = picture.height / original.slide_height
     assert copied_label.left - picture.left == pytest.approx(label.left * scale, abs=2)
     assert copied_label.top - picture.top == pytest.approx(label.top * scale, abs=2)
@@ -630,13 +630,12 @@ def test_preserved_drops_multiline_title_with_nearby_rules(tmp_path, style):
     assert {"Misaligned line", "Distant line", "Thick line", "Diagonal annotation"} <= copied.keys()
 
 
-@pytest.mark.parametrize("style", ["padrao", "ousado"])
-def test_preserved_frame_keeps_divider_below_title(tmp_path, source_deck, style):
+def test_standard_preserved_frame_keeps_divider_below_title(tmp_path, source_deck):
     source, _ = source_deck
     titles = ["Título curto", "INDICAÇÕES ESTÉTICAS\nAVANÇADAS\n\n"]
     script = tmp_path / "roteiro.json"
     script.write_text(json.dumps({
-        "estilo": style, "avulso": True,
+        "estilo": "padrao", "avulso": True,
         "slides": [
             {"tipo": "preservado", "deck": source.name, "slide": 1, "titulo": title, "kicker": "Teste"}
             for title in titles
@@ -649,21 +648,37 @@ def test_preserved_frame_keeps_divider_below_title(tmp_path, source_deck, style)
     original = Presentation(source).slides[0]
     copied_names = {shape.name for shape in list(original.shapes)[4:]}
     for slide, title in zip(Presentation(out).slides, titles, strict=True):
-        expected = title.rstrip().upper() if style == "padrao" else title.rstrip()
+        expected = title.rstrip().upper()
         heading = next(
             shape for shape in slide.shapes
             if shape.has_text_frame and shape.text.rstrip() == expected
         )
         divider = next(
             shape for shape in slide.shapes
-            if shape.name == "!!barra" or (shape.shape_type == MSO_SHAPE_TYPE.LINE and shape.height == 0)
+            if shape.shape_type == MSO_SHAPE_TYPE.LINE and shape.height == 0
         )
         copied = [shape for shape in slide.shapes if shape.name in copied_names]
         if "\n" in expected:
-            assert heading.height >= Inches(0.8 if style == "padrao" else 1.0)
+            assert heading.height >= Inches(0.8)
             assert [paragraph.text for paragraph in heading.text_frame.paragraphs] == expected.splitlines()
         assert heading.top + heading.height < divider.top
         assert min(shape.top for shape in copied) > divider.top + divider.height
+
+
+def test_bold_preserved_reserves_space_for_wrapped_title(tmp_path):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    body = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(2), Inches(1), Inches(1), Inches(3))
+    title = "PLANEJAMENTO E ORGANIZAÇÃO DAS ATIVIDADES PRÁTICAS DO MÓDULO AVANÇADO"
+
+    shapes = restyle_one(tmp_path, original, "ousado", title)
+
+    heading = next(shape for shape in shapes if shape.has_text_frame and shape.text == title)
+    copied = next(shape for shape in shapes if shape.name == body.name)
+    assert heading.top == Inches(0.62)
+    assert heading.width > Inches(6)
+    assert heading.height > Inches(0.6)
+    assert heading.top + heading.height < copied.top
 
 
 @pytest.mark.parametrize("style", ["padrao", "ousado"])
@@ -720,7 +735,7 @@ def test_preserved_objects_and_exact_standalone_slide_count(tmp_path, source_dec
 
 @pytest.mark.parametrize("style, content_top, content_bottom", [
     ("padrao", 1.4, 5.275),
-    ("ousado", 1.79, 5.375),
+    ("ousado", 1.35, 5.375),
 ])
 @pytest.mark.parametrize("extra_extent", ["table-frame", "background", "empty-shapes"])
 def test_preserved_fits_centered_content(tmp_path, style, content_top, content_bottom, extra_extent):
@@ -830,7 +845,7 @@ def test_preserved_fits_autofit_text_and_keeps_visible_shapes(tmp_path, frame_he
     label = copied[oversized.name]
     assert label.text == oversized.text
     assert copied[placeholder.name].text == placeholder.text
-    assert label.top >= Inches(1.79) - 1
+    assert label.top >= Inches(1.35) - 1
     assert label.top + label.height <= Inches(5.375) + 1
     assert label.height < 0.99 * oversized.height * (copied[filled.name].height / filled.height)
     assert label.text_frame.paragraphs[0].runs[0].font.size > Pt(18)
@@ -851,7 +866,7 @@ def test_preserved_excludes_empty_textbox_inside_group(tmp_path):
 
     copied = next(shape for shape in restyle_one(tmp_path, original, "ousado") if shape.name == group.name)
     assert [shape.name for shape in copied.shapes] == [visible.name]
-    assert copied.height == pytest.approx(Inches(5.375 - 1.79), abs=1)
+    assert copied.height == pytest.approx(Inches(5.375 - 1.35), abs=1)
 
 
 @pytest.mark.parametrize("explicit_size", [True, False])

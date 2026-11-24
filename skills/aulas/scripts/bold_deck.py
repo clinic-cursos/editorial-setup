@@ -558,11 +558,24 @@ def space_steps(prs, slide, steps, track, bottom):
     track.end_y = round(steps[-1][0].top + steps[-1][0].height / 2)
 
 
-def s_steps(prs, s, d):
-    an = Anim(s)
+def light_content_frame(s):
     bg(s, CREME)
     name(rect(s, 0, 0, W, 0.08, fill=VINHO), "!!painel")
     logo(s, False)
+
+
+def content_title_rows(value, width, size):
+    available = Inches(width - 0.04).pt / size
+    return sum(wrapped_rows(measured_words(line), available) for line in value.splitlines())
+
+
+def content_title_height(rows, size):
+    return 0.04 + size * (1.38 + 0.9 * 1.2) / 72 if rows > 1 else 0.6
+
+
+def s_steps(prs, s, d):
+    an = Anim(s)
+    light_content_frame(s)
     kicker(s, d.get("kicker", ""), M, 0.42, VINHO)
     panel = has_image_panel(d)
     full_width = W - 2 * M
@@ -571,10 +584,8 @@ def s_steps(prs, s, d):
     heading_width = 6 if panel else full_width
     heading_height = 0.6
     if panel:
-        available = Inches(heading_width - 0.04).pt / heading_size
-        lines = sum(wrapped_rows(measured_words(line), available) for line in heading_text.splitlines())
-        if lines > 1:
-            heading_height = 0.04 + heading_size * (1.38 + 0.9 * 1.2) / 72
+        rows = content_title_rows(heading_text, heading_width, heading_size)
+        heading_height = content_title_height(rows, heading_size)
     heading = title(s, heading_text, M, 0.62, heading_width, heading_height,
                     color=PRETO, size=heading_size, hl=d.get("destaque_titulo"), hlc=VINHO)
     extra_height = heading_height - 0.6
@@ -822,18 +833,22 @@ def s_closing(prs, s, d):
 
 
 def s_preserved(prs, s, d, preserved):
-    bg(s, CREME)
-    logo(s, False)
-    kicker(s, d.get("kicker", ""), M, 0.22, VINHO)
-    title_top, title_height = 0.54, 1.0
-    title_lines = [[(value, {})] for value in d.get("titulo", "").rstrip().splitlines()]
-    heading = text(s, M, title_top, W - 2 * M - 1, title_height, title_lines, size=26,
+    light_content_frame(s)
+    if d.get("kicker"):
+        kicker(s, d["kicker"], M, 0.42, VINHO)
+    title_text = d.get("titulo", "").rstrip()
+    title_width, title_size = 6, 26
+    rows = content_title_rows(plain_text(title_text), title_width, title_size)
+    if rows > 2:
+        # Keep the previous width for long titles that need both lines.
+        title_width = W - 2 * M - 1
+    title_height = content_title_height(rows, title_size)
+    title_lines = [accent_runs(value, VINHO) for value in title_text.splitlines()]
+    heading = text(s, M, 0.62, title_width, title_height, title_lines, size=title_size,
                    color=PRETO, font=FONTE_FORTE, bold=True, spacing=0.9)
-    divider_top = title_top + title_height + 0.05
-    bar(s, M, divider_top, color=VINHO)
-    content_top = divider_top + 0.20
+    content_top = 1.35 + (title_height - 0.6)
     frame = PreservedFrame(Inches(M), Inches(content_top), Inches(W - 2 * M), Inches(H - 0.25 - content_top), NOITE)
-    objects = preserved.copy(s, d, frame)
+    objects = preserved.copy(s, {**d, "titulo": heading.text}, frame)
     animation = Anim(s)
     for shape in [heading, *objects]:
         animation.add(shape, gap=0 if shape is not heading else 250)
