@@ -6,8 +6,11 @@ import sys
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
+from pptx.enum.dml import MSO_THEME_COLOR
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
 from pptx.enum.text import MSO_AUTO_SIZE
+from pptx.oxml import parse_xml
+from pptx.oxml.ns import nsdecls
 from pptx.util import Inches, Pt
 import pytest
 
@@ -306,6 +309,59 @@ def test_rejects_preserved_content_outside_model(tmp_path, violation):
     ]
 
 
+@pytest.mark.parametrize("kind, color, legend", [
+    ("text", "1769F2", False),
+    ("text", "dk2", False),
+    ("text", "6930AB", True),
+    ("bullet", "1769F2", False),
+    ("bullet", "dk2", False),
+    ("bullet", "682FAA", True),
+])
+def test_checks_preserved_annotation_colors(tmp_path, kind, color, legend, monkeypatch):
+    monkeypatch.syspath_prepend(str(CLI.parent))
+    from conferir import mark_preserved
+
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    box = slide.shapes.add_textbox(Inches(2), Inches(3), Inches(4), Inches(1))
+    mark_preserved(box)
+    paragraph = box.text_frame.paragraphs[0]
+    run = paragraph.add_run()
+    run.text = "Legenda" if legend else "Item"
+    run.font.name = "Montserrat"
+    run.font.color.rgb = RGBColor.from_string("404040")
+    if kind == "bullet":
+        paint = f'<a:schemeClr val="{color}"/>' if color == "dk2" else f'<a:srgbClr val="{color}"/>'
+        paragraph._p.get_or_add_pPr().extend(parse_xml(node) for node in (
+            f'<a:buClr {nsdecls("a")}>{paint}</a:buClr>',
+            f'<a:buChar {nsdecls("a")} char="•"/>',
+        ))
+    elif color == "dk2":
+        run.font.color.theme_color = MSO_THEME_COLOR.DARK_2
+    else:
+        run.font.color.rgb = RGBColor.from_string(color)
+    if legend:
+        point = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(1.7), Inches(3), Inches(0.15), Inches(0.15))
+        point.fill.solid()
+        point.fill.fore_color.rgb = RGBColor.from_string("682FAA")
+        point.line.fill.background()
+        mark_preserved(point)
+    deck = tmp_path / "deck.pptx"
+    presentation.save(deck)
+
+    result = run_cli("conferir", deck, "--json")
+    assert result.returncode == (0 if legend else 1), result.stderr or result.stdout
+    report = json.loads(result.stdout)
+    errors = [item for item in report["findings"] if item["severity"] == "error"]
+    if legend:
+        assert not errors
+        assert all(item["rule"] != "text_color" for item in report["preserved_findings"])
+    else:
+        assert len(errors) == 1
+        assert errors[0]["rule"] == "text_color"
+        assert ("1F497D" if color == "dk2" else color) in errors[0]["message"]
+
+
 def test_preserved_warnings_are_grouped_by_slide_and_rule(tmp_path):
     source = Presentation()
     slide = source.slides.add_slide(source.slide_layouts[6])
@@ -337,11 +393,10 @@ def test_preserved_warnings_are_grouped_by_slide_and_rule(tmp_path):
         for child in group.shapes:
             paragraph = child.text_frame.paragraphs[0]
             paragraph.runs[0].font.name = "Montserrat"
-            paragraph.runs[0].font.color.rgb = RGBColor.from_string("333300")
             duplicate = paragraph.add_run()
             duplicate.text = "M"
             duplicate.font.name = "Montserrat"
-            duplicate.font.color.rgb = RGBColor.from_string("333300")
+            duplicate.font.color.rgb = RGBColor.from_string("404040")
     box = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(4), Inches(1))
     box.name = "Nota editorial"
     run = box.text_frame.paragraphs[0].add_run()
@@ -355,21 +410,20 @@ def test_preserved_warnings_are_grouped_by_slide_and_rule(tmp_path):
     lines = result.stdout.splitlines()
     assert "Slide 1 (Nota editorial) | Aviso: Marcador editorial pendente." in lines
     for number in (1, 2):
-        for label in ("cores de texto fora da paleta", "estouros de texto"):
-            assert lines.count(f"Slide {number} | Aviso: conteúdo preservado com 2 {label}.") == 1
-    assert "1 aviso(s), 8 aviso(s) em conteúdo preservado" in lines[0]
-    assert len(lines[1:]) == 5
+        assert lines.count(f"Slide {number} | Aviso: conteúdo preservado com 2 estouros de texto.") == 1
+    assert "1 aviso(s), 4 aviso(s) em conteúdo preservado" in lines[0]
+    assert len(lines[1:]) == 3
 
     result = run_cli("conferir", deck, "--json")
     assert result.returncode == 0, result.stderr or result.stdout
     report = json.loads(result.stdout)
-    assert (report["errors"], report["warnings"], report["preserved_warnings"]) == (0, 1, 8)
+    assert (report["errors"], report["warnings"], report["preserved_warnings"]) == (0, 1, 4)
     assert [(item["shape"], item["rule"]) for item in report["findings"]] == [("Nota editorial", "marker")]
     details = report["preserved_findings"]
-    assert len(details) == 8
+    assert len(details) == 4
     assert {(item["slide"], item["shape"], item["rule"], item["severity"]) for item in details} == {
-        (slide, f"Conteúdo original {shape}", rule, "warning")
-        for slide in (1, 2) for shape in (1, 2) for rule in ("text_color", "overflow")
+        (slide, f"Conteúdo original {shape}", "overflow", "warning")
+        for slide in (1, 2) for shape in (1, 2)
     }
     assert all(item["message"] for item in details)
 

@@ -108,7 +108,9 @@ def test_preserved_keeps_annotations_over_picture(tmp_path):
     assert "conteúdo preservado com 1 contorno fora da paleta" in checked.stdout
 
 
-@pytest.mark.parametrize("case", ["yellow", "office-rgb", "office-theme", "white-on-wine", "white-over-wine", "title"])
+@pytest.mark.parametrize("case", [
+    "yellow", "blue", "purple", "office-rgb", "office-theme", "white-on-wine", "white-over-wine", "title",
+])
 def test_preserved_normalizes_text_on_its_surface(tmp_path, case):
     original = Presentation()
     slide = original.slides.add_slide(original.slide_layouts[1 if case == "title" else 6])
@@ -129,18 +131,25 @@ def test_preserved_normalizes_text_on_its_surface(tmp_path, case):
     frame = shape.text_frame
     frame.auto_size = MSO_AUTO_SIZE.NONE
     paragraph = frame.paragraphs[0]
-    paragraph.font.bold = True
+    paragraph.font.bold = case != "blue"
     paragraph.font.italic = True
     run = paragraph.add_run()
     run.text = "Projeção"
     run.font.name = "Calibri"
     run.font.size = Pt(20)
     yellow = RGBColor.from_string("FFF4A3")
+    purple = RGBColor.from_string("682FAA")
+    if case in {"yellow", "purple"}:
+        marker = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(1.7), Inches(3), Inches(0.15), Inches(0.15))
+        marker.fill.solid()
+        marker.fill.fore_color.rgb = yellow if case == "yellow" else purple
+        marker.line.fill.background()
     if case == "office-theme":
         run.font.color.theme_color = MSO_THEME_COLOR.DARK_2
         run.font.color.brightness = 0.4
     else:
-        source_colors = {"yellow": yellow, "office-rgb": RGBColor.from_string("1F497D"),
+        source_colors = {"yellow": yellow, "purple": purple, "blue": RGBColor.from_string("1769F2"),
+                         "office-rgb": RGBColor.from_string("1F497D"),
                          "title": RGBColor.from_string("666666")}
         run.font.color.rgb = source_colors.get(case, RGBColor.from_string("FFFFFF"))
 
@@ -151,14 +160,52 @@ def test_preserved_normalizes_text_on_its_surface(tmp_path, case):
     if case == "yellow":
         assert 4.5 <= contrast_ratio(color, RGBColor.from_string("FAF6F4")) < 4.6
         assert rgb_to_hls(*color)[0] == pytest.approx(rgb_to_hls(*yellow)[0], abs=0.003)
+    elif case == "purple":
+        assert color == purple
     elif case.startswith("white"):
         assert str(color) == "FFFFFF"
         assert shapes[rectangle.name].fill.fore_color.rgb == wine
-    else:
+    elif case == "blue":
         assert str(color) == "404040"
+    else:
+        assert str(color) == "9C4C48"
     assert font.name == ("Montserrat ExtraBold" if case == "title" else "Montserrat")
-    assert font.bold and font.italic
+    assert font.bold == (case != "blue") and font.italic
     assert font.size.pt == pytest.approx(20 * copied.width / shape.width, abs=0.005)
+
+
+@pytest.mark.parametrize("color, source_dk2, expected", [
+    ('<a:schemeClr val="dk2"/>', None, "404040"),
+    ('<a:schemeClr val="dk2"/>', "682FAA", "682FAA"),
+    ('<a:srgbClr val="1769F2"/>', None, "404040"),
+    ('<a:srgbClr val="682FAA"/>', None, "682FAA"),
+])
+def test_preserved_normalizes_explicit_bullet_color(tmp_path, color, source_dk2, expected):
+    original = Presentation()
+    slide = original.slides.add_slide(original.slide_layouts[6])
+    if source_dk2:
+        part = slide.slide_layout.slide_master.part.part_related_by(RT.THEME)
+        theme = parse_xml(part.blob)
+        theme.find(f".//{qn('a:clrScheme')}/{qn('a:dk2')}/{qn('a:srgbClr')}").set("val", source_dk2)
+        part.blob = serialize_part_xml(theme)
+    box = slide.shapes.add_textbox(Inches(2), Inches(3), Inches(4), Inches(1))
+    box.text_frame.auto_size = MSO_AUTO_SIZE.NONE
+    box.text = "Item"
+    paragraph = box.text_frame.paragraphs[0]
+    paragraph._p.get_or_add_pPr().extend(parse_xml(node) for node in (
+        f'<a:buClr {nsdecls("a")}>{color}</a:buClr>',
+        f'<a:buChar {nsdecls("a")} char="•"/>',
+    ))
+    marker = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(1.7), Inches(3), Inches(0.15), Inches(0.15))
+    marker.fill.solid()
+    marker.fill.fore_color.rgb = RGBColor.from_string("682FAA")
+    marker.line.fill.background()
+
+    copied = next(shape for shape in restyle_one(tmp_path, original, "padrao") if shape.name == box.name)
+    bullet = copied.text_frame.paragraphs[0]._p.pPr.find(qn("a:buClr"))
+    assert len(bullet) == 1
+    assert bullet[0].tag == qn("a:srgbClr")
+    assert bullet[0].get("val") == expected
 
 
 def picture_fill(slide, image):

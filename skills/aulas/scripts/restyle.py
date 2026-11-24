@@ -646,11 +646,13 @@ def overlaps(first, second):
     return x1 <= a2 and a1 <= x2 and y1 <= b2 and b1 <= y2
 
 
-def structural_shapes(shapes, slide_area):
-    # Marcações pequenas e linhas sobre imagens podem codificar informação clínica.
+def slide_shape_roles(shapes, slide_area):
+    # Marcações desenhadas podem codificar informação clínica.
     # A área é a do objeto no slide final, já com a escala dos grupos.
     def leaves(items, place, area_scale):
         for shape in items:
+            if shape._element._nvXxPr.cNvPr.get("hidden") in {"1", "true"}:
+                continue
             x, y, width, height = shape_frame(shape)
             if shape.shape_type != GROUP:
                 yield shape, place(bounds(shape)), width * height * area_scale
@@ -672,18 +674,38 @@ def structural_shapes(shapes, slide_area):
 
     pictures = []
     for shape, box, area in leaves(shapes, lambda box: box, 1):
-        if shape._element._nvXxPr.cNvPr.get("hidden") in {"1", "true"}:
-            continue
         if shape._element.tag == qn("p:pic") or shape._element.find(
             f"{qn('p:spPr')}/{qn('a:blipFill')}"
         ) is not None:
             pictures.append(box)
-        elif shape.shape_type == MSO_SHAPE_TYPE.LINE and any(overlaps(box, image) for image in pictures):
             continue
-        elif area > slide_area * 0.02 or (
-            (shape.has_text_frame or shape.has_table) and any(value.strip() for value in texts(shape))
-        ):
-            yield shape._element
+        has_text = (shape.has_text_frame or shape.has_table) and any(value.strip() for value in texts(shape))
+        small = area <= slide_area * 0.02
+        arrow_or_line = shape.shape_type == MSO_SHAPE_TYPE.LINE or (
+            shape.shape_type == MSO_SHAPE_TYPE.AUTO_SHAPE and "ARROW" in shape.auto_shape_type.name
+        )
+        annotation = not has_text and is_drawing(shape) and (
+            small or arrow_or_line or any(overlaps(box, image) for image in pictures)
+        )
+        yield shape, (has_text or not small) and not annotation, annotation
+
+
+def annotation_colors(roles, theme):
+    return {color for shape, _, annotation in roles if annotation
+            for kind in ("fill", "ln") if (color := solid_fill_color(theme, *shape_paint(shape, theme, kind)))}
+
+
+def matches_annotation(color, annotations, background=None):
+    channels = rgb_channels(color)
+    if channels is None:
+        return False
+    for annotation in annotations:
+        # A conferência também reconhece a cor após o ajuste de contraste.
+        for candidate in {annotation, readable_color(annotation, background)}:
+            distance = sum((a - b) ** 2 for a, b in zip(channels, rgb_channels(candidate), strict=True))
+            if distance <= (8 / 255) ** 2:
+                return True
+    return False
 
 
 def is_title_rule(shape, title_bounds):
@@ -912,9 +934,9 @@ class PreservedSlides:
         return part
 
     def copy(self, target, script, box):
-        from bold_deck import CREME
+        from bold_deck import CREME, NOITE
         from clinic_deck import ROSE, VINHO, VINHO_ESC
-        from conferir import Theme
+        from conferir import PALETTES, Theme
 
         deck, source = self.source(script.get("deck"), script.get("slide"))
         _, title, backdrops, content, rectangle_color = slide_content(deck, source)
@@ -959,6 +981,7 @@ class PreservedSlides:
         existing = list(target.shapes)
         background = slide_surface(target, target_theme)
         swatches = tuple(map(str, (panel_color, VINHO_ESC, VINHO, ROSE, CREME)))
+        palette = PALETTES["ousado" if panel_color == NOITE else "padrao"]
         slide_area = target_deck.slide_width * target_deck.slide_height
         # Fontes herdadas e novas quebras podem mudar a altura após a escala.
         for _ in range(64):
@@ -967,12 +990,14 @@ class PreservedSlides:
             positioned = [position_copy(shape, element, frame, scale, dx, dy, target.shapes, target_theme)
                           for shape, element, frame in copies]
             targets = [target.shapes._shape_factory(element) for element in positioned]
-            structural = set(structural_shapes(existing + targets, slide_area))
+            roles = list(slide_shape_roles(targets, slide_area))
+            structural = {shape._element for shape, strict, _ in roles if strict}
+            annotations = annotation_colors(roles, theme)
             for copied in targets:
                 normalize_paint(copied, theme, structural, swatches)
             surfaces = list(shape_surfaces(existing + targets, target_theme, background))[len(existing):]
             for (shape, _, _), copied, surface in zip(copies, targets, surfaces, strict=True):
-                normalize_shape_text(shape, copied, theme, target_theme, surface)
+                normalize_shape_text(shape, copied, theme, target_theme, surface, palette, annotations)
             bottom = max((rect[3] for copied in targets
                           if (rect := text_bounds(copied, target_theme, target_deck.slide_height)) is not None),
                          default=y)
@@ -1110,43 +1135,58 @@ def normalize_paint(shape, theme, structural, swatches):
                 direct.getparent().replace(direct, updated)
 
 
-def normalize_shape_text(source, target, source_theme, target_theme, surface):
+def normalize_shape_text(source, target, source_theme, target_theme, surface, palette, annotations):
     if target.shape_type == GROUP:
         originals = {shape.shape_id: shape for shape in source.shapes}
         for child, background in zip(target.shapes, shape_surfaces(target.shapes, target_theme, surface), strict=True):
-            normalize_shape_text(originals[child.shape_id], child, source_theme, target_theme, background)
+            normalize_shape_text(originals[child.shape_id], child, source_theme, target_theme, background,
+                                 palette, annotations)
     elif target.has_table:
         for original, cell in zip(source.table.iter_cells(), target.table.iter_cells(), strict=True):
             if not cell.is_spanned:
                 fill = cell._tc.tcPr.eg_fillProperties if cell._tc.tcPr is not None else None
                 background = fill_surface(target_theme, surface, fill)
-                normalize_text(source, original.text_frame, cell.text_frame, source_theme, background)
+                normalize_text(source, original.text_frame, cell.text_frame, source_theme, background,
+                               palette, annotations)
     elif target.has_text_frame:
-        normalize_text(source, source.text_frame, target.text_frame, source_theme, surface)
+        normalize_text(source, source.text_frame, target.text_frame, source_theme, surface, palette, annotations)
 
 
-def normalize_text(shape, source, target, theme, background):
-    from clinic_deck import CINZA_CLARO, FONTE, FONTE_FORTE, TEXTO
-    from conferir import text_color_node, text_defaults
+def normalize_text(shape, source, target, theme, background, palette, annotations):
+    from clinic_deck import BRANCO, CINZA_CLARO, FONTE, FONTE_FORTE, PRETO, TEXTO, VINHO
+    from conferir import bullet_color_node, text_color_node, text_defaults
 
     title = shape.is_placeholder and shape.placeholder_format.type in {
         PP_PLACEHOLDER.TITLE, PP_PLACEHOLDER.CENTER_TITLE, PP_PLACEHOLDER.VERTICAL_TITLE,
     }
     style_color = str(CINZA_CLARO if background is not None and is_dark(background) else TEXTO)
+
+    def normalized_color(node, emphasized):
+        color = solid_color(node, theme) if node is not None else None
+        if color is not None and matches_annotation(color, annotations):
+            return readable_color(color, background)
+        preferred = color if color in palette else str(VINHO) if emphasized else style_color
+        if background is None or contrast_ratio(preferred, background) >= 4.5:
+            return preferred
+        if contrast_ratio(style_color, background) >= 4.5:
+            return style_color
+        return max(map(str, (PRETO, BRANCO)), key=lambda candidate: contrast_ratio(candidate, background))
+
     for original, paragraph in zip(source.paragraphs, target.paragraphs, strict=True):
         defaults = text_defaults(original, shape, source, theme)
         original_runs = (node for node in original._p if node.findtext(qn("a:t"), ""))
         copied_runs = (node for node in paragraph._p if node.findtext(qn("a:t"), ""))
+        first_emphasized = None
         for source_node, node in zip(original_runs, copied_runs, strict=True):
             styles = [style for style in (source_node.find(qn("a:rPr")), *defaults) if style is not None]
             bold, italic = (next((style.get(key) in {"1", "true"} for style in styles if key in style.attrib), False)
                             for key in ("b", "i"))
-            color_node = text_color_node(styles, shape)
-            base = theme.color(color_node) if color_node is not None else "000000"
-            color = solid_color(color_node, theme) if color_node is not None else base
-            neutral = color != "FFFFFF" and color[0:2] == color[2:4] == color[4:6]
-            if rgb_channels(color) is None or base == "1F497D" or neutral:
-                color = style_color
+            highlight = next((item for style in styles if (item := style.find(qn("a:highlight"))) is not None),
+                             None)
+            emphasized = bold or (highlight is not None and len(highlight) > 0)
+            if first_emphasized is None and source_node.findtext(qn("a:t")).strip():
+                first_emphasized = emphasized
+            color = normalized_color(text_color_node(styles, shape), emphasized)
             font = Font(node.get_or_add_rPr())
             font.name = FONTE_FORTE if title and bold else FONTE
             font.bold, font.italic = bold, italic
@@ -1157,7 +1197,17 @@ def normalize_text(shape, source, target, theme, background):
             fill = font._rPr.eg_fillProperties
             if fill is not None:
                 font._rPr.remove(fill)
-            font.color.rgb = RGBColor.from_string(readable_color(color, background))
+            font.color.rgb = RGBColor.from_string(color)
+        bullet = bullet_color_node(original, shape, source, theme)
+        if bullet is not None:
+            properties = paragraph._p.get_or_add_pPr()
+            paint = properties.find(qn("a:buClr"))
+            if paint is None:
+                paint = etree.Element(qn("a:buClr"))
+                properties.insert_element_before(paint, "a:buSzTx", "a:buSzPct", "a:buSzPts", "a:buFontTx",
+                                                 "a:buFont", "a:buNone", "a:buAutoNum", "a:buChar", "a:buBlip",
+                                                 "a:tabLst", "a:defRPr", "a:extLst")
+            paint[:] = [etree.Element(qn("a:srgbClr"), val=normalized_color(bullet, first_emphasized))]
 
 
 def scale_details(element, scale):

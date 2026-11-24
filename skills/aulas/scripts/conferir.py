@@ -23,9 +23,10 @@ from pptx.util import Emu, Inches, Pt
 import bold_deck
 import clinic_deck
 from restyle import (
-    PAINT_TAGS, bounds, cell_fill, cell_outlines, contrast_ratio, fill_surface, open_deck,
+    PAINT_TAGS, annotation_colors, bounds, cell_fill, cell_outlines, contrast_ratio, fill_surface,
+    matches_annotation, open_deck,
     rgb_channels, shape_paint, shape_surfaces, slide_surface, solid_color, solid_fill_color,
-    structural_shapes, table_style, visible_color,
+    slide_shape_roles, table_style, visible_color,
 )
 
 
@@ -35,7 +36,6 @@ PRESERVED_WARNING_LABELS = {
     "marker": ("marcador editorial pendente", "marcadores editoriais pendentes"),
     "outline_color": ("contorno fora da paleta", "contornos fora da paleta"),
     "overflow": ("estouro de texto", "estouros de texto"),
-    "text_color": ("cor de texto fora da paleta", "cores de texto fora da paleta"),
 }
 
 
@@ -199,27 +199,33 @@ class Theme:
         return node.get("val", etree.QName(node).localname)
 
     def defaults(self, shape, frame, level):
-        path = f"{qn(f'a:lvl{level + 1}pPr')}/{qn('a:defRPr')}"
+        for properties in self.paragraph_defaults(shape, frame, level):
+            yield properties.find(qn("a:defRPr"))
+
+    def paragraph_defaults(self, shape, frame, level):
+        path = qn(f"a:lvl{level + 1}pPr")
         style = frame._txBody.find(qn("a:lstStyle"))
         if style is not None:
-            yield style.find(path)
+            yield from style.findall(path)
         if shape.is_placeholder:
             placeholder = self.layout.placeholders.get(idx=shape.placeholder_format.idx)
             if placeholder is not None and placeholder.has_text_frame:
-                yield placeholder._element.find(f"{qn('p:txBody')}/{qn('a:lstStyle')}/{path}")
-                yield placeholder._element.find(f"{qn('p:txBody')}/{qn('a:p')}/{qn('a:pPr')}/{qn('a:defRPr')}")
+                yield from placeholder._element.findall(f"{qn('p:txBody')}/{qn('a:lstStyle')}/{path}")
+                properties = placeholder._element.find(f"{qn('p:txBody')}/{qn('a:p')}/{qn('a:pPr')}")
+                if properties is not None:
+                    yield properties
                 master_placeholder = self.master.placeholders.get(ph_type=placeholder.placeholder_format.type)
                 if master_placeholder is not None:
-                    yield master_placeholder._element.find(f"{qn('p:txBody')}/{qn('a:lstStyle')}/{path}")
+                    yield from master_placeholder._element.findall(f"{qn('p:txBody')}/{qn('a:lstStyle')}/{path}")
             placeholder_type = shape.placeholder_format.type.name
             style_name = "titleStyle" if "TITLE" in placeholder_type else "bodyStyle"
         else:
             style_name = "otherStyle"
         if self.text_styles is not None:
-            yield self.text_styles.find(f"{qn('p:' + style_name)}/{path}")
+            yield from self.text_styles.findall(f"{qn('p:' + style_name)}/{path}")
         if self.default_style is not None:
-            yield self.default_style.find(path)
-            yield self.default_style.find(f"{qn('a:defPPr')}/{qn('a:defRPr')}")
+            yield from self.default_style.findall(path)
+            yield from self.default_style.findall(qn("a:defPPr"))
 
     def referenced_fills(self, reference):
         if reference is None:
@@ -273,6 +279,23 @@ def text_defaults(paragraph, shape, frame, theme):
             *theme.defaults(shape, frame, paragraph.level)]
 
 
+def bullet_color_node(paragraph, shape, frame, theme):
+    properties = [node for node in (
+        paragraph._p.pPr, *theme.paragraph_defaults(shape, frame, paragraph.level)
+    ) if node is not None]
+    bullet_types = {qn(f"a:{name}") for name in ("buNone", "buChar", "buAutoNum", "buBlip")}
+    bullet_type = next((child.tag for node in properties for child in node if child.tag in bullet_types), None)
+    if bullet_type in {qn("a:buNone"), qn("a:buBlip")}:
+        return None
+    for node in properties:
+        if node.find(qn("a:buClrTx")) is not None:
+            return None
+        paint = node.find(qn("a:buClr"))
+        if paint is not None and len(paint):
+            return paint[0]
+    return None
+
+
 def text_color_node(styles, shape):
     for style in styles:
         fill = style.eg_fillProperties
@@ -283,13 +306,13 @@ def text_color_node(styles, shape):
 
 
 def check_text(frame, shape, theme, palette, add, width, height, margins, top, slide_bottom, *,
-               grows=False, background=None, allow_quote_font=True):
+               grows=False, background=None, allow_quote_font=True, annotations=None):
     text = frame.text.strip()
     if not text:
         return 0, []
     if MARKER.search(text):
         add("marker", "Marcador editorial pendente.", "warning")
-    fonts, colors = set(), set()
+    fonts, colors, bullet_colors = set(), set(), set()
     available_width = Emu(width - margins[0] - margins[1]).pt
     available_height = Emu(height - margins[2] - margins[3]).pt
     cursor = text_bottom = 0
@@ -303,6 +326,14 @@ def check_text(frame, shape, theme, palette, add, width, height, margins, top, s
     for paragraph in frame.paragraphs:
         alignment = {PP_ALIGN.CENTER: 0.5, PP_ALIGN.RIGHT: 1}.get(paragraph.alignment, 0)
         defaults = text_defaults(paragraph, shape, frame, theme)
+        if annotations is not None and paragraph.text.strip():
+            bullet = bullet_color_node(paragraph, shape, frame, theme)
+            if bullet is not None:
+                color = solid_color(bullet, theme)
+                if color not in palette and not matches_annotation(color, annotations, background):
+                    bullet_colors.add(color)
+                if background is not None and rgb_channels(color) is not None:
+                    low_contrast |= contrast_ratio(visible_color(color, bullet, background), background) < 3
         lines = [[]]
         previous_size = next((int(style.get("sz")) / 100 for style in defaults
                               if style is not None and "sz" in style.attrib), 18) * scale
@@ -322,10 +353,15 @@ def check_text(frame, shape, theme, palette, add, width, height, margins, top, s
             if (content.strip() and not decorative and font_family != family
                 and not font_family.startswith(family + " ")):
                 fonts.add(font)
-            color = next((values for style in styles if (values := list(fill_colors(style, theme)))), [])
-            colors.update(set(color) - palette)
+            color_node = text_color_node(styles, shape)
+            if annotations is not None and color_node is not None:
+                color = solid_color(color_node, theme)
+                if content.strip() and color not in palette and not matches_annotation(color, annotations, background):
+                    colors.add(color)
+            else:
+                color = next((values for style in styles if (values := list(fill_colors(style, theme)))), [])
+                colors.update(set(color) - palette)
             if background is not None and not low_contrast and content.strip():
-                color_node = text_color_node(styles, shape)
                 foreground = solid_color(color_node, theme) if color_node is not None else "000000"
                 if rgb_channels(foreground) is not None:
                     low_contrast = contrast_ratio(visible_color(foreground, color_node, background), background) < 3
@@ -366,6 +402,8 @@ def check_text(frame, shape, theme, palette, add, width, height, margins, top, s
         add("font", f"Fonte {font} fora da família {clinic_deck.FONTE}.")
     for color in sorted(colors):
         add("text_color", f"Cor de texto {color} fora da paleta.")
+    for color in sorted(bullet_colors):
+        add("text_color", f"Cor de marcador de lista {color} fora da paleta.")
     if low_contrast:
         add("contrast", "Texto com contraste abaixo de 3:1.", "warning")
     if not text_bottom:
@@ -391,7 +429,7 @@ def check_text(frame, shape, theme, palette, add, width, height, margins, top, s
     ]
 
 
-def check_table(shape, theme, palette, add, slide_bottom, background, preserved, strict):
+def check_table(shape, theme, palette, add, slide_bottom, background, preserved, strict, annotations):
     table = shape.table
     style = table_style(table, theme) if preserved else None
     if style is not None:
@@ -419,13 +457,14 @@ def check_table(shape, theme, palette, add, slide_bottom, background, preserved,
             surface = fill_surface(theme, background, fill) if preserved else None
             needed, _ = check_text(cell.text_frame, shape, theme, palette, add, width, height, margins,
                                    top, slide_bottom, grows=True, background=surface,
-                                   allow_quote_font=not preserved)
+                                   allow_quote_font=not preserved, annotations=annotations if preserved else None)
             # A altura gravada é mínima. O crescimento da célula desloca as linhas seguintes.
             heights[last_row] += max(0, needed - height)
         top += heights[row]
 
 
-def check_shape(shape, theme, palette, add, slide_bottom, text_boxes, structural, preserved=False, background=None):
+def check_shape(shape, theme, palette, add, slide_bottom, text_boxes, structural, annotations,
+                preserved=False, background=None):
     if shape._element._nvXxPr.cNvPr.get("hidden") in {"1", "true"}:
         return
     preserved = preserved or is_preserved(shape)
@@ -434,7 +473,7 @@ def check_shape(shape, theme, palette, add, slide_bottom, text_boxes, structural
     def finding(rule, message, severity="error"):
         if preserved and rule == "contrast":
             severity = "error"
-        rejects = rule in {"font", "contrast", "fill_color", "outline_color"} and severity == "error"
+        rejects = rule in {"font", "contrast", "fill_color", "outline_color", "text_color"} and severity == "error"
         add(rule, message, severity, shape.name, preserved=preserved and not rejects)
 
     if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
@@ -445,7 +484,8 @@ def check_shape(shape, theme, palette, add, slide_bottom, text_boxes, structural
         child_boxes = []
         surfaces = shape_surfaces(shape.shapes, theme, background)
         for child, surface in zip(shape.shapes, surfaces, strict=True):
-            check_shape(child, theme, palette, add, slide_bottom, child_boxes, structural, preserved, surface)
+            check_shape(child, theme, palette, add, slide_bottom, child_boxes, structural, annotations,
+                        preserved, surface)
         # A comparação usa retângulos alinhados aos eixos do slide.
         if (child_boxes and child_origin is not None and child_extent is not None
             and child_extent.cx and child_extent.cy and not (shape.rotation or transform.flipH or transform.flipV)):
@@ -472,7 +512,7 @@ def check_shape(shape, theme, palette, add, slide_bottom, text_boxes, structural
             margins = (frame.margin_left, frame.margin_right, frame.margin_top, frame.margin_bottom)
             needed, rows = check_text(frame, shape, theme, palette, finding, shape.width, shape.height,
                                       margins, shape.top, slide_bottom, background=background if preserved else None,
-                                      allow_quote_font=not preserved)
+                                      allow_quote_font=not preserved, annotations=annotations if preserved else None)
             if rows and not preserved and not shape.rotation:
                 if (len(rows) > 1 and needed > shape.height
                     and frame.auto_size == MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT):
@@ -484,7 +524,7 @@ def check_shape(shape, theme, palette, add, slide_bottom, text_boxes, structural
                             rows[i] = (x1, y1, x2, bottom)
                 text_boxes.append((shape, shape.top, rows))
         if shape.has_table:
-            check_table(shape, theme, palette, finding, slide_bottom, background, preserved, strict)
+            check_table(shape, theme, palette, finding, slide_bottom, background, preserved, strict, annotations)
 
 
 def inspect(path, style):
@@ -515,7 +555,9 @@ def inspect(path, style):
             if timing is None or not any(target.get("spid") in ids for target in timing.iter(qn("p:spTgt"))):
                 add("animation", "Animação de forma ausente.")
         text_boxes = []
-        structural = set(structural_shapes(slide.shapes, deck.slide_width * deck.slide_height))
+        roles = list(slide_shape_roles(slide.shapes, deck.slide_width * deck.slide_height))
+        structural = {shape._element for shape, strict, _ in roles if strict}
+        annotations = annotation_colors(roles, theme)
         surfaces = shape_surfaces(slide.shapes, theme, slide_surface(slide, theme))
         for shape, surface in zip(slide.shapes, surfaces, strict=True):
             box = bounds(shape)
@@ -526,7 +568,8 @@ def inspect(path, style):
                 and not legacy_arc(shape, box)):
                 add("bounds", "Forma fora dos limites do slide.", shape=shape.name,
                     preserved=is_preserved(shape))
-            check_shape(shape, theme, palette, add, deck.slide_height, text_boxes, structural, background=surface)
+            check_shape(shape, theme, palette, add, deck.slide_height, text_boxes, structural, annotations,
+                        background=surface)
         text_boxes.sort(key=lambda box: box[1])
         for (upper, _, upper_rows), (lower, _, lower_rows) in combinations(text_boxes, 2):
             if any(
