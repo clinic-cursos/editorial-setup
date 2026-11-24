@@ -654,31 +654,31 @@ def group_bounds(shape, box):
     return frame_bounds(rotated_crop(shape, frame), shape.rotation)
 
 
+def shape_leaves(shapes, place=lambda box: box, area_scale=1):
+    for shape in shapes:
+        if shape._element._nvXxPr.cNvPr.get("hidden") in {"1", "true"}:
+            continue
+        width, height = shape_size(shape)
+        if shape.shape_type != GROUP:
+            yield shape, place(bounds(shape)), width * height * area_scale
+            continue
+        transform = shape._element.xfrm
+        if transform is None or transform.chOff is None or transform.chExt is None:
+            yield from shape_leaves(shape.shapes, place, area_scale)
+            continue
+        extent = transform.chExt
+        sx, sy = width / extent.cx if extent.cx else 1, height / extent.cy if extent.cy else 1
+
+        def in_group(box):
+            return place(group_bounds(shape, box))
+
+        yield from shape_leaves(shape.shapes, in_group, area_scale * sx * sy)
+
+
 def slide_shape_roles(shapes, slide_area):
-    # Marcações desenhadas podem codificar informação clínica.
     # A área é a do objeto no slide final, já com a escala dos grupos.
-    def leaves(items, place, area_scale):
-        for shape in items:
-            if shape._element._nvXxPr.cNvPr.get("hidden") in {"1", "true"}:
-                continue
-            width, height = shape_size(shape)
-            if shape.shape_type != GROUP:
-                yield shape, place(bounds(shape)), width * height * area_scale
-                continue
-            transform = shape._element.xfrm
-            if transform is None or transform.chOff is None or transform.chExt is None:
-                yield from leaves(shape.shapes, place, area_scale)
-                continue
-            extent = transform.chExt
-            sx, sy = width / extent.cx if extent.cx else 1, height / extent.cy if extent.cy else 1
-
-            def in_group(box):
-                return place(group_bounds(shape, box))
-
-            yield from leaves(shape.shapes, in_group, area_scale * sx * sy)
-
     pictures = []
-    for shape, box, area in leaves(shapes, lambda box: box, 1):
+    for shape, box, area in shape_leaves(shapes):
         if shape._element.tag == qn("p:pic") or shape._element.find(
             f"{qn('p:spPr')}/{qn('a:blipFill')}"
         ) is not None:
@@ -729,20 +729,39 @@ def is_title_rule(shape, title_bounds):
     return False
 
 
-def drawing_counts(shapes):
-    images = [(shape.shape_id, bounds(shape)) for shape in shapes
-              if next(image_references(shape), None) is not None]
-    drawings = overlays = 0
-    for shape in shapes:
-        if is_drawing(shape):
-            drawings += 1
-            overlays += any(shape.shape_id != image_id and overlaps(bounds(shape), box)
-                            for image_id, box in images)
-        if shape.shape_type == GROUP:
-            child_drawings, child_overlays = drawing_counts(shape.shapes)
-            drawings += child_drawings
-            overlays += child_overlays
-    return drawings, overlays
+def preserved_content(title, backdrops, content, script_title):
+    titles = {normalize_title(script_title)}
+    if title is not None:
+        titles.add(normalize_title(title.text))
+    titles.discard("")
+    for index, shape in enumerate(content):
+        if shape.has_text_frame and normalize_title(shape.text) in titles:
+            title_bounds = bounds(shape)
+            return backdrops + [item for i, item in enumerate(content)
+                                if i != index and not is_title_rule(item, title_bounds)]
+    return backdrops + content
+
+
+def drawing_count(shapes):
+    count = sum(is_drawing(shape) for shape in shapes)
+    return count + sum(drawing_count(shape.shapes) for shape in shapes if shape.shape_type == GROUP)
+
+
+def can_preserve(shapes, *, count_images=True):
+    images = []
+    # A ordem da cópia coloca a marcação depois da imagem que ela sobrepõe.
+    for shape, box, _ in shape_leaves(shapes):
+        if not visible_shape(shape):
+            continue
+        if shape.has_table:
+            return True
+        if next(image_references(shape), None) is not None:
+            images.append(box)
+            if count_images and len(images) >= 3:
+                return True
+        elif is_drawing(shape) and any(overlaps(box, image) for image in images):
+            return True
+    return False
 
 
 def sized_images(shape, scale_x=1, scale_y=1):
@@ -811,9 +830,8 @@ def extract(deck, folder, selection):
     for number in numbers:
         slide = presentation.slides[number - 1]
         shapes, title, backdrops, content, _ = slide_content(presentation, slide)
-        content = backdrops + [
-            shape for shape in content if title is None or shape.shape_id != title.shape_id
-        ]
+        title_text = title.text if title is not None else ""
+        content = preserved_content(title, backdrops, content, title_line(title_text))
         ordered = reading_order(shapes)
         images = []
         content_ids = {shape.shape_id for shape in content}
@@ -838,8 +856,7 @@ def extract(deck, folder, selection):
                 item["recortada"] = True
             images.append(item)
         content_images = [image["caminho"] for image in images if not image["decorativa"]]
-        drawings, annotations = drawing_counts(content)
-        title_text = title.text if title is not None else ""
+        drawings = drawing_count(content)
         heading = title_text.strip()
         paragraphs = [value for shape in reading_order(content) for value in texts(shape) if value.strip()]
         topics = [line for value in paragraphs for line in value.splitlines() if line.strip()]
@@ -848,31 +865,21 @@ def extract(deck, folder, selection):
             "textos": [value for shape in ordered for value in texts(shape)],
             "imagens": images, "formas_desenhadas": drawings,
         }
-        # Preserva composições complexas antes de sugerir um layout, inclusive no primeiro slide.
-        complex_content = (annotations >= 4 or len(content_images) > 1
-                           or any(shape.has_table or shape.has_chart for shape in content))
+        eligible = can_preserve(content, count_images=len(content_images) >= 3)
         short_heading = bool(heading) and len(heading) <= 80 and len(heading.splitlines()) == 1
         entry["revisar"] = False
-        if not (heading or paragraphs):
-            entry["tipo"] = "preservado"
-            visual_content = content_images or any(
-                shape._element.tag != qn("p:pic")
-                and not (shape.has_text_frame and (shape.is_placeholder or shape.shape_type == MSO_SHAPE_TYPE.TEXT_BOX))
-                for shape in content
-            )
-            if visual_content:
-                entry.update(revisar=True, motivo="conteúdo só em imagem")
-            else:
-                entry["vazio"] = True
-        elif complex_content or (not content_images and drawings and not (short_heading and len(topics) == 1)):
+        textless = not (heading or paragraphs)
+        if eligible:
             entry["tipo"] = "preservado"
         elif number == 1 and heading:
             entry["tipo"] = "capa"
-        elif content_images:
-            if Path(content_images[0]).suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff"}:
-                entry.update(tipo="texto_imagem", imagem=content_images[0], imagem_modo="conter", topicos=topics)
-            else:
-                entry["tipo"] = "preservado"
+        elif (textless or content_images or any(shape.has_chart for shape in content)
+              or (drawings and not (short_heading and len(topics) == 1))):
+            entry.update(tipo="texto_imagem", imagem_modo="conter", topicos=topics)
+            native_image = next((path for path in content_images if Path(path).suffix.lower()
+                                 in {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff"}), None)
+            if native_image:
+                entry["imagem"] = native_image
         else:
             # Citação ocupa o slide inteiro. Divisória admite uma linha de chamada além do título curto.
             blocks = ([heading] if heading else []) + paragraphs
@@ -888,7 +895,17 @@ def extract(deck, folder, selection):
                     entry["selo"] = topics[0]
             else:
                 entry.update(tipo="texto_imagem", imagem_modo="conter", topicos=topics)
-        if entry["tipo"] not in {"preservado", "capa", "modulo"}:
+        if textless:
+            visual_content = content_images or any(
+                shape._element.tag != qn("p:pic")
+                and not (shape.has_text_frame and (shape.is_placeholder or shape.shape_type == MSO_SHAPE_TYPE.TEXT_BOX))
+                for shape in content
+            )
+            if visual_content:
+                entry.update(revisar=True, motivo="conteúdo só em imagem")
+            else:
+                entry["vazio"] = True
+        elif entry["tipo"] not in {"preservado", "capa", "modulo"}:
             entry["revisar"] = True
         slides.append(entry)
     path = folder / "roteiro-rascunho.json"
@@ -925,6 +942,15 @@ class PreservedSlides:
             raise ValueError(f"slide {number} fora do deck {path} ({len(deck.slides)} slides)")
         return deck, deck.slides[number - 1]
 
+    def validate(self, script):
+        deck, source = self.source(script.get("deck"), script.get("slide"))
+        _, title, backdrops, content, _ = slide_content(deck, source)
+        if not can_preserve(preserved_content(title, backdrops, content, script.get("titulo", ""))):
+            raise ValueError(
+                'preservado exige tabela, três ou mais imagens ou marcação desenhada sobre imagem. '
+                'Use texto_imagem com imagem_modo: "conter".'
+            )
+
     def import_part(self, original, package):
         if original in self.parts:
             return self.parts[original]
@@ -945,18 +971,9 @@ class PreservedSlides:
 
         deck, source = self.source(script.get("deck"), script.get("slide"))
         _, title, backdrops, content, rectangle_color = slide_content(deck, source)
-        titles = {normalize_title(script.get("titulo", ""))}
-        if title is not None:
-            titles.add(normalize_title(title.text))
-        titles.discard("")
-        for index, shape in enumerate(content):
-            if shape.has_text_frame and normalize_title(shape.text) in titles:
-                del content[index]
-                title_bounds = bounds(shape)
-                content = [item for item in content if not is_title_rule(item, title_bounds)]
-                break
+        content = preserved_content(title, backdrops, content, script.get("titulo", ""))
         theme = Theme(source, deck)
-        copies = [(shape, *copy) for shape in backdrops + content
+        copies = [(shape, *copy) for shape in content
                   if (copy := visible_copy(shape, deepcopy(shape._element), theme, deck.slide_height)) is not None]
         if not copies:
             return []

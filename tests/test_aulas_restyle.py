@@ -26,6 +26,89 @@ def run_cli(*args):
     return subprocess.run([sys.executable, str(CLI), *map(str, args)], capture_output=True, text=True)
 
 
+@pytest.fixture
+def preservation_deck(tmp_path):
+    deck = Presentation()
+    image = tmp_path / "ilustracao.png"
+    Image.new("RGB", (32, 24), "white").save(image)
+    for kind in ("one", "two", "dots", "group", "outside", "table", "three", "hidden"):
+        slide = deck.slides.add_slide(deck.slide_layouts[5])
+        slide.shapes.title.text = "Ilustração anatômica"
+        if kind == "table":
+            slide.shapes.add_table(1, 1, Inches(1), Inches(2), Inches(4), Inches(1)).table.cell(0, 0).text = "Dado"
+            continue
+        for index in range({"two": 2, "three": 3}.get(kind, 1)):
+            slide.shapes.add_picture(str(image), Inches(1 + 3 * index), Inches(2), Inches(2))
+        if kind in {"dots", "group", "outside", "hidden"}:
+            shapes = slide.shapes
+            if kind in {"group", "outside"}:
+                shapes = shapes.add_group_shape().shapes
+            for x in ((0.2, 3.5) if kind == "outside" else (1.5, 2.5)):
+                dot = shapes.add_shape(MSO_SHAPE.OVAL, Inches(x), Inches(2.5), Pt(6), Pt(6))
+                if kind == "hidden":
+                    dot._element.nvSpPr.cNvPr.set("hidden", "1")
+    source = tmp_path / "original.pptx"
+    deck.save(source)
+    return source
+
+
+@pytest.mark.parametrize("style", ["padrao", "ousado"])
+@pytest.mark.parametrize("source_slide,allowed", [(1, False), (3, True), (4, True), (6, True), (7, True)])
+def test_generate_validates_preserved_content(tmp_path, preservation_deck, style, source_slide, allowed):
+    script = tmp_path / "roteiro.json"
+    script.write_text(json.dumps({
+        "estilo": style, "parcerias": False, "precificacao": False,
+        "slides": [{"tipo": "capa"}, {"tipo": "sumario"}, {"tipo": "modulo"}, {
+            "tipo": "preservado", "deck": preservation_deck.name, "slide": source_slide,
+            "titulo": "Ilustração anatômica",
+        }, {"tipo": "encerramento"}],
+    }), encoding="utf-8")
+    out = tmp_path / "aula.pptx"
+    result = run_cli("gerar", script, out, "--sem-conferir")
+
+    if allowed:
+        assert result.returncode == 0, result.stderr
+        assert len(Presentation(out).slides) == 5
+    else:
+        assert result.returncode == 2, result.stdout + result.stderr
+        assert not out.exists()
+        assert "esqueleto inválido" in result.stderr
+        assert any(line.startswith("slide 4:") and all(term in line for term in (
+            "preservado", "tabela", "marcação", "texto_imagem", "imagem_modo",
+        )) for line in result.stderr.splitlines())
+
+
+def test_generate_accumulates_preservation_and_structure_errors(tmp_path, preservation_deck):
+    script = tmp_path / "roteiro.json"
+    script.write_text(json.dumps({
+        "parcerias": False, "precificacao": False,
+        "slides": [{"tipo": "preservado", "deck": preservation_deck.name, "slide": i}
+                   for i in (2, 5, 8)],
+    }), encoding="utf-8")
+    result = run_cli("gerar", script, tmp_path / "aula.pptx", "--sem-conferir")
+
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "slide 1: deve ser capa" in result.stderr
+    assert "slide 4: falta encerramento" in result.stderr
+    for i in (1, 2, 3):
+        assert any(line.startswith(f"slide {i}:") and "imagem_modo" in line for line in result.stderr.splitlines())
+
+
+def test_extract_suggests_preservation_only_for_eligible_content(tmp_path, preservation_deck):
+    folder = tmp_path / "rascunho"
+    result = run_cli("extrair", preservation_deck, folder)
+
+    assert result.returncode == 0, result.stderr
+    slides = json.loads((folder / "roteiro-rascunho.json").read_text(encoding="utf-8"))["slides"]
+    assert [slide["tipo"] for slide in slides] == [
+        "capa", "texto_imagem", "preservado", "preservado", "texto_imagem", "preservado", "preservado", "texto_imagem",
+    ]
+    assert slides[1]["imagem_modo"] == "conter"
+    assert len(slides[1]["imagens"]) == 2
+    assert slides[1]["imagem"] == slides[1]["imagens"][0]["caminho"]
+    assert slides[1]["revisar"] is True
+
+
 def restyle_one(tmp_path, original, style, title="Novo título"):
     source = tmp_path / "original.pptx"
     original.save(source)
@@ -577,7 +660,7 @@ def test_extract_maps_single_callout_to_module_badge(tmp_path):
     assert slide["textos"] == ["Prática", callout]
 
 
-def test_extract_preserves_textless_content_and_flags_empty_slides(tmp_path):
+def test_extract_suggests_native_layout_for_textless_content(tmp_path):
     prs = Presentation()
     photo = tmp_path / "foto.png"
     Image.new("RGB", (16, 16), "red").save(photo)
@@ -597,11 +680,13 @@ def test_extract_preserves_textless_content_and_flags_empty_slides(tmp_path):
         (folder / "roteiro-rascunho.json").read_text(encoding="utf-8")
     )["slides"]
     for slide in (picture, drawing):
-        assert slide["tipo"] == "preservado"
+        assert slide["tipo"] == "texto_imagem"
+        assert slide["imagem_modo"] == "conter"
         assert slide["revisar"] is True
         assert slide["motivo"] == "conteúdo só em imagem"
         assert not slide.get("vazio")
     assert empty["vazio"] is True
+    assert empty["tipo"] == "texto_imagem"
 
 
 @pytest.mark.parametrize("style", ["padrao", "ousado"])
