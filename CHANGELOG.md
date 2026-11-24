@@ -1,5 +1,9 @@
 # Histórico de versões
 
+## 0.2.8
+
+- A nota do apresentador nos slides de precificação orienta o ajuste da tabela sem citar ferramentas de IA.
+
 ## 0.2.7
 
 - No `texto_imagem` em `conter` sem corpo, o título fica em uma linha, o kicker mantém a posição do modelo e a imagem ocupa a maior área livre.
