@@ -22,6 +22,55 @@ def generate(tmp_path, spec):
 
 
 @pytest.mark.parametrize("style", ["padrao", "ousado"])
+def test_generate_keeps_numeric_expressions_together(tmp_path, style):
+    topics = [
+        "Dose (0,1-0,2 mL) ou (~ 3000 UI / indivíduo)",
+        "≈ 2 ml; < 3 U; > 4 SU; ± 5 G",
+        "6 mm; 7 cm; 8 mg; 9 %; 10 h; 11 PT",
+        "12 **mL**, 13 um e 14 minutos; 15 - 16 mg",
+    ]
+    result, out = generate(tmp_path, {"estilo": style, "avulso": True, "slides": [
+        {"tipo": "texto_imagem", "titulo": "Medidas", "topicos": topics},
+    ]})
+    assert result.returncode == 0, result.stderr
+    slide = Presentation(out).slides[0]
+    texts = {shape.text for shape in slide.shapes if shape.has_text_frame}
+    assert {
+        "Dose (0,1\u20110,2\u00a0mL) ou (~\u00a03000\u00a0UI / indivíduo)",
+        "≈\u00a02\u00a0ml; <\u00a03\u00a0U; >\u00a04\u00a0SU; ±\u00a05\u00a0G",
+        "6\u00a0mm; 7\u00a0cm; 8\u00a0mg; 9\u00a0%; 10\u00a0h; 11\u00a0PT",
+        "12\u00a0mL, 13 um e 14 minutos; 15\u00a0\u2011\u00a016\u00a0mg",
+    } <= texts
+
+
+@pytest.mark.parametrize("style", ["padrao", "ousado"])
+def test_generate_keeps_literal_bold_markers(tmp_path, style):
+    result, out = generate(tmp_path, {"estilo": style, "avulso": True, "slides": [
+        {"tipo": "texto_imagem", "titulo": "Anotações", "topicos": [
+            r"**Destaque** e (correção)** com \*\* literal",
+            "**Abertura sem par",
+            r"**Com \*\* dentro**",
+            r"\*\***Junto**",
+        ]},
+        {"tipo": "sumario", "info": r"**Horário** e (correção)** com \*\* literal"},
+    ]})
+    assert result.returncode == 0, result.stderr
+    body, summary = Presentation(out).slides
+    for slide, prefix in ((body, "Destaque"), (summary, "Horário")):
+        shape = next(shape for shape in slide.shapes if shape.has_text_frame and shape.text.startswith(prefix))
+        assert shape.text == f"{prefix} e (correção)** com ** literal"
+        runs = shape.text_frame.paragraphs[0].runs
+        assert runs[0].text == prefix and runs[0].font.bold
+        if slide is body or style == "ousado":
+            assert not runs[1].font.bold
+    body_texts = {shape.text for shape in body.shapes if shape.has_text_frame}
+    assert {"**Abertura sem par", "Com ** dentro"} <= body_texts
+    adjacent = next(shape for shape in body.shapes if shape.has_text_frame and shape.text.endswith("Junto"))
+    assert adjacent.text == "**Junto"
+    assert [run.text for run in adjacent.text_frame.paragraphs[0].runs if run.font.bold] == ["Junto"]
+
+
+@pytest.mark.parametrize("style", ["padrao", "ousado"])
 @pytest.mark.parametrize("kinds,violations", [
     ("sumario modulo texto_imagem encerramento", [(1, "capa"), (2, "sumario")]),
     ("capa sumario texto_imagem modulo encerramento", [(3, "modulo")]),

@@ -150,6 +150,7 @@ def test_model_matches_reference(tmp_path):
     slides = Presentation(out).slides
     assert len(slides) == len(reference) == 16
     style_mismatches = []
+    breakable = str.maketrans("\u00a0\u2011", " -")
     for number, (slide, expected) in enumerate(zip(slides, reference, strict=True), 1):
         prompts = [shape for shape in slide.shapes if shape.name.startswith("Texto do prompt ")]
         omitted = ()
@@ -168,6 +169,11 @@ def test_model_matches_reference(tmp_path):
         assert actual["shapes"].keys() == expected["shapes"].keys(), number
         for name, geometry in expected["shapes"].items():
             assert actual["shapes"][name] == pytest.approx(geometry, abs=0.02), (number, name)
+        # Estes caracteres mudam a quebra de linha e preservam o texto visível.
+        for snapshot in (actual, expected):
+            snapshot["texts"] = [value.translate(breakable) for value in snapshot["texts"]]
+            for run in snapshot["runs"]:
+                run["text"] = run["text"].translate(breakable)
         assert Counter(actual["texts"]) == Counter(expected["texts"]), number
         actual_texts = Counter(run["text"] for run in actual["runs"])
         expected_texts = Counter(run["text"] for run in expected["runs"])

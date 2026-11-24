@@ -67,7 +67,9 @@ Declare `estilo` no roteiro. Para roteiros antigos sem esse campo, a ferramenta 
 | `continue_evolucao` | vitrine ClinicPlus · Residência · Pós · MBA | cards[{titulo, texto, icone, qr, selo}], frase1, frase2 |
 | `encerramento` | contato e próximos passos | titulo, mensagem, contatos[], qr (imagem ou null para espaço reservado), qr_legenda, selo |
 
-Todo slide aceita `notas` (vai para as notas do apresentador). Em qualquer texto, `**trecho**` vira negrito vinho.
+Todo slide aceita `notas` (vai para as notas do apresentador). Nos campos com marcação de texto, `**trecho**` aplica negrito quando os delimitadores abrem e fecham um trecho na mesma string. Um `**` sem par aparece literalmente. Para forçar a exibição dos dois asteriscos, use `\*\*` no texto (no JSON, escreva `"\\*\\*"`).
+
+Nos dois estilos, o gerador mantém juntos os números e suas unidades, as faixas numéricas com hífen e os símbolos de aproximação ou comparação com seus valores. Escreva as medidas com os espaços e hífens habituais.
 
 ## Campos no estilo ousado
 

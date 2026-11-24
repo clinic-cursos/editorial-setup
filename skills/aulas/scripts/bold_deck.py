@@ -17,7 +17,7 @@ from pptx.util import Inches
 from clinic_deck import (
     A, ALERTA, BRANCO, CINZA, CINZA_CLARO, FONTE, FONTE_FORTE, H, LAYOUTS, M,
     PRETO, ROSE, ROSE_CLARO, TEXTO, VINHO, VINHO_ESC, W, _alpha, _parse_bold,
-    arc, badge, image, line, rect, text,
+    arc, badge, image, keep_numeric_expressions, line, plain_text, rect, text,
 )
 from restyle import PreservedFrame
 
@@ -189,11 +189,6 @@ def photo(s, d, x, y, w, h, *, dark=False, prompt_height=None, contain=False, av
     return name(shape, "!!foto")
 
 
-def accent_runs(value, color):
-    return [(part, {"bold": True, "color": color} if i % 2 else {})
-            for i, part in enumerate(value.split("**")) if part]
-
-
 def crop_pillar_photo(picture, path):
     with Image.open(path) as source:
         width, height = source.size
@@ -237,7 +232,7 @@ def s_agenda(prs, s, d):
     items = d.get("itens", [])
     an.add(text(s, M, 1.5, 2.8, 1.2, str(len(items)), size=88, color=BRANCO, font=FONTE_FORTE, bold=True), eff="up")
     an.add(text(s, M, 2.85, 2.6, 0.5, d.get("resumo", ""), size=12, color=BRANCO))
-    text(s, M, 3.45, 2.7, 0.8, [accent_runs(row, ROSE) for row in d.get("info", "").splitlines()],
+    text(s, M, 3.45, 2.7, 0.8, [_parse_bold(row, ROSE) for row in d.get("info", "").splitlines()],
          size=9.5, color=CINZA_CLARO)
     rows = max(6, (len(items) + 1) // 2)
     stride = max(0.5, 4.2 / rows)
@@ -301,7 +296,7 @@ def s_pillars(prs, s, d):
     badge_width = 2.9
     badge_left = W - M - badge_width
     info_value = d.get("info", "")
-    info = [accent_runs(row, ROSE) for row in info_value.splitlines()]
+    info = [_parse_bold(row, ROSE) for row in info_value.splitlines()]
     if panel:
         picture = photo(s, d, 0, 0, 4.3, H, dark=True, prompt_height=H - 1)
         if picture.shape_type == MSO_SHAPE_TYPE.PICTURE:
@@ -377,9 +372,11 @@ def s_pillars(prs, s, d):
 def measured_words(line):
     # Estimate Montserrat widths in em with room for wide glyphs, independent of
     # installed fonts.
-    return [(sum(1 if ch in "MWmw" else 0.85 if ch.isupper() else 0.75 for ch in word),
+    line = keep_numeric_expressions(line)
+    return [(sum(0.35 if ch == "\u00a0" else 1 if ch in "MWmw" else 0.85 if ch.isupper() else 0.75
+                 for ch in word),
              len(gap) * 0.35)
-            for word, gap in re.findall(r"(\S+)(\s*)", line)]
+            for word, gap in re.findall(r"((?:\S|\u00a0)+)((?:(?!\u00a0)\s)*)", line)]
 
 
 def wrapped_rows(words, available):
@@ -413,10 +410,6 @@ def text_image_font_size(paragraphs, width, height, model_size, min_size, spacin
             return size
     # Preserve overflowing text at the floor so the editorial check can flag it.
     return min_size
-
-
-def plain_text(value):
-    return str(value).replace("**", "")
 
 
 def list_text_height(paragraphs, width, body_size):
@@ -820,7 +813,7 @@ def s_comparison(prs, s, d):
         size, boxes = fit_list([[(plain_text(item), None)] for item in its], width=4.3,
                                tops=tops, bottom=bottom, base_height=0.3, body_size=9.5)
         for it, (y, height) in zip(its, boxes):
-            segs = accent_runs(it, BRANCO)
+            segs = _parse_bold(it, BRANCO)
             an.add(text(s, x, y, 4.3, height, [segs], size=size, color=CINZA_CLARO), gap=90, eff="left")
     if d.get("nota"):
         r = rect(s, 0, H - 0.42, W, 0.42, fill=VINHO)
@@ -919,7 +912,7 @@ def light_content_header(s, heading_text, label):
         # Keep the previous width for long titles that need both lines.
         title_width = W - 2 * M - 1
     title_height = content_title_height(rows, title_size)
-    title_lines = [accent_runs(value, VINHO) for value in title_text.splitlines()]
+    title_lines = [_parse_bold(value) for value in title_text.splitlines()]
     heading = text(s, M, 0.62, title_width, title_height, title_lines, size=title_size,
                    color=PRETO, font=FONTE_FORTE, bold=True, spacing=0.9)
     content_top = 1.35 + (title_height - 0.6)

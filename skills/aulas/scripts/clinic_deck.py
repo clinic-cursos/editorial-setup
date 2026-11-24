@@ -15,6 +15,7 @@ professor trocar depois.
 """
 import copy
 import json, os, sys
+import re
 from pptx import Presentation
 from pptx.util import Inches, Pt, Emu
 from pptx.dml.color import RGBColor
@@ -55,6 +56,16 @@ def A(name):
 
 
 # ---------------------------------------------------------------- primitivas
+def keep_numeric_expressions(value):
+    """Keep substitutions the same length so they can span styled runs."""
+    value = re.sub(r"(?<=\d)[ \u00a0]*[-\u2011][ \u00a0]*(?=\d)",
+                   lambda match: match[0].replace(" ", "\u00a0").replace("-", "\u2011"), value)
+    value = re.sub(r"(?<=\d) +(?=(?:ml|ui|u|su|g|mm|cm|mg|%|h|pt)(?!\w))",
+                   lambda match: "\u00a0" * len(match[0]), value, flags=re.IGNORECASE)
+    return re.sub(r"(?<=[~≈<>±]) +(?=[+-]?\d)",
+                  lambda match: "\u00a0" * len(match[0]), value)
+
+
 def rect(s, x, y, w, h, fill=None, line=None, shape=MSO_SHAPE.RECTANGLE, lw=0.75):
     sh = s.shapes.add_shape(shape, Inches(x), Inches(y), Inches(w), Inches(h))
     sh.shadow.inherit = False
@@ -85,24 +96,43 @@ def text(s, x, y, w, h, runs, size=12, color=TEXTO, bold=False, font=FONTE,
     for i, p in enumerate(paras):
         para = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
         para.alignment = align; para.line_spacing = spacing
-        segs = p if isinstance(p, list) else _parse_bold(p)
-        for seg in segs:
-            t, o = (seg, {}) if isinstance(seg, str) else seg
-            r = para.add_run(); r.text = t.upper() if caps else t
+        segments = p if isinstance(p, list) else _parse_bold(p)
+        segments = [(segment, {}) if isinstance(segment, str) else segment for segment in segments]
+        paragraph_text = keep_numeric_expressions("".join(value for value, _ in segments))
+        start = 0
+        for value, o in segments:
+            end = start + len(value)
+            value = paragraph_text[start:end]
+            start = end
+            r = para.add_run(); r.text = value.upper() if caps else value
             f = r.font; f.name = o.get("font", font); f.size = Pt(o.get("size", size))
             f.bold = o.get("bold", bold); f.italic = o.get("italic", italic)
             f.color.rgb = o.get("color", color)
     return tb
 
 
-def _parse_bold(t):
-    """'texto **destaque** texto' -> segmentos; destaque em negrito vinho."""
-    out, bold = [], False
-    for part in str(t).split("**"):
-        if part:
-            out.append((part, {"bold": True, "color": VINHO} if bold else {}))
-        bold = not bold
-    return out or [""]
+def _parse_bold(value, color=VINHO):
+    """Parse paired bold delimiters before decoding literal escapes."""
+    value = str(value)
+    escape = r"\\\*\\\*"
+    marker = r"\*\*"
+    tokens = rf"{escape}|{marker}((?:{escape}|(?!{escape}|{marker}).)+){marker}"
+    segments = []
+    start = 0
+    for match in re.finditer(tokens, value, flags=re.DOTALL):
+        if match[1] is None:
+            continue
+        if match.start() > start:
+            segments.append((value[start:match.start()], {}))
+        segments.append((match[1], {"bold": True, "color": color}))
+        start = match.end()
+    if start < len(value):
+        segments.append((value[start:], {}))
+    return [(part.replace(r"\*\*", "**"), style) for part, style in segments]
+
+
+def plain_text(value):
+    return "".join(part for part, _ in _parse_bold(value))
 
 
 def line(s, x1, y1, x2, y2, color=VINHO, w=1.0, dash=False):
@@ -583,7 +613,7 @@ def layout_tabela(prs, s, d, *, content_header=None):
             c.vertical_anchor = MSO_ANCHOR.MIDDLE
             tf = c.text_frame; tf.text = ""
             p = tf.paragraphs[0]; p.alignment = PP_ALIGN.LEFT if j == 0 else PP_ALIGN.CENTER
-            r = p.add_run(); r.text = str(v); f = r.font; f.name = FONTE; f.size = Pt(9)
+            r = p.add_run(); r.text = keep_numeric_expressions(str(v)); f = r.font; f.name = FONTE; f.size = Pt(9)
             c.fill.solid()
             if i == 0:
                 c.fill.fore_color.rgb = VINHO if j != hl else VINHO_ESC
@@ -827,10 +857,10 @@ def layout_precificacao(prs, s, d):
                 else:
                     p = procs[j - 1]
                     if p.get("estrategia"):
-                        r = para.add_run(); r.text = p["estrategia"].upper()
+                        r = para.add_run(); r.text = keep_numeric_expressions(p["estrategia"]).upper()
                         r.font.size = Pt(6.5); r.font.bold = True; r.font.color.rgb = ROSE_CLARO; r.font.name = FONTE
                         para = tf.add_paragraph(); para.alignment = PP_ALIGN.CENTER
-                    r = para.add_run(); r.text = p.get("nome", "")
+                    r = para.add_run(); r.text = keep_numeric_expressions(p.get("nome", ""))
                     r.font.size = Pt(7.5); r.font.bold = True; r.font.color.rgb = BRANCO; r.font.name = FONTE
                 continue
             label, key = rows[i - 1]
@@ -886,7 +916,7 @@ def layout_parceria(prs, s, d):
         rect(s, M + 0.12, y + 0.04, 0.2, 0.2, fill=VINHO, shape=MSO_SHAPE.OVAL)
         text(s, M + 0.12, y + 0.04, 0.2, 0.2, "✓", size=7, color=BRANCO, bold=True,
              align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
-        nl = 1 + len(b.replace("**", "")) // 72
+        nl = 1 + len(plain_text(b)) // 72
         text(s, M + 0.42, y, 4.8, 0.2 + 0.17 * nl, _parse_bold(b), size=9.5)
         y += 0.15 + 0.17 * nl
     if d.get("validade"):
