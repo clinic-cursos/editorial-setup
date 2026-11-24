@@ -37,6 +37,19 @@ Data:
 Saída do `pip list` e dos imports:
 
 
+## Aulas
+
+- python-pptx: presente / ausente
+- lxml: presente / ausente
+- Pillow: presente / ausente
+- LibreOffice (`soffice`): presente / ausente
+- `pdftoppm`: presente / ausente
+- Montserrat: presente / ausente
+- Produz aulas com prévia: sim / não
+
+Saída dos imports, versões e comandos:
+
+
 ## Imagem gerada
 
 
@@ -49,5 +62,7 @@ Saída do `pip list` e dos imports:
 ## Observações
 
 ```
+
+Sem `soffice` ou `pdftoppm`, a produção de aulas deve ser feita pela equipe no Claude Code ou no Codex, conforme o guia da Paula.
 
 Se o Python não enxergar a imagem, registre isso como resultado. O roteiro não exige que a imagem seja baixada ou reenviada.

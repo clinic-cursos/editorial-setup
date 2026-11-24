@@ -46,6 +46,10 @@ Fale com o Editor-Chefe e anexe os materiais citados no pedido. Escolha uma das 
 
 O pedido de design system novo usa o estilo ousado do modelo mestre v1. O Editor-Chefe encaminha o PowerPoint para sua conferência depois da revisão dos slides.
 
+### Antes do primeiro pedido de aula
+
+Rode o [teste de plataforma](medicoes/teste-plataforma/roteiro.md) e confira a seção **Aulas**. Se o resultado for **“Produz aulas com prévia: não”**, peça a aula à equipe, que pode rodar a produção no Claude Code ou no Codex. O deck exige a fonte Montserrat instalada no computador que vai apresentar, pois a fonte não vem embutida.
+
 ## Abra a auditoria científica em uma conversa nova
 
 1. Na conversa do livro, peça ao Editor-Chefe o pacote de auditoria da fase 1. Ele inclui o manuscrito, a tabela de rastreabilidade, a tabela slide a capítulo, os materiais originais e a rubrica da fase.
@@ -73,3 +77,7 @@ Quando o Python da conversa não enxergar uma imagem gerada pelo ChatGPT, baixe-
 Dite a sugestão ao Editor-Chefe e peça uma linha com data, papel, o que mudar, por quê e exemplo. Envie a linha ao Alify ou use diretamente o [modelo de melhorias](melhorias.md). Use exemplos sem trechos de livro, fotos clínicas ou dados de alunos.
 
 A equipe registra a mudança no repositório, roda os testes, gera o pacote e publica a nova versão no [histórico](../CHANGELOG.md). Quando receber a versão, reinstale as skills ou atualize as instruções e fontes do Projeto. Edições feitas diretamente na skill instalada se perdem na próxima atualização.
+
+## Atualizar para uma nova versão
+
+Os pacotes de cada versão ficam nas [releases do repositório](https://github.com/clinic-cursos/editorial-setup/releases). No ChatGPT, reenvie os ZIPs mais recentes de `dist/chatgpt/` ou atualize o Projeto com os arquivos de `dist/chatgpt-projeto/`, incluindo a nova skill `revisor-aulas`. No Claude Code ou no Codex, rode `git pull` no checkout do editorial-setup e reinicie a sessão. No Claude Code, use `/plugin` para atualizar o plugin instalado pelo catálogo.

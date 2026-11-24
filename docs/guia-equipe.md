@@ -25,6 +25,8 @@ Distribua os pacotes de uma mesma versão. Mantenha `dist/` fora do Git. Para o 
 
 ## Claude Code
 
+Para produzir aulas com prévia, o computador precisa de Python 3.12 com `uv`, LibreOffice com `soffice` e `pdftoppm` no `PATH`, além da fonte Montserrat instalada. Confira com `uv run --locked python skills/aulas/scripts/aulas.py previa <deck> <pasta>`.
+
 1. Na raiz do checkout, valide o plugin com `claude plugin validate .`.
 2. Para uma sessão com o plugin local, rode `claude --plugin-dir .` na raiz. Para instalar pelo catálogo da equipe, use `/plugin marketplace add /caminho/para/editorial-setup` em uma sessão, abra `/plugin` e instale `clinic-editorial` na aba **Discover** do marketplace `clinic-editora`.
 3. Inicie o livro com `/clinic-editorial:editor-chefe` na conversa principal. Informe o caminho da ficha e a fase desejada. O Editor-Chefe aciona os demais papéis como subagentes.
@@ -50,6 +52,8 @@ Se a sessão não interativa negar a leitura das referências, passe também o d
 [Carregar skills no Claude](https://support.claude.com/en/articles/12512180-use-skills-in-claude)
 
 ## Codex local
+
+Para produzir aulas com prévia, o computador precisa de Python 3.12 com `uv`, LibreOffice com `soffice` e `pdftoppm` no `PATH`, além da fonte Montserrat instalada. Confira com `uv run --locked python skills/aulas/scripts/aulas.py previa <deck> <pasta>`.
 
 1. Na pasta de trabalho que você vai abrir no Codex, copie as pastas completas dos papéis de `skills/` para `.agents/skills/`. Cada papel deve ficar em `.agents/skills/<papel>/SKILL.md`, com suas referências, scripts e recursos.
 2. Copie os arquivos `.toml` de `dist/codex/agents/` para `.codex/agents/` na pasta de trabalho. Para disponibilizar os agentes em todas as sessões locais, use `~/.codex/agents/` e mantenha as skills acessíveis a partir de cada pasta de trabalho.

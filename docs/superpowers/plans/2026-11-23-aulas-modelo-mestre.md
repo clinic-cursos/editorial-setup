@@ -88,7 +88,9 @@ Verificação comum (todo cartão): `uv run --locked pytest -q tests/test_aulas.
 
 ## Status
 
-- Feito: verificação dos três arquivos de referência, plano e cartões 1 a 4. PR #6 mergeado em 23/11/2026 (merge `9c18808`). Versão 0.2.0 publicada como release.
+- Feito: PRs #6 a #14 mergeados entre 23 e 24/11/2026; versões 0.2.0 e 0.2.3 a 0.2.8 publicadas como releases (a 0.2.8 é a atual). Regra do Alify de 24/11/2026: modelo mestre v1 travado por hook e hash; esqueleto e moldura do modelo validados pelo `gerar`; `preservado` só para marcação sobre imagem, tabela ou composição de três ou mais imagens. Piloto HOF básico refeito em 7 versões e aprovado pelo `revisor-aulas` com nota 91, sem eliminatórios; 125 slides, com conteúdo técnico conferido nos 100 slides de origem. Teste de plataforma e guias atualizados para aulas.
 - Em andamento: nada.
-- Travado: nada.
-- Próximo passo: achados menores da CLI-647.
+- Travado: nada no repositório. Fora dele: a Paula decide os 15 pontos de conteúdo do HOF (lista entregue com o deck) e roda o teste de plataforma no ambiente dela.
+- Próximo passo: a Paula atualiza para a 0.2.8, roda o teste de plataforma e abre o HOF no PowerPoint para conferir animação e fontes; achados menores abertos na CLI-647.
+
+Projeto no Linear: "Setup editorial: aulas no modelo mestre".
