@@ -80,4 +80,4 @@ A equipe registra a mudança no repositório, roda os testes, gera o pacote e pu
 
 ## Atualizar para uma nova versão
 
-Os pacotes de cada versão ficam nas [releases do repositório](../releases). No ChatGPT, reenvie os ZIPs mais recentes de `dist/chatgpt/` ou atualize o Projeto com os arquivos de `dist/chatgpt-projeto/`, incluindo a nova skill `revisor-aulas`. No Claude Code ou no Codex, rode `git pull` no checkout do editorial-setup e reinicie a sessão. No Claude Code, use `/plugin` para atualizar o plugin instalado pelo catálogo.
+Os pacotes de cada versão ficam nas [releases do repositório](https://github.com/clinic-cursos/editorial-setup/releases). No ChatGPT, reenvie os ZIPs mais recentes de `dist/chatgpt/` ou atualize o Projeto com os arquivos de `dist/chatgpt-projeto/`, incluindo a nova skill `revisor-aulas`. No Claude Code ou no Codex, rode `git pull` no checkout do editorial-setup e reinicie a sessão. No Claude Code, use `/plugin` para atualizar o plugin instalado pelo catálogo.
