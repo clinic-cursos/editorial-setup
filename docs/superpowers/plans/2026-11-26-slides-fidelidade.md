@@ -79,13 +79,20 @@ Gravidade média: afeta as aulas entregues pelo time; o erro aparece no `conferi
   - Sem travessão.
 - **Verificação:** `uv run --locked python scripts/package.py --check && uv run --locked pytest -q`
 
+### Cartão 4: fidelidade de conteúdo por parágrafo
+
+- **Função:** backend
+- **Objetivo:** emenda depois do ensaio do cartão 2 no HOF real (26/11): a comparação pela sequência global de palavras gerava ruído quando o layout do modelo muda a ordem das formas (sumário em duas colunas, kicker antes do título, "Módulo 1" virando "01"). A unidade passa a ser o parágrafo do original, procurado como sequência contígua num slide da saída, com cursor em ordem entre slides e zeros à esquerda ignorados. Cortes e trocas continuam reprovando, e a divergência traz o texto do parágrafo em `paragraph`.
+- **Arquivos permitidos:** `skills/aulas/scripts/conferir.py`, `tests/test_aulas_conferir.py`
+- **Verificação:** `uv run --locked pytest -q tests/test_aulas_conferir.py tests/test_aulas.py tests/test_aulas_ousado.py tests/test_aulas_restyle.py`
+
 ## Teste de ponta a ponta (orquestrador, depois do merge)
 
 Com Docker para a prévia: deck "cagado" de propósito, gerado a partir do roteiro de referência e estragado (logo removido, fonte trocada, palavra cortada, frase reordenada). Fluxo: editor-chefe → `aulas` em modo verificação (placar e gaps) → `aulas` em modo refatoração (`extrair`, `gerar`, `conferir --origem`) → `revisor-aulas` → ajuste pontual de um texto. Prova: placar 100 em todos os slides, conteúdo 100% e só o texto pedido mudou no ajuste.
 
 ## Status
 
-- Feito: plano escrito; issue CLI-716 aberta.
-- Em andamento: cartão 1.
+- Feito: cartões 1 a 4 executados pelo Codex (placar, `--origem`, textos e versão 0.2.9, comparação por parágrafo); suíte completa verde no cartão 3. Ensaio no HOF real: o deck gerado do roteiro do modelo tira 100 nos 16 slides; o HOF refeito à mão (fora do modelo) tira média 28; o HOF aprovado na 0.2.8 (nota 91) tira 100 no placar mas só 92,67% de conteúdo preservado, com 67 parágrafos cortados ou alterados.
+- Em andamento: revisão única pelo `cross-reviewer`.
 - Travado: nada.
-- Próximo passo: despachar os cartões 1 a 3 em série, revisão pelo `cross-reviewer`, PR, merge e o teste de ponta a ponta.
+- Próximo passo: PR, integrate, merge, teste de ponta a ponta e aviso à Paula sobre o HOF 0.2.8.
