@@ -7,9 +7,10 @@ import subprocess
 from bisect import bisect_right
 from collections import Counter, defaultdict
 from difflib import SequenceMatcher
-from functools import cached_property
+from functools import cache, cached_property
 from io import BytesIO
 from itertools import combinations
+from math import dist
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unicodedata import combining, decimal, normalize
@@ -28,8 +29,8 @@ import bold_deck
 import clinic_deck
 from restyle import (
     PAINT_TAGS, annotation_colors, background_picture, bounds, cell_fill, cell_outlines, contrast_ratio,
-    fill_surface, matches_annotation, open_deck, reading_order, rgb_channels, shape_paint, shape_surfaces,
-    sized_images, slide_surface,
+    fill_surface, group_bounds, matches_annotation, open_deck, reading_order, rgb_channels, rotated_crop,
+    shape_frame, shape_paint, shape_surfaces, sized_images, slide_surface,
     solid_color, solid_fill_color,
     slide_numbers, slide_shape_roles, table_style, texts, visible_color,
 )
@@ -710,14 +711,49 @@ def compare_content(deck, source, numbers):
     }
 
 
+def clip_polygon(points, axis, edge, direction):
+    clipped = []
+    for start, end in zip(points[-1:] + points[:-1], points, strict=True):
+        start_inside = (start[axis] - edge) * direction >= 0
+        end_inside = (end[axis] - edge) * direction >= 0
+        if start_inside != end_inside:
+            fraction = (edge - start[axis]) / (end[axis] - start[axis])
+            other = start[1 - axis] + fraction * (end[1 - axis] - start[1 - axis])
+            clipped.append((other, edge) if axis else (edge, other))
+        if end_inside:
+            clipped.append(end)
+    return clipped
+
+
 def slide_images(slide, width, height):
+    def visible_images(shape, place):
+        if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+            def in_group(x, y):
+                return place(*group_bounds(shape, (x, y, x, y))[:2])
+
+            for child in shape.shapes:
+                yield from visible_images(child, in_group)
+            return
+        for part, crop, _, _ in sized_images(shape):
+            x, y, w, h = shape_frame(shape)
+            corners = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
+            frame = [place(*rotated_crop(shape, (px, py, 0, 0))[:2]) for px, py in corners]
+            points = frame
+            for axis, edge, direction in ((0, 0, 1), (0, width, -1), (1, 0, 1), (1, height, -1)):
+                points = clip_polygon(points, axis, edge, direction)
+            area = abs(sum(
+                x1 * y2 - x2 * y1
+                for (x1, y1), (x2, y2) in zip(points, points[1:] + points[:1], strict=True)
+            )) / 2
+            yield part, crop, dist(frame[0], frame[1]), dist(frame[0], frame[3]), area
+
     shapes = list(slide.shapes)
     backdrop = background_picture(slide, width, height)
     if backdrop is not None:
         shapes.insert(0, backdrop)
     # Replica a enumeração do extrair antes da ordenação por área.
     for shape in reading_order(shapes):
-        yield from sized_images(shape)
+        yield from visible_images(shape, lambda x, y: (x, y))
 
 
 def image_signature(part, crop=None):
@@ -745,6 +781,37 @@ def image_signature(part, crop=None):
     return digest
 
 
+def match_image_occurrences(origins, output, origin_order):
+    matches = []
+    for signature in origins:
+        matches.append([
+            index for index, signatures in enumerate(output)
+            if any(signature == digest or (
+                isinstance(signature, int) and isinstance(digest, int)
+                and (signature ^ digest).bit_count() <= 10
+            ) for digest in signatures)
+        ])
+
+    owners = {}
+    for origin in origin_order:
+        # Procura uma saída livre, remanejando correspondências anteriores se preciso.
+        queue = [origin]
+        previous = {origin: (None, None)}
+        for current in queue:
+            free = next((index for index in matches[current] if index not in owners), None)
+            if free is not None:
+                while free is not None:
+                    owners[free] = current
+                    current, free = previous[current]
+                break
+            for index in matches[current]:
+                owner = owners[index]
+                if owner not in previous:
+                    previous[owner] = current, index
+                    queue.append(owner)
+    return set(owners.values())
+
+
 def compare_images(deck, source, numbers, omitted_images, findings):
     width, height = source.slide_width, source.slide_height
     slide_area = width * height
@@ -752,10 +819,9 @@ def compare_images(deck, source, numbers, omitted_images, findings):
     candidates = []
     unknown = set(omitted_images)
     for number in numbers:
-        for index, (part, crop, w, h) in enumerate(slide_images(source.slides[number - 1], width, height), 1):
+        for index, (part, crop, w, h, area) in enumerate(slide_images(source.slides[number - 1], width, height), 1):
             key = (number, index)
             unknown.discard(key)
-            area = w * h
             if area < slide_area * 0.02:
                 continue
             background = area >= slide_area * 0.90
@@ -772,23 +838,26 @@ def compare_images(deck, source, numbers, omitted_images, findings):
     if not candidates:
         return images
 
-    output = set()
-    output_parts = set()
+    output = []
+    full_signature = cache(image_signature)
+    output_min_area = deck.slide_width * deck.slide_height * 0.02
     for slide in deck.slides:
-        for part, crop, _, _ in slide_images(slide, deck.slide_width, deck.slide_height):
-            output_parts.add(part)
+        for part, crop, _, _, area in slide_images(slide, deck.slide_width, deck.slide_height):
+            if area < output_min_area:
+                continue
+            signatures = {full_signature(part)}
             if crop is not None and any((crop.l, crop.t, crop.r, crop.b)):
                 signature = image_signature(part, crop)
                 if signature is not None:
-                    output.add(signature)
-    output.update(image_signature(part) for part in output_parts)
-    hashes = [digest for digest in output if isinstance(digest, int)]
-    for part, crop, background, item in candidates:
-        signature = image_signature(part, crop)
-        found = signature in output or (
-            isinstance(signature, int) and any((signature ^ digest).bit_count() <= 10 for digest in hashes)
-        )
-        if found:
+                    signatures.add(signature)
+            output.append(signatures)
+
+    # A falta de conteúdo reprova, por isso o pareamento de fundos tem menor prioridade.
+    origin_order = sorted(range(len(candidates)), key=lambda index: candidates[index][2])
+    signatures = [image_signature(part, crop) for part, crop, _, _ in candidates]
+    matched = match_image_occurrences(signatures, output, origin_order)
+    for index, (_, _, background, item) in enumerate(candidates):
+        if index in matched:
             images["kept"] += not background
             continue
         if not background:

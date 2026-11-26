@@ -115,6 +115,14 @@ def save_image_deck(path, mode):
 
     if mode == "background":
         add_picture(slide.shapes, image, 0, 0, 9, 7.5)
+    elif mode == "partial_background":
+        add_picture(slide.shapes, image, -2, 0, 6, 12)
+    elif mode in {"miniature", "off_slide_miniature"}:
+        left, width = (1, 1) if mode == "miniature" else (-3, 4)
+        add_picture(slide.shapes, image.crop((0, 0, 80, 80)), left, 1, width, 1)
+    elif mode == "rotated_miniature":
+        picture = add_picture(slide.shapes, image.crop((0, 0, 80, 80)), 2, 3, 6, 0.2)
+        picture.rotation = 45
     elif mode in {"origin", "group", "icons"}:
         # A ordem do extrair segue a posição, mesmo com os objetos empilhados ao contrário.
         if mode == "group":
@@ -126,12 +134,18 @@ def save_image_deck(path, mode):
         if mode != "icons":
             picture.crop_right = 0.5
         add_picture(slide.shapes, image, 0, 0, 1, 1)
-    elif mode in {"same_crop", "opposite_crop"}:
+    elif mode in {"same_crop", "opposite_crop", "duplicate", "mixed_crop", "two_variants"}:
         picture = add_picture(slide.shapes, image, 1, 1, 4, 3)
-        if mode == "same_crop":
-            picture.crop_right = 0.5
-        else:
+        if mode == "opposite_crop":
             picture.crop_left = 0.5
+        else:
+            picture.crop_right = 0.5
+        if mode in {"duplicate", "mixed_crop"}:
+            second = add_picture(slide.shapes, image, 5, 1, 4, 3)
+            if mode == "duplicate":
+                second.crop_right = 0.5
+        elif mode == "two_variants":
+            add_picture(slide.shapes, image.crop((0, 0, 80, 80)), 5, 1, 4, 3)
     elif mode in {"kept", "recropped", "different", "uncropped"}:
         crop = {
             "different": (80, 0, 160, 80),
@@ -173,6 +187,31 @@ def test_content_image_fidelity(tmp_path, source, output, severity):
     assert [(item["rule"], item["severity"]) for item in report["findings"]] == (
         [("content_image", severity)] if severity else []
     )
+
+
+@pytest.mark.parametrize("source, output, total, missing_count", [
+    ("origin", "miniature", 1, 1),
+    ("origin", "off_slide_miniature", 1, 1),
+    ("origin", "rotated_miniature", 1, 1),
+    ("partial_background", "empty", 1, 1),
+    ("duplicate", "kept", 2, 1),
+    ("duplicate", "duplicate", 2, 0),
+    ("mixed_crop", "same_crop", 2, 1),
+    ("mixed_crop", "two_variants", 2, 0),
+])
+def test_content_image_fidelity_uses_visible_area_and_occurrences(tmp_path, source, output, total, missing_count):
+    origin, deck = tmp_path / "original.pptx", tmp_path / "aula.pptx"
+    save_image_deck(origin, source)
+    save_image_deck(deck, output)
+
+    result = run_cli("conferir", deck, "--origem", origin, "--json")
+    report = json.loads(result.stdout)
+    images = report["content"]["images"]
+    assert [images["origin"], images["kept"], len(images["missing"])] == [total, total - missing_count, missing_count]
+    assert [item["severity"] for item in report["findings"] if item["rule"] == "content_image"] == [
+        "error"
+    ] * missing_count
+    assert result.returncode == int(bool(missing_count)), result.stderr or result.stdout
 
 
 def test_content_image_omission_uses_extracted_index(tmp_path):
