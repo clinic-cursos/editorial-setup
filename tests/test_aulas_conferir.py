@@ -1000,3 +1000,23 @@ def test_content_accepts_title_repeated_on_split_slides(tmp_path):
     content = json.loads(result.stdout)["content"]
     assert content["origin_tokens"] == content["kept_tokens"] == 14
     assert content["divergences"] == []
+
+
+def test_content_repeated_number_on_previous_slide_does_not_pull_title_window_back(tmp_path):
+    # "02" também está no slide anterior: não pode puxar o trecho do slide 2 para trás e perder o título.
+    origin = tmp_path / "original.pptx"
+    deck = tmp_path / "aula.pptx"
+    save_content_deck(origin, "02\nVisão geral", "02\nToxina botulínica\nMecanismo, duração e planejamento",
+                      "Toxina botulínica\nMecanismo de ação")
+    save_content_deck(deck, "02\nVisão geral", "02\nToxina botulínica\nDuração, mecanismo e planejamento",
+                      "Toxina botulínica\nMecanismo de ação")
+
+    result = run_cli("conferir", deck, "--origem", origin, "--json")
+    assert result.returncode == 1, result.stderr or result.stdout
+    content = json.loads(result.stdout)["content"]
+    assert content["origin_tokens"] == 15
+    assert content["kept_tokens"] == 14
+    assert content["divergences"] == [{
+        "origin_slide": 2, "paragraph": "Mecanismo, duração e planejamento",
+        "missing": ["duração"], "replaced_by": [],
+    }]

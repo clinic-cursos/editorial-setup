@@ -667,7 +667,10 @@ def compare_content(deck, source, numbers):
                 if needle not in repeated and (hit := find(needle, cursor, len(output))) is not None]
         unique_hits.append(hits)
         if not hits:
-            hits = [find(needle, cursor, len(output)) for _, _, needle in paragraphs if needle in repeated]
+            needles = [needle for _, _, needle in paragraphs if needle in repeated]
+            nearest = {hit for needle in needles if (hit := find(needle, cursor, len(output))) is not None}
+            if nearest:
+                hits = [max(nearest, key=lambda hit: (sum(needle in searchable[hit] for needle in needles), -hit))]
         cursor = min((hit for hit in hits if hit is not None), default=cursor)
         anchors.append(cursor)
 
