@@ -51,6 +51,8 @@ def main():
     check = commands.add_parser("conferir", help="Confere um PowerPoint pelo padrão editorial")
     check.add_argument("deck", type=Path)
     check.add_argument("--estilo", choices=conferir.PALETTES, default="padrao")
+    check.add_argument("--origem", type=Path, help="Deck original para conferir a fidelidade do texto")
+    check.add_argument("--origem-slides", help="Números e intervalos de slides da origem, como 3,5-9")
     check.add_argument("--json", action="store_true")
     preview = commands.add_parser("previa", help="Gera um PNG por slide")
     preview.add_argument("deck", type=Path)
@@ -58,8 +60,11 @@ def main():
     args = parser.parse_args()
 
     if args.command == "conferir":
+        if args.origem_slides is not None and args.origem is None:
+            check.error("--origem-slides exige --origem")
         try:
-            return conferir.report(args.deck, args.estilo, as_json=args.json)
+            return conferir.report(args.deck, args.estilo, as_json=args.json,
+                                   origin=args.origem, origin_selection=args.origem_slides)
         except ValueError as exc:
             check.error(str(exc))
     if args.command == "previa":

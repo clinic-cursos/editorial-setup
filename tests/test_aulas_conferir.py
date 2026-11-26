@@ -10,7 +10,7 @@ from pptx.enum.dml import MSO_THEME_COLOR
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
 from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.oxml import parse_xml
-from pptx.oxml.ns import nsdecls
+from pptx.oxml.ns import nsdecls, qn
 from pptx.util import Inches, Pt
 import pytest
 
@@ -33,6 +33,118 @@ def write_script(tmp_path, style, slides):
     return script
 
 
+def add_content_text(shapes, value):
+    box = shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(1))
+    run = box.text_frame.paragraphs[0].add_run()
+    run.text = value
+    run.font.name = "Montserrat"
+    run.font.size = Pt(16)
+    run.font.color.rgb = RGBColor.from_string("404040")
+    return box
+
+
+def save_content_deck(path, *slides):
+    deck = Presentation()
+    for value in slides:
+        slide = deck.slides.add_slide(deck.slide_layouts[6])
+        add_content_text(slide.shapes, value)
+    deck.save(path)
+
+
+@pytest.mark.parametrize("rewritten,kept,divergence", [
+    (("ATE\u0301 **12** UNIDADES",), 3, None),
+    (("Até\u00a012",), 2, {"origin_slide": 1, "missing": ["unidades"], "replaced_by": []}),
+    (("Até 15 unidades",), 2, {"origin_slide": 1, "missing": ["12"], "replaced_by": ["15"]}),
+    (("unidades Até 12",), 2, {"origin_slide": 1, "missing": ["unidades"], "replaced_by": []}),
+    (("Kicker Até 12 unidades",), 3, None),
+    (("Até 12", "unidades"), 3, None),
+])
+def test_content_fidelity(tmp_path, rewritten, kept, divergence):
+    origin = tmp_path / "original.pptx"
+    deck = tmp_path / "aula.pptx"
+    save_content_deck(origin, "Até\u00a012 unidades")
+    save_content_deck(deck, *rewritten)
+
+    result = run_cli("conferir", deck, "--origem", origin, "--json")
+    assert result.returncode == int(divergence is not None), result.stderr or result.stdout
+    report = json.loads(result.stdout)
+    assert report["content"] == {
+        "origin": str(origin), "origin_tokens": 3, "kept_tokens": kept,
+        "fidelity_pct": 100 if kept == 3 else pytest.approx(200 / 3, abs=0.01),
+        "divergences": [divergence] if divergence else [],
+    }
+    assert report["errors"] == int(divergence is not None)
+    assert [(item["slide"], item["rule"], item["severity"]) for item in report["findings"]] == (
+        [(1, "content", "error")] if divergence else []
+    )
+
+
+def test_content_reads_nested_groups_and_tables_without_notes_or_metadata(tmp_path):
+    origin = tmp_path / "original.pptx"
+    deck = tmp_path / "aula.pptx"
+    source = Presentation()
+    slide = source.slides.add_slide(source.slide_layouts[6])
+    box = add_content_text(slide.shapes, "Primeira")
+    table = slide.shapes.add_table(1, 2, Inches(1), Inches(3), Inches(4), Inches(1))
+    table.table.cell(0, 0).text = "Segunda"
+    table.table.cell(0, 1).text = "Terceira"
+    inner = slide.shapes.add_group_shape([box, table])
+    slide.shapes.add_group_shape([inner])
+    slide.notes_slide.notes_text_frame.text = "Nota do apresentador"
+    for placeholder in ("sldNum", "ftr", "dt"):
+        box = add_content_text(slide.shapes, placeholder)
+        properties = box._element.find(f"{qn('p:nvSpPr')}/{qn('p:nvPr')}")
+        properties.append(parse_xml(f'<p:ph {nsdecls("p")} type="{placeholder}"/>'))
+    source.save(origin)
+    save_content_deck(deck, "Primeira Segunda Terceira")
+
+    result = run_cli("conferir", deck, "--origem", origin, "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    content = json.loads(result.stdout)["content"]
+    assert content["origin_tokens"] == content["kept_tokens"] == 3
+    assert content["divergences"] == []
+
+
+def test_content_selection_reports_actual_origin_slide_numbers(tmp_path):
+    origin = tmp_path / "original.pptx"
+    deck = tmp_path / "aula.pptx"
+    save_content_deck(origin, "Ignorado", "Primeiro", "Segundo", "Terceiro")
+    save_content_deck(deck, "Primeiro")
+
+    result = run_cli("conferir", deck, "--origem", origin, "--origem-slides", "4,2-3", "--json")
+    assert result.returncode == 1, result.stderr or result.stdout
+    report = json.loads(result.stdout)
+    assert report["content"]["origin_tokens"] == 3
+    assert report["content"]["divergences"] == [
+        {"origin_slide": 3, "missing": ["segundo"], "replaced_by": []},
+        {"origin_slide": 4, "missing": ["terceiro"], "replaced_by": []},
+    ]
+    assert report["errors"] == 2
+    assert report["model_score"]["min"] == 100
+    assert [(item["slide"], item["rule"]) for item in report["findings"]] == [(3, "content"), (4, "content")]
+
+    result = run_cli("conferir", deck, "--origem", origin, "--origem-slides", "4,2-3")
+    assert result.returncode == 1, result.stderr
+    assert "Slide 3 da origem" in result.stdout
+    assert "segundo" in result.stdout
+
+
+@pytest.mark.parametrize("selection,has_origin,error", [
+    ("1", False, "--origem"),
+    ("1,5-3", True, "seletor fora do deck"),
+    ("primeiro", True, "seletor inválido"),
+])
+def test_content_rejects_invalid_origin_selection(tmp_path, selection, has_origin, error):
+    deck = tmp_path / "aula.pptx"
+    save_content_deck(deck, "Texto")
+    origin_args = ("--origem", deck) if has_origin else ()
+
+    result = run_cli("conferir", deck, *origin_args, "--origem-slides", selection)
+    assert result.returncode == 2
+    assert "unrecognized arguments" not in result.stderr
+    assert error in result.stderr
+
+
 @pytest.mark.parametrize("style,script", [
     ("padrao", EXAMPLE),
     ("ousado", SKILL / "references/modelo_hof_roteiro.json"),
@@ -47,6 +159,7 @@ def test_generated_deck_passes(tmp_path, style, script):
     assert checked.returncode == 0, checked.stderr or checked.stdout
     report = json.loads(checked.stdout)
     assert report["errors"] == 0
+    assert "content" not in report
     assert report["scores"] == [
         {"slide": number, "score": 100, "gaps": []}
         for number in range(1, len(Presentation(deck).slides) + 1)

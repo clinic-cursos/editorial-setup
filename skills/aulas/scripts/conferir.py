@@ -5,15 +5,16 @@ import re
 import shutil
 import subprocess
 from collections import Counter, defaultdict
+from difflib import SequenceMatcher
 from functools import cached_property
-from itertools import combinations
+from itertools import combinations, groupby
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unicodedata import combining, normalize
 
 from lxml import etree
 from pptx.dml.color import RGBColor
-from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.enum.shapes import MSO_SHAPE_TYPE, PP_PLACEHOLDER
 from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.oxml import parse_xml
@@ -24,9 +25,9 @@ import bold_deck
 import clinic_deck
 from restyle import (
     PAINT_TAGS, annotation_colors, bounds, cell_fill, cell_outlines, contrast_ratio, fill_surface,
-    matches_annotation, open_deck,
+    matches_annotation, open_deck, reading_order,
     rgb_channels, shape_paint, shape_surfaces, slide_surface, solid_color, solid_fill_color,
-    slide_shape_roles, table_style, visible_color,
+    slide_numbers, slide_shape_roles, table_style, texts, visible_color,
 )
 
 
@@ -51,6 +52,7 @@ SCORE_CATEGORY_BY_RULE = {
     for category, (_, rules) in SCORE_CATEGORIES.items()
     for rule in rules
 }
+CONTENT_METADATA = {PP_PLACEHOLDER.SLIDE_NUMBER, PP_PLACEHOLDER.FOOTER, PP_PLACEHOLDER.DATE}
 
 
 # Tons locais de clinic_deck.image, prompt_box, tabela, precificacao e parcerias.
@@ -579,7 +581,55 @@ def score_slides(slide_count, style, findings):
     return scores, model_score
 
 
-def inspect(path, style):
+def content_text(shapes):
+    for shape in reading_order(shapes):
+        if shape.is_placeholder and shape.placeholder_format.type in CONTENT_METADATA:
+            continue
+        if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+            yield from content_text(shape.shapes)
+        else:
+            yield from texts(shape)
+
+
+def slide_tokens(slide):
+    for value in content_text(slide.shapes):
+        yield from re.findall(r"\w+", normalize("NFC", value).casefold())
+
+
+def compare_content(deck, origin, selection):
+    source = open_deck(origin)
+    original = []
+    source_slides = []
+    for number in slide_numbers(selection, len(source.slides)):
+        tokens = list(slide_tokens(source.slides[number - 1]))
+        original.extend(tokens)
+        source_slides.extend([number] * len(tokens))
+    output = [token for slide in deck.slides for token in slide_tokens(slide)]
+    matcher = SequenceMatcher(None, original, output, autojunk=False)
+    kept = 0
+    divergences = []
+    for tag, start, end, output_start, output_end in matcher.get_opcodes():
+        if tag == "equal":
+            kept += end - start
+        elif tag in {"delete", "replace"}:
+            replacement = output[output_start:output_end]
+            for number, positions in groupby(range(start, end), source_slides.__getitem__):
+                divergences.append({
+                    "origin_slide": number,
+                    "missing": [original[position] for position in positions],
+                    "replaced_by": replacement,
+                })
+    total = len(original)
+    return {
+        "origin": str(origin),
+        "origin_tokens": total,
+        "kept_tokens": kept,
+        "fidelity_pct": kept * 10_000 // total / 100 if total else 100,
+        "divergences": divergences,
+    }
+
+
+def inspect(path, style, *, origin=None, origin_selection=None):
     deck = open_deck(path)
     palette = PALETTES[style]
     findings = []
@@ -632,16 +682,29 @@ def inspect(path, style):
                 add("text_overlap", f"Texto sobreposto: {upper.name} invade a caixa de {lower.name}.",
                     severity, upper.name)
     slide_count = len(deck.slides)
+    # Divergências de conteúdo apontam para slides da origem, que podem ter outra numeração.
     scores, model_score = score_slides(slide_count, style, findings)
-    return {"style": style, "slides": slide_count, "findings": findings,
-            "scores": scores, "model_score": model_score,
-            "preserved_findings": preserved_findings, "preserved_warnings": len(preserved_findings),
-            "errors": sum(item["severity"] == "error" for item in findings),
-            "warnings": sum(item["severity"] == "warning" for item in findings)}
+    result = {"style": style, "slides": slide_count, "findings": findings,
+              "scores": scores, "model_score": model_score,
+              "preserved_findings": preserved_findings, "preserved_warnings": len(preserved_findings)}
+    if origin is not None:
+        content = compare_content(deck, origin, origin_selection)
+        result["content"] = content
+        for item in content["divergences"]:
+            missing = " ".join(item["missing"])
+            replacement = " ".join(item["replaced_by"])
+            message = f"Trecho ausente ou fora de ordem: {missing}."
+            if replacement:
+                message = f"Trecho trocado: {missing} por {replacement}."
+            findings.append({"slide": item["origin_slide"], "shape": None, "rule": "content",
+                             "severity": "error", "message": message})
+    result["errors"] = sum(item["severity"] == "error" for item in findings)
+    result["warnings"] = sum(item["severity"] == "warning" for item in findings)
+    return result
 
 
-def report(path, style, *, as_json=False):
-    result = inspect(path, style)
+def report(path, style, *, as_json=False, origin=None, origin_selection=None):
+    result = inspect(path, style, origin=origin, origin_selection=origin_selection)
     if as_json:
         print(json.dumps(result, ensure_ascii=False))
     else:
@@ -651,7 +714,8 @@ def report(path, style, *, as_json=False):
         for item in result["findings"]:
             severity = "Reprovação" if item["severity"] == "error" else "Aviso"
             shape = f" ({item['shape']})" if item["shape"] else ""
-            print(f"Slide {item['slide']}{shape} | {severity}: {item['message']}")
+            source = " da origem" if item["rule"] == "content" else ""
+            print(f"Slide {item['slide']}{source}{shape} | {severity}: {item['message']}")
         counts = Counter((item["slide"], item["rule"]) for item in result["preserved_findings"])
         for (slide, rule), count in sorted(counts.items()):
             singular, plural = PRESERVED_WARNING_LABELS[rule]
@@ -666,6 +730,8 @@ def report(path, style, *, as_json=False):
                 categories = ", ".join(sorted({gap["category"] for gap in item["gaps"]}))
                 print(f"Slide {item['slide']} | Placar do modelo: {item['score']}/100 | "
                       f"Categorias faltantes: {categories}")
+        if "content" in result:
+            print(f"Fidelidade de conteúdo: {result['content']['fidelity_pct']:g}%")
     return int(result["errors"] > 0)
 
 
