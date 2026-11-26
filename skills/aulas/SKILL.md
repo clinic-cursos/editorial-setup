@@ -75,7 +75,7 @@ Nos dois estilos, o gerador usa espaços não separáveis entre números e suas 
 
 Use [o roteiro de exemplo](references/exemplo_ousado.json) como ponto de partida. Na raiz, declare `estilo` como `"ousado"` e forneça `slides`, uma lista de objetos. O `titulo` da raiz é opcional e identifica a aula no arquivo de prompts. O booleano opcional `avulso` impede as inserções automáticas quando vale `true`. Em aulas completas, os booleanos opcionais `precificacao` e `parcerias` controlam essas inserções e valem `true` por padrão.
 
-Cada slide precisa de `tipo`. Todos aceitam `notas`, texto opcional para o apresentador. Os campos da tabela são opcionais para o gerador, salvo os indicados como obrigatórios. Use texto simples quando o formato não estiver indicado. As quantidades e linhas são recomendações de espaço. Em slides de conteúdo, mantenha cerca de 40 palavras e confira a prévia.
+Cada slide precisa de `tipo`. Todos aceitam `notas`, texto opcional para o apresentador. Os campos da tabela são opcionais para o gerador, salvo os indicados como obrigatórios. Use texto simples quando o formato não estiver indicado. As quantidades e linhas são recomendações de espaço. Na produção, mantenha cerca de 40 palavras em slides de conteúdo e confira a prévia.
 
 | Tipo | Campos e formato | Limite prático | Sem imagem fornecida |
 |---|---|---|---|
@@ -117,12 +117,20 @@ Os tipos `tabela`, `grafico`, `antes_depois`, `artigo`, `caso_clinico` e `refere
 
 1. **Aula do zero com conteúdo.** Leia os materiais e monte o roteiro JSON seguindo a seção abaixo. Rode `gerar`.
 2. **Deck ou slide de referência.** Rode `extrair` no PowerPoint recebido. Use `--slides` para selecionar números ou intervalos. A ferramenta grava `roteiro-rascunho.json` e a pasta `img/`. As imagens PNG e JPEG saem com o recorte do slide original e recebem `"recortada": true` no rascunho quando o recorte é aplicado. No rascunho, cada item de `imagens` traz `caminho` e `decorativa`. Use a lista diretamente nos tipos que recebem `imagens`, como `caso_clinico`, nos dois estilos. O gerador aceita também caminhos em texto, resolve caminhos relativos à pasta do roteiro e ignora itens com `"decorativa": true`.
-   - Confira a ordem e a integridade dos textos, ajuste o texto sem alterar o sentido e declare o estilo.
+   - Confira a ordem e a integridade dos textos e declare o estilo.
    - Escolha primeiro um tipo nativo do modelo. O `extrair` sugere `preservado` quando encontra no conteúdo a copiar uma marcação desenhada sobre imagem (inclusive ilustração anatômica), uma tabela ou pelo menos três imagens de conteúdo. Para uma ou duas imagens sem marcação ou tabela, use `texto_imagem` com `imagem_modo` ou outro tipo nativo adequado.
    - Rode `gerar` com o roteiro ajustado. O rascunho vem com `"avulso": true` para conservar a seleção sem inserções automáticas.
 3. **Slide avulso ou pontual a corrigir.** Monte um roteiro só com os slides pedidos e use `"avulso": true`. Informe no roteiro o `numero` de cada módulo avulso. Para correção, parta do roteiro da versão a corrigir ou use `extrair` com a seleção do slide. Se a pessoa pediu o deck inteiro corrigido, mantenha os demais slides no roteiro e gere o deck completo.
 
 `"avulso": true` funciona nos dois estilos e gera só os slides declarados. Inclua capa, encerramento, precificação ou parcerias no roteiro apenas se fizerem parte da seleção pedida.
+
+## Modos da frente Slides
+
+- **Produção:** crie uma aula do zero a partir do material. A estrutura e a densidade de cerca de 40 palavras por slide de conteúdo descritas nesta skill valem neste modo.
+- **Refatoração ou verificação de deck enviado:** preserve o conteúdo integralmente, sem reduzir, cortar, alterar, reordenar nem desviar o sentido. Se não couber, divida em mais slides do modelo, sempre entre parágrafos e nunca no meio de um parágrafo, pois `conferir --origem` procura cada parágrafo inteiro em um slide. A checagem não detecta a troca de ordem entre parágrafos no mesmo slide; o revisor confere a ordem pela prévia. Na refatoração, rode `conferir` com `--origem <deck enviado>` e só entregue com 100% de fidelidade de conteúdo. Na verificação sem refazer, confira o deck enviado e devolva o placar do modelo, seus gaps e a fidelidade de conteúdo.
+- **Ajuste pontual:** mude somente o campo pedido. Parta do roteiro da versão anterior, rode `conferir` com `--origem <versão anterior>` e explique cada divergência como consequência da mudança pedida.
+
+Em qualquer modo, só entregue quando `model_score.min` for 100. Abaixo de 100, complete pelo roteiro o que falta no modelo e gere novamente. Nunca mude o modelo para fechar o placar.
 
 ## Como transformar o material em aula
 
@@ -141,7 +149,7 @@ Os tipos `tabela`, `grafico`, `antes_depois`, `artigo`, `caso_clinico` e `refere
    - complicação → `alerta`, sempre com sinais e conduta;
    - conceito → `texto_imagem`.
    Evite mais de 2 slides seguidos do mesmo tipo.
-4. **Densidade:** slide é apoio de aula. No máximo cerca de 40 palavras por slide de conteúdo, tópicos curtos, um conceito por slide. O detalhe vai para `notas`.
+4. **Densidade na produção:** slide é apoio de aula. No máximo cerca de 40 palavras por slide de conteúdo, tópicos curtos, um conceito por slide. O detalhe vai para `notas`.
 5. **Precisão técnica:** não invente dados, doses, calibres ou referências. Se o material não trouxer um número, deixe genérico ou marque `[confirmar]`. Prefira citar estudos que o professor enviou. Se precisar complementar evidência, busque no PubMed (se conectado) e cite.
 6. **Imagens:** use os arquivos enviados (caminho em `imagem`, `antes`, `depois`, `imagens`). Sem imagem, siga a seção "Direção de imagens": prompt para ilustrações, descrição da foto para casos reais.
 7. Monte o JSON do roteiro e siga a seção "Execução". Faça as correções no roteiro e gere uma nova versão.
@@ -187,12 +195,13 @@ No repositório:
 uv run --locked python skills/aulas/scripts/aulas.py extrair "Referência.pptx" rascunho/ --slides 3,5-9
 uv run --locked python skills/aulas/scripts/aulas.py gerar roteiro.json "Aula.pptx"
 uv run --locked python skills/aulas/scripts/aulas.py conferir "Aula.pptx" --estilo ousado --json > conferir.json
+uv run --locked python skills/aulas/scripts/aulas.py conferir "Aula-refatorada.pptx" --estilo ousado --origem "Deck-enviado.pptx" --json > conferir-fidelidade.json
 uv run --locked python skills/aulas/scripts/aulas.py previa "Aula.pptx" previa/
 ```
 
 Fora dele (skill instalada no ChatGPT, Codex ou Claude), com `python-pptx` instalado, use `python3 scripts/aulas.py` na pasta da skill, com os mesmos subcomandos.
 
-Troque os caminhos de exemplo pelos do projeto. Remova `--slides` para extrair o deck inteiro. Em `conferir`, use o mesmo estilo do roteiro. `gerar` já executa a checagem automática. Se `gerar` ou `conferir` reprovar, corrija o roteiro e gere novamente antes de encaminhar a versão.
+Troque os caminhos de exemplo pelos do projeto. Remova `--slides` para extrair o deck inteiro. Em `conferir`, use o mesmo estilo do roteiro. `gerar` já executa a checagem automática. Se `gerar` ou `conferir` reprovar, corrija o roteiro e gere novamente antes de encaminhar a versão. Para a refatoração ou ajuste pontual, passe a versão correspondente em `--origem`.
 
 No conteúdo copiado por `preservado`, o `conferir` reprova fonte fora da família Montserrat, preenchimento ou contorno sólido fora da paleta nas formas sujeitas à normalização e contraste de texto abaixo de 3:1 sobre fundo sólido conhecido. As reprovações e os avisos gerais aparecem em `findings` no JSON e em linhas individuais no terminal. Cores de marcadores pequenos e linhas sobre imagens continuam como avisos agrupados por slide e motivo no terminal, com detalhe por forma em `preserved_findings` no JSON.
 

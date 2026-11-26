@@ -1,6 +1,6 @@
 # Setup editorial da Clinic Editora
 
-Oito papéis de IA ajudam a transformar slides e apostilas em livros e a produzir aulas no padrão da Clinic. As mesmas skills são distribuídas para ChatGPT, Claude Code, Cowork, claude.ai e Codex.
+Oito papéis de IA atuam em duas frentes: Editorial (livros) e Slides. As mesmas skills são distribuídas para ChatGPT, Claude Code, Cowork, claude.ai e Codex.
 
 - [Guia da Paula](docs/guia-paula.md) para instalar no ChatGPT e conduzir um livro.
 - [Guia da equipe](docs/guia-equipe.md) para empacotar e instalar nas demais plataformas.

@@ -10,7 +10,7 @@ from pptx.enum.dml import MSO_THEME_COLOR
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
 from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.oxml import parse_xml
-from pptx.oxml.ns import nsdecls
+from pptx.oxml.ns import nsdecls, qn
 from pptx.util import Inches, Pt
 import pytest
 
@@ -18,6 +18,7 @@ import pytest
 SKILL = Path(__file__).resolve().parents[1] / "skills/aulas"
 CLI = SKILL / "scripts/aulas.py"
 EXAMPLE = SKILL / "references/exemplo_roteiro.json"
+BOLD_EXAMPLE = SKILL / "references/exemplo_ousado.json"
 
 
 def run_cli(*args, env=None):
@@ -32,10 +33,195 @@ def write_script(tmp_path, style, slides):
     return script
 
 
+def add_content_text(shapes, value, *, left=1, top=1, width=8):
+    box = shapes.add_textbox(Inches(left), Inches(top), Inches(width), Inches(1.5))
+    box.text = value
+    for paragraph in box.text_frame.paragraphs:
+        for run in paragraph.runs:
+            run.font.name = "Montserrat"
+            run.font.size = Pt(16)
+            run.font.color.rgb = RGBColor.from_string("404040")
+    return box
+
+
+def save_content_deck(path, *slides):
+    deck = Presentation()
+    for value in slides:
+        slide = deck.slides.add_slide(deck.slide_layouts[6])
+        add_content_text(slide.shapes, value)
+    deck.save(path)
+
+
+@pytest.mark.parametrize("original,rewritten,kept,missing,replaced_by", [
+    ("Até\u00a012 unidades", ("ATE\u0301 **12** UNIDADES",), 3, [], []),
+    ("Até\u00a012 unidades", ("Até\u00a012",), 2, ["unidades"], []),
+    ("Até\u00a012 unidades", ("Até 15 unidades",), 2, ["12"], ["15"]),
+    ("Até\u00a012 unidades", ("unidades Até 12",), 2, ["unidades"], []),
+    ("Até\u00a012 unidades", ("Kicker Até 12 unidades",), 3, [], []),
+    ("Até\u00a012 unidades", ("Até 12", "unidades"), 2, ["unidades"], []),
+    ("Até 12\nunidades", ("Até 12", "unidades"), 3, [], []),
+    ("Módulo 1", ("Módulo 01",), 2, [], []),
+    ("Veja ex clínicos", ("Veja exemplos clínicos",), 2, ["ex"], ["exemplos"]),
+    ("Os pacientes podem possuir sintomas", ("O paciente pode ter sintomas",), 1,
+     ["os", "pacientes", "podem", "possuir"], ["o", "paciente", "pode", "ter"]),
+    ("Primeiro. Uma frase inteira.", ("Primeiro.",), 1, ["uma", "frase", "inteira"], []),
+    ("a b c", ("a x b c",), 0, [], ["x"]),
+    ("a b c", ("kicker a x b y c rodapé",), 0, [], ["x", "y"]),
+])
+def test_content_fidelity(tmp_path, original, rewritten, kept, missing, replaced_by):
+    origin = tmp_path / "original.pptx"
+    deck = tmp_path / "aula.pptx"
+    save_content_deck(origin, original)
+    save_content_deck(deck, *rewritten)
+
+    diverged = bool(missing or replaced_by)
+    result = run_cli("conferir", deck, "--origem", origin, "--json")
+    assert result.returncode == int(diverged), result.stderr or result.stdout
+    report = json.loads(result.stdout)
+    total = len(original.split())
+    assert report["content"] == {
+        "origin": str(origin), "origin_tokens": total, "kept_tokens": kept,
+        "fidelity_pct": round(100 * kept / total, 2),
+        "divergences": [{
+            "origin_slide": 1, "paragraph": original, "missing": missing, "replaced_by": replaced_by,
+        }] if diverged else [],
+    }
+    assert report["errors"] == int(diverged)
+    assert [(item["slide"], item["rule"], item["severity"]) for item in report["findings"]] == (
+        [(1, "content", "error")] if diverged else []
+    )
+    if replaced_by and not missing:
+        assert report["findings"][0]["message"] == f"Trecho inserido: {' '.join(replaced_by)}."
+
+
+@pytest.mark.parametrize("original,shapes,total", [
+    ("Introdução\nAnatomia\nPlanejamento\nPrática",
+     [("Introdução\nPlanejamento", 1, 1), ("Anatomia\nPrática", 5, 1)], 4),
+    ("Título principal\nVisão geral", [("Visão geral", 1, 1), ("Título principal", 1, 3)], 4),
+    ("Cuidados após o procedimento.", [("Cuidados após", 1, 1), ("o procedimento.", 1, 3)], 4),
+])
+def test_content_accepts_changes_in_layout(tmp_path, original, shapes, total):
+    origin = tmp_path / "original.pptx"
+    deck = tmp_path / "aula.pptx"
+    save_content_deck(origin, original)
+    output = Presentation()
+    slide = output.slides.add_slide(output.slide_layouts[6])
+    for value, left, top in shapes:
+        add_content_text(slide.shapes, value, left=left, top=top, width=3.5)
+    output.save(deck)
+
+    result = run_cli("conferir", deck, "--origem", origin, "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    content = json.loads(result.stdout)["content"]
+    assert content["origin_tokens"] == content["kept_tokens"] == total
+    assert content["fidelity_pct"] == 100
+    assert content["divergences"] == []
+
+
+def test_content_cursor_uses_earliest_match_and_does_not_move_back(tmp_path):
+    origin = tmp_path / "original.pptx"
+    deck = tmp_path / "aula.pptx"
+    save_content_deck(origin, "Terceiro\nPrimeiro", "Segundo", "Ausente", "Início")
+    save_content_deck(deck, "Início", "Primeiro", "Segundo", "Terceiro")
+
+    result = run_cli("conferir", deck, "--origem", origin, "--json")
+    assert result.returncode == 1, result.stderr or result.stdout
+    content = json.loads(result.stdout)["content"]
+    assert content["origin_tokens"] == 5
+    assert content["kept_tokens"] == 3
+    assert content["divergences"] == [
+        {"origin_slide": 3, "paragraph": "Ausente", "missing": ["ausente"], "replaced_by": []},
+        {"origin_slide": 4, "paragraph": "Início", "missing": ["início"], "replaced_by": []},
+    ]
+
+
+def test_content_aligns_with_best_slide_in_cursor_window(tmp_path):
+    origin = tmp_path / "original.pptx"
+    deck = tmp_path / "aula.pptx"
+    save_content_deck(origin, "Abertura", "Veja riscos e benefícios clínicos")
+    save_content_deck(deck, "Veja riscos e prazos clínicos", "Abertura", "Veja riscos",
+                      "Outro assunto", "Veja riscos e critérios", "Veja riscos e benefícios gerais")
+
+    result = run_cli("conferir", deck, "--origem", origin, "--json")
+    assert result.returncode == 1, result.stderr or result.stdout
+    content = json.loads(result.stdout)["content"]
+    assert content["kept_tokens"] == 4
+    assert content["divergences"] == [{
+        "origin_slide": 2, "paragraph": "Veja riscos e benefícios clínicos",
+        "missing": ["benefícios", "clínicos"], "replaced_by": ["critérios"],
+    }]
+
+
+def test_content_reads_nested_groups_and_tables_without_notes_or_metadata(tmp_path):
+    origin = tmp_path / "original.pptx"
+    deck = tmp_path / "aula.pptx"
+    source = Presentation()
+    slide = source.slides.add_slide(source.slide_layouts[6])
+    box = add_content_text(slide.shapes, "Primeira")
+    table = slide.shapes.add_table(1, 2, Inches(1), Inches(3), Inches(4), Inches(1))
+    table.table.cell(0, 0).text = "Segunda\nQuarta"
+    table.table.cell(0, 1).text = "Terceira"
+    inner = slide.shapes.add_group_shape([box, table])
+    slide.shapes.add_group_shape([inner])
+    slide.notes_slide.notes_text_frame.text = "Nota do apresentador"
+    for placeholder in ("sldNum", "ftr", "dt"):
+        box = add_content_text(slide.shapes, placeholder)
+        properties = box._element.find(f"{qn('p:nvSpPr')}/{qn('p:nvPr')}")
+        properties.append(parse_xml(f'<p:ph {nsdecls("p")} type="{placeholder}"/>'))
+    source.save(origin)
+    save_content_deck(deck, "Primeira Segunda Terceira Quarta")
+
+    result = run_cli("conferir", deck, "--origem", origin, "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    content = json.loads(result.stdout)["content"]
+    assert content["origin_tokens"] == content["kept_tokens"] == 4
+    assert content["divergences"] == []
+
+
+def test_content_selection_reports_actual_origin_slide_numbers(tmp_path):
+    origin = tmp_path / "original.pptx"
+    deck = tmp_path / "aula.pptx"
+    save_content_deck(origin, "Ignorado", "Primeiro", "Segundo", "Terceiro")
+    save_content_deck(deck, "Primeiro")
+
+    result = run_cli("conferir", deck, "--origem", origin, "--origem-slides", "4,2-3", "--json")
+    assert result.returncode == 1, result.stderr or result.stdout
+    report = json.loads(result.stdout)
+    assert report["content"]["origin_tokens"] == 3
+    assert report["content"]["divergences"] == [
+        {"origin_slide": 3, "paragraph": "Segundo", "missing": ["segundo"], "replaced_by": []},
+        {"origin_slide": 4, "paragraph": "Terceiro", "missing": ["terceiro"], "replaced_by": []},
+    ]
+    assert report["errors"] == 2
+    assert report["model_score"]["min"] == 100
+    assert [(item["slide"], item["rule"]) for item in report["findings"]] == [(3, "content"), (4, "content")]
+
+    result = run_cli("conferir", deck, "--origem", origin, "--origem-slides", "4,2-3")
+    assert result.returncode == 1, result.stderr
+    assert "Slide 3 da origem" in result.stdout
+    assert "segundo" in result.stdout
+
+
+@pytest.mark.parametrize("selection,has_origin,error", [
+    ("1", False, "--origem"),
+    ("1,5-3", True, "seletor fora do deck"),
+    ("primeiro", True, "seletor inválido"),
+])
+def test_content_rejects_invalid_origin_selection(tmp_path, selection, has_origin, error):
+    deck = tmp_path / "aula.pptx"
+    save_content_deck(deck, "Texto")
+    origin_args = ("--origem", deck) if has_origin else ()
+
+    result = run_cli("conferir", deck, *origin_args, "--origem-slides", selection)
+    assert result.returncode == 2
+    assert "unrecognized arguments" not in result.stderr
+    assert error in result.stderr
+
+
 @pytest.mark.parametrize("style,script", [
     ("padrao", EXAMPLE),
     ("ousado", SKILL / "references/modelo_hof_roteiro.json"),
-    ("ousado", SKILL / "references/exemplo_ousado.json"),
+    ("ousado", BOLD_EXAMPLE),
 ])
 def test_generated_deck_passes(tmp_path, style, script):
     deck = tmp_path / "aula.pptx"
@@ -44,7 +230,73 @@ def test_generated_deck_passes(tmp_path, style, script):
     assert "Conferência" in generated.stdout
     checked = run_cli("conferir", deck, "--estilo", style, "--json")
     assert checked.returncode == 0, checked.stderr or checked.stdout
-    assert json.loads(checked.stdout)["errors"] == 0
+    report = json.loads(checked.stdout)
+    assert report["errors"] == 0
+    assert "content" not in report
+    assert report["scores"] == [
+        {"slide": number, "score": 100, "gaps": []}
+        for number in range(1, len(Presentation(deck).slides) + 1)
+    ]
+    assert report["model_score"] == {"min": 100, "mean": 100, "slides_below_100": 0}
+
+
+@pytest.mark.parametrize("change,category,rule,score", [
+    ("remove_logo", "elementos-base", "morph_shape", 80),
+    ("replace_font", "fonte", "font", 85),
+])
+def test_bold_model_score_reports_slide_gap(tmp_path, change, category, rule, score):
+    deck = tmp_path / "aula.pptx"
+    generated = run_cli("gerar", BOLD_EXAMPLE, deck, "--sem-conferir")
+    assert generated.returncode == 0, generated.stderr or generated.stdout
+    presentation = Presentation(deck)
+    slide = presentation.slides[0]
+    if change == "remove_logo":
+        logo = next(shape for shape in slide.shapes if shape.name == "!!logo")
+        logo._element.getparent().remove(logo._element)
+    else:
+        run = next(
+            run for shape in slide.shapes if shape.has_text_frame
+            for paragraph in shape.text_frame.paragraphs for run in paragraph.runs
+            if run.text.strip()
+        )
+        run.font.name = "Arial"
+    presentation.save(deck)
+
+    checked = run_cli("conferir", deck, "--estilo", "ousado", "--json")
+    assert checked.returncode == 1, checked.stderr or checked.stdout
+    report = json.loads(checked.stdout)
+    assert report["errors"] == 1
+    finding = next(item for item in report["findings"] if item["severity"] == "error")
+    assert (finding["slide"], finding["rule"]) == (1, rule)
+    assert report["scores"][0] == {
+        "slide": 1, "score": score,
+        "gaps": [{"category": category, "rule": rule, "message": finding["message"]}],
+    }
+    assert all(item["score"] == 100 for item in report["scores"][1:])
+    assert report["model_score"]["min"] == score
+    assert report["model_score"]["slides_below_100"] == 1
+
+    checked = run_cli("conferir", deck, "--estilo", "ousado")
+    assert checked.returncode == 1, checked.stderr or checked.stdout
+    total = len(presentation.slides)
+    score_lines = [line for line in checked.stdout.splitlines() if "Placar do modelo:" in line]
+    assert score_lines == [
+        f"Placar do modelo: {score}/100 ({total - 1} de {total} slides com 100)",
+        f"Slide 1 | Placar do modelo: {score}/100 | Categorias faltantes: {category}",
+    ]
+
+
+def test_unknown_error_rule_reduces_readability_score(monkeypatch):
+    monkeypatch.syspath_prepend(str(SKILL / "scripts"))
+    from conferir import score_slides
+
+    finding = {"slide": 1, "severity": "error", "rule": "new_rule", "message": "Regra nova."}
+    scores, _ = score_slides(1, "ousado", [finding])
+
+    assert scores == [{
+        "slide": 1, "score": 80,
+        "gaps": [{"category": "leitura", "rule": "new_rule", "message": "Regra nova."}],
+    }]
 
 
 def test_bold_fallbacks_pass(tmp_path):
@@ -79,11 +331,17 @@ def test_reports_rejections_and_warnings_by_slide(tmp_path):
     presentation.save(deck)
     result = run_cli("conferir", deck, "--json")
     assert result.returncode == 1
-    findings = json.loads(result.stdout)["findings"]
+    report = json.loads(result.stdout)
+    findings = report["findings"]
     assert {(item["slide"], item["rule"], item["severity"]) for item in findings} == {
         (2, "font", "error"), (2, "text_color", "error"), (2, "fill_color", "error"),
         (2, "bounds", "error"), (2, "overflow", "error"), (2, "marker", "warning"),
     }
+    assert [item["score"] for item in report["scores"]] == [100, 28]
+    assert {gap["rule"] for gap in report["scores"][1]["gaps"]} == {
+        "font", "text_color", "fill_color", "bounds", "overflow",
+    }
+    assert report["model_score"] == {"min": 28, "mean": 64, "slides_below_100": 1}
 
 
 @pytest.mark.parametrize("name,geometry,auto_size,parts,reason", [
@@ -444,12 +702,18 @@ def test_preserved_warnings_are_grouped_by_slide_and_rule(tmp_path):
     for number in (1, 2):
         assert lines.count(f"Slide {number} | Aviso: conteúdo preservado com 2 estouros de texto.") == 1
     assert "1 aviso(s), 4 aviso(s) em conteúdo preservado" in lines[0]
-    assert len(lines[1:]) == 3
+    assert len(lines[1:]) == 4
+    assert "Placar do modelo: 100/100 (2 de 2 slides com 100)" in lines
 
     result = run_cli("conferir", deck, "--json")
     assert result.returncode == 0, result.stderr or result.stdout
     report = json.loads(result.stdout)
     assert (report["errors"], report["warnings"], report["preserved_warnings"]) == (0, 1, 4)
+    assert report["scores"] == [
+        {"slide": 1, "score": 100, "gaps": []},
+        {"slide": 2, "score": 100, "gaps": []},
+    ]
+    assert report["model_score"] == {"min": 100, "mean": 100, "slides_below_100": 0}
     assert [(item["shape"], item["rule"]) for item in report["findings"]] == [("Nota editorial", "marker")]
     details = report["preserved_findings"]
     assert len(details) == 4
@@ -493,8 +757,23 @@ def test_bold_rejects_missing_markers_and_motion(tmp_path):
 
     result = run_cli("conferir", deck, "--estilo", "ousado", "--json")
     assert result.returncode == 1
-    findings = json.loads(result.stdout)["findings"]
+    report = json.loads(result.stdout)
+    findings = report["findings"]
     assert sorted(item["rule"] for item in findings) == ["animation", "morph", "morph_shape", "morph_shape"]
+    assert report["scores"][0]["score"] == 50
+    assert {gap["category"] for gap in report["scores"][0]["gaps"]} == {
+        "animacao", "transicao", "elementos-base",
+    }
+
+
+def test_empty_deck_has_no_score_deductions(tmp_path):
+    deck = tmp_path / "vazio.pptx"
+    Presentation().save(deck)
+    result = run_cli("conferir", deck, "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    report = json.loads(result.stdout)
+    assert report["scores"] == []
+    assert report["model_score"] == {"min": 100, "mean": 100, "slides_below_100": 0}
 
 
 def test_preview_reports_missing_soffice(tmp_path):

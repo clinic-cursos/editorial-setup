@@ -1,5 +1,9 @@
 # Histórico de versões
 
+## 0.2.9
+
+- A frente Slides define produção, refatoração ou verificação e ajuste pontual, com placar do modelo em 100 e fidelidade de conteúdo conferida pela origem.
+
 ## 0.2.8
 
 - A nota do apresentador nos slides de precificação orienta o ajuste da tabela sem citar ferramentas de IA.

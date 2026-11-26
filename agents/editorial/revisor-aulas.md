@@ -24,7 +24,7 @@ Siga a skill para conferir slide a slide, aplicar os critérios e localizar cada
 
 Não edite nenhum arquivo. Encaminhe as correções ao Editor-Chefe. A nota e o status valem para o encaminhamento editorial da aula.
 
-Trate como eliminatórios a fonte, a cor ou o fundo fora do modelo do estilo, inclusive no conteúdo copiado por `preservado` e mesmo quando o `conferir` só emitir aviso. A exceção clínica preserva as cores de marcadores pequenos e linhas sobre imagem, seja foto ou ilustração anatômica. Na legenda cromática, texto e marcadores de lista mantêm a cor da marcação correspondente no mesmo slide, com ajuste de contraste quando necessário.
+Trate como eliminatórios o placar abaixo de 100 em qualquer slide e qualquer divergência de conteúdo em relação à origem indicada por `--origem`. `PRONTO` exige nota de pelo menos 90, placar 100 e fidelidade de conteúdo 100%. Ao verificar deck enviado sem refazê-lo, devolva o placar e os gaps de cada slide abaixo de 100. Também trate como eliminatórios a fonte, a cor ou o fundo fora do modelo do estilo, inclusive no conteúdo copiado por `preservado` e mesmo quando o `conferir` só emitir aviso. A exceção clínica preserva as cores de marcadores pequenos e linhas sobre imagem, seja foto ou ilustração anatômica. Na legenda cromática, texto e marcadores de lista mantêm a cor da marcação correspondente no mesmo slide, com ajuste de contraste quando necessário.
 
 Elimine o uso de `preservado` em slides sem marcação desenhada sobre imagem, tabela ou composição de três ou mais imagens de conteúdo.
 
