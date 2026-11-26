@@ -4,6 +4,7 @@ import json
 import re
 import shutil
 import subprocess
+from bisect import bisect_right
 from collections import Counter, defaultdict
 from difflib import SequenceMatcher
 from functools import cached_property
@@ -640,29 +641,62 @@ def compare_content(deck, origin, selection):
     ]
     # Os espaços delimitam tokens, inclusive nas extremidades do slide.
     searchable = [f" {' '.join(tokens)} " for tokens in output]
-    cursor = total = kept = 0
-    divergences = []
+
+    def find(needle, start, end):
+        return next((index for index in range(start, end) if needle in searchable[index]), None)
+
+    slides = []
+    paragraph_counts = Counter()
     for number in slide_numbers(selection, len(source.slides)):
-        earliest = len(output)
+        paragraphs = []
         for paragraph in content_paragraphs(source.slides[number - 1].shapes):
             tokens = content_tokens(paragraph)
-            if not tokens:
-                continue
+            if tokens:
+                paragraphs.append((paragraph, tokens, f" {' '.join(tokens)} "))
+        slides.append((number, paragraphs))
+        paragraph_counts.update({needle for _, _, needle in paragraphs})
+
+    repeated = {needle for needle, count in paragraph_counts.items() if count > 1}
+    starts, anchors, unique_hits = [], [], []
+    cursor = 0
+    for _, paragraphs in slides:
+        starts.append(cursor)
+        hits = [hit for _, _, needle in paragraphs
+                if needle not in repeated and (hit := find(needle, cursor, len(output))) is not None]
+        unique_hits.append(hits)
+        if not hits:
+            hits = [find(needle, cursor, len(output)) for _, _, needle in paragraphs if needle in repeated]
+        cursor = min((hit for hit in hits if hit is not None), default=cursor)
+        anchors.append(cursor)
+
+    # Um título pode ficar em um slide separado, antes do primeiro parágrafo único.
+    segment_starts = []
+    segment_start = 0
+    for index, anchor in enumerate(anchors):
+        if index and anchors[index - 1] < anchor:
+            last_previous = max((hit for hit in unique_hits[index - 1] if hit < anchor),
+                                default=anchors[index - 1])
+            segment_start = last_previous + 1
+        segment_starts.append(segment_start)
+
+    total = kept = 0
+    divergences = []
+    for index, ((number, paragraphs), start) in enumerate(zip(slides, starts, strict=True)):
+        # Títulos repetidos ficam no trecho do próprio slide, inclusive se ele foi dividido.
+        next_anchor = bisect_right(anchors, anchors[index])
+        end = segment_starts[next_anchor] if next_anchor < len(anchors) else len(output)
+        for paragraph, tokens, needle in paragraphs:
             total += len(tokens)
-            needle = f" {' '.join(tokens)} "
-            match = next((index for index in range(cursor, len(output)) if needle in searchable[index]), None)
-            if match is not None:
-                earliest = min(earliest, match)
+            left, right = (segment_starts[index], end) if needle in repeated else (start, len(output))
+            if find(needle, left, right) is not None:
                 kept += len(tokens)
                 continue
-            matched, missing, replaced_by = align_paragraph(tokens, output[cursor:cursor + 4])
+            matched, missing, replaced_by = align_paragraph(tokens, output[left:min(left + 4, right)])
             kept += matched
             divergences.append({
                 "origin_slide": number, "paragraph": paragraph,
                 "missing": missing, "replaced_by": replaced_by,
             })
-        if earliest < len(output):
-            cursor = earliest
     return {
         "origin": str(origin),
         "origin_tokens": total,
