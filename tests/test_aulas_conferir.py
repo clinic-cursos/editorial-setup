@@ -126,6 +126,12 @@ def save_image_deck(path, mode):
         if mode != "icons":
             picture.crop_right = 0.5
         add_picture(slide.shapes, image, 0, 0, 1, 1)
+    elif mode in {"same_crop", "opposite_crop"}:
+        picture = add_picture(slide.shapes, image, 1, 1, 4, 3)
+        if mode == "same_crop":
+            picture.crop_right = 0.5
+        else:
+            picture.crop_left = 0.5
     elif mode in {"kept", "recropped", "different", "uncropped"}:
         crop = {
             "different": (80, 0, 160, 80),
@@ -140,6 +146,8 @@ def save_image_deck(path, mode):
 @pytest.mark.parametrize("source, output, severity", [
     ("origin", "kept", None),
     ("origin", "recropped", None),
+    ("origin", "same_crop", None),
+    ("origin", "opposite_crop", "error"),
     ("origin", "different", "error"),
     ("origin", "uncropped", "error"),
     ("origin", "empty", "error"),

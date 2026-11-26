@@ -772,9 +772,16 @@ def compare_images(deck, source, numbers, omitted_images, findings):
     if not candidates:
         return images
 
-    output_parts = {part for slide in deck.slides
-                    for part, _, _, _ in slide_images(slide, deck.slide_width, deck.slide_height)}
-    output = {image_signature(part) for part in output_parts}
+    output = set()
+    output_parts = set()
+    for slide in deck.slides:
+        for part, crop, _, _ in slide_images(slide, deck.slide_width, deck.slide_height):
+            output_parts.add(part)
+            if crop is not None and any((crop.l, crop.t, crop.r, crop.b)):
+                signature = image_signature(part, crop)
+                if signature is not None:
+                    output.add(signature)
+    output.update(image_signature(part) for part in output_parts)
     hashes = [digest for digest in output if isinstance(digest, int)]
     for part, crop, background, item in candidates:
         signature = image_signature(part, crop)
