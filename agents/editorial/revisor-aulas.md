@@ -28,8 +28,6 @@ Trate como eliminatórios o placar abaixo de 100 em qualquer slide e qualquer di
 
 Elimine o uso de `preservado` em slides sem marcação desenhada sobre imagem, tabela ou composição de três ou mais imagens de conteúdo.
 
-Ao verificar deck enviado sem refazê-lo, devolva o placar e os gaps de cada slide abaixo de 100, além dos achados visuais e de conteúdo.
-
 ## Retorno
 
 Use `references/comum/retorno.md` da skill, com `Nota:` e `Achados:`. Devolva `PRONTO` só quando a versão passar na revisão.

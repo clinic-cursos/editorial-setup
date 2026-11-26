@@ -127,7 +127,7 @@ Os tipos `tabela`, `grafico`, `antes_depois`, `artigo`, `caso_clinico` e `refere
 ## Modos da frente Slides
 
 - **Produção:** crie uma aula do zero a partir do material. A estrutura e a densidade de cerca de 40 palavras por slide de conteúdo descritas nesta skill valem neste modo.
-- **Refatoração ou verificação de deck enviado:** preserve o conteúdo integralmente, sem reduzir, cortar, alterar, reordenar nem desviar o sentido. Se não couber, divida em mais slides do modelo. Na refatoração, rode `conferir` com `--origem <deck enviado>` e só entregue com 100% de fidelidade de conteúdo. Na verificação sem refazer, confira o deck enviado e devolva o placar do modelo, seus gaps e a fidelidade de conteúdo.
+- **Refatoração ou verificação de deck enviado:** preserve o conteúdo integralmente, sem reduzir, cortar, alterar, reordenar nem desviar o sentido. Se não couber, divida em mais slides do modelo, sempre entre parágrafos e nunca no meio de um parágrafo, pois `conferir --origem` procura cada parágrafo inteiro em um slide. A checagem não detecta a troca de ordem entre parágrafos no mesmo slide; o revisor confere a ordem pela prévia. Na refatoração, rode `conferir` com `--origem <deck enviado>` e só entregue com 100% de fidelidade de conteúdo. Na verificação sem refazer, confira o deck enviado e devolva o placar do modelo, seus gaps e a fidelidade de conteúdo.
 - **Ajuste pontual:** mude somente o campo pedido. Parta do roteiro da versão anterior, rode `conferir` com `--origem <versão anterior>` e explique cada divergência como consequência da mudança pedida.
 
 Em qualquer modo, só entregue quando `model_score.min` for 100. Abaixo de 100, complete pelo roteiro o que falta no modelo e gere novamente. Nunca mude o modelo para fechar o placar.
