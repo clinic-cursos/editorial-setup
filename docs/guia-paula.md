@@ -49,7 +49,7 @@ Fale com o Editor-Chefe e anexe os materiais citados no pedido. Escolha uma das 
 
 O pedido de design system novo usa o estilo ousado do modelo mestre v1. Na refatoração, o conteúdo não pode ser reduzido, cortado, alterado, reordenado nem ter o sentido desviado; se não couber, o conteúdo é distribuído por mais slides do modelo. O ajuste pontual muda somente o campo pedido. O placar do modelo deve ser 100 em todos os slides. O Editor-Chefe encaminha o PowerPoint para sua conferência depois da revisão dos slides. A entrega também informa quantos quadros de prompt de imagem continuam pendentes, para você saber o que falta gerar.
 
-As imagens dos slides são geradas no próprio app quando há ferramenta disponível; as imagens de anatomia vêm marcadas para o professor conferir. Fotos de pacientes e imagens de antes e depois continuam sendo enviadas por você.
+As imagens dos slides são geradas no próprio app quando há ferramenta disponível; as de anatomia vêm listadas na entrega e com aviso nas notas do slide para o professor conferir. Fotos de pacientes e imagens de antes e depois continuam sendo enviadas por você.
 
 ### Antes do primeiro pedido de aula
 
