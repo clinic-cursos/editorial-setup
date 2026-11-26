@@ -1,5 +1,13 @@
 # Histórico de versões
 
+## 0.3.0
+
+- `9cdba2e`: o `conferir --origem` verifica a fidelidade das imagens de conteúdo, com opção para registrar omissões decididas pelo Editor-Chefe.
+- `0c9ef70`: o relatório do `conferir` informa por slide e no total os quadros de prompt de imagem pendentes.
+- `9c62561`: o `conferir --origem` compara imagens recortadas da origem com imagens inteiras na saída.
+- `598a51f`: a comparação de texto ancora slides repetidos no slide de saída com mais parágrafos, reduzindo falsos positivos.
+- A documentação do `texto_imagem` no estilo ousado inclui `referencia` para a referência bibliográfica fora do corpo.
+
 ## 0.2.9
 
 - A frente Slides define produção, refatoração ou verificação e ajuste pontual, com placar do modelo em 100 e fidelidade de conteúdo conferida pela origem.

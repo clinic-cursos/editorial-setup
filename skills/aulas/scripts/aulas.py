@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -37,6 +38,19 @@ def build_deck(spec, output, base_dir, layouts):
         layouts["preservado"] = layout
 
 
+def parse_image_omissions(value):
+    pairs = set()
+    for item in value.split(","):
+        match = re.fullmatch(r"([1-9][0-9]*):([1-9][0-9]*)", item.strip())
+        if match is None:
+            raise argparse.ArgumentTypeError(f"{item!r}: use slide:índice, como 8:3,8:4")
+        try:
+            pairs.add((int(match[1]), int(match[2])))
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(f"{item!r}: slide ou índice longo demais") from exc
+    return pairs
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -51,8 +65,10 @@ def main():
     check = commands.add_parser("conferir", help="Confere um PowerPoint pelo padrão editorial")
     check.add_argument("deck", type=Path)
     check.add_argument("--estilo", choices=conferir.PALETTES, default="padrao")
-    check.add_argument("--origem", type=Path, help="Deck original para conferir a fidelidade do texto")
+    check.add_argument("--origem", type=Path, help="Deck original para conferir a fidelidade do conteúdo")
     check.add_argument("--origem-slides", help="Números e intervalos de slides da origem, como 3,5-9")
+    check.add_argument("--imagens-omitidas", type=parse_image_omissions, default=frozenset(),
+                       help="Imagens omitidas pelo slide e índice do extrair, como 8:3,8:4")
     check.add_argument("--json", action="store_true")
     preview = commands.add_parser("previa", help="Gera um PNG por slide")
     preview.add_argument("deck", type=Path)
@@ -62,9 +78,12 @@ def main():
     if args.command == "conferir":
         if args.origem_slides is not None and args.origem is None:
             check.error("--origem-slides exige --origem")
+        if args.imagens_omitidas and args.origem is None:
+            check.error("--imagens-omitidas exige --origem")
         try:
             return conferir.report(args.deck, args.estilo, as_json=args.json,
-                                   origin=args.origem, origin_selection=args.origem_slides)
+                                   origin=args.origem, origin_selection=args.origem_slides,
+                                   omitted_images=args.imagens_omitidas)
         except ValueError as exc:
             check.error(str(exc))
     if args.command == "previa":
