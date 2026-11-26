@@ -42,9 +42,12 @@ Fale com o Editor-Chefe e anexe os materiais citados no pedido. Escolha uma das 
 
 - “Crie uma aula do zero para [curso] usando o conteúdo anexado. Use o estilo padrão da Clinic.”
 - “Refaça o deck ou slide anexado no design system novo, preservando o sentido do conteúdo.”
+- “Verifique o deck anexado sem refazê-lo. Devolva o placar do modelo e os gaps de cada slide.”
+- “Refatore o deck anexado no modelo. Preserve todo o conteúdo e compare com a origem.”
+- “Ajuste somente [campo] no deck anexado, usando o roteiro da versão anterior.”
 - “Crie um slide avulso sobre [tema] com o material anexado, ou corrija o slide [número] conforme [ajuste] e entregue só esse slide.”
 
-O pedido de design system novo usa o estilo ousado do modelo mestre v1. O Editor-Chefe encaminha o PowerPoint para sua conferência depois da revisão dos slides.
+O pedido de design system novo usa o estilo ousado do modelo mestre v1. Na refatoração, o conteúdo não pode ser reduzido, cortado, alterado, reordenado nem ter o sentido desviado; se não couber, o conteúdo é distribuído por mais slides do modelo. O ajuste pontual muda somente o campo pedido. O placar do modelo deve ser 100 em todos os slides. O Editor-Chefe encaminha o PowerPoint para sua conferência depois da revisão dos slides.
 
 ### Antes do primeiro pedido de aula
 

@@ -20,9 +20,10 @@ Dirija a aula seguindo a skill `aulas`. Monte ou ajuste o roteiro e gere o Power
 ## Processo
 
 1. Siga "Escolha a entrada" e "Estilos" na skill. Monte ou ajuste o roteiro JSON. Use `aulas.py extrair` para ler slides de um PowerPoint.
-2. Rode `aulas.py gerar`, depois `aulas.py conferir` com o estilo do roteiro e `--json` para salvar o relatório. Leia o resumo e os achados. Em caso de reprovação, corrija o roteiro e gere uma nova versão.
-3. Rode `aulas.py previa` e confira cada PNG para ver cortes, sobreposições e legibilidade. Se encontrar uma falha visual, corrija o roteiro e repita a geração, a checagem e a prévia. Se a prévia não puder ser gerada, devolva `BLOQUEADO` com o motivo.
-4. Devolva o .pptx, o roteiro, o relatório e a prévia. Inclua o arquivo de prompts de imagem se a ferramenta o gerou nesta execução.
+2. Identifique o modo em `Modos da frente Slides` na skill. Na refatoração ou ajuste pontual, rode `aulas.py conferir` com `--origem` apontando para o deck enviado ou versão anterior, conforme o pedido. Na verificação sem refazer, devolva placar e gaps. Só entregue com `model_score.min` igual a 100; abaixo disso, complete pelo roteiro o que falta no modelo e gere novamente, sem alterá-lo.
+3. Rode `aulas.py gerar`, depois `aulas.py conferir` com o estilo do roteiro e `--json` para salvar o relatório. Leia o resumo e os achados. Em caso de reprovação, corrija o roteiro e gere uma nova versão.
+4. Rode `aulas.py previa` e confira cada PNG para ver cortes, sobreposições e legibilidade. Se encontrar uma falha visual, corrija o roteiro e repita a geração, a checagem e a prévia. Se a prévia não puder ser gerada, devolva `BLOQUEADO` com o motivo.
+5. Devolva o .pptx, o roteiro, o relatório e a prévia. Inclua o arquivo de prompts de imagem se a ferramenta o gerou nesta execução.
 
 ## Limites
 
