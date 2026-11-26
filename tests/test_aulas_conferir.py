@@ -18,6 +18,7 @@ import pytest
 SKILL = Path(__file__).resolve().parents[1] / "skills/aulas"
 CLI = SKILL / "scripts/aulas.py"
 EXAMPLE = SKILL / "references/exemplo_roteiro.json"
+BOLD_EXAMPLE = SKILL / "references/exemplo_ousado.json"
 
 
 def run_cli(*args, env=None):
@@ -35,7 +36,7 @@ def write_script(tmp_path, style, slides):
 @pytest.mark.parametrize("style,script", [
     ("padrao", EXAMPLE),
     ("ousado", SKILL / "references/modelo_hof_roteiro.json"),
-    ("ousado", SKILL / "references/exemplo_ousado.json"),
+    ("ousado", BOLD_EXAMPLE),
 ])
 def test_generated_deck_passes(tmp_path, style, script):
     deck = tmp_path / "aula.pptx"
@@ -44,7 +45,59 @@ def test_generated_deck_passes(tmp_path, style, script):
     assert "Conferência" in generated.stdout
     checked = run_cli("conferir", deck, "--estilo", style, "--json")
     assert checked.returncode == 0, checked.stderr or checked.stdout
-    assert json.loads(checked.stdout)["errors"] == 0
+    report = json.loads(checked.stdout)
+    assert report["errors"] == 0
+    assert report["scores"] == [
+        {"slide": number, "score": 100, "gaps": []}
+        for number in range(1, len(Presentation(deck).slides) + 1)
+    ]
+    assert report["model_score"] == {"min": 100, "mean": 100, "slides_below_100": 0}
+
+
+@pytest.mark.parametrize("change,category,rule,score", [
+    ("remove_logo", "elementos-base", "morph_shape", 80),
+    ("replace_font", "fonte", "font", 85),
+])
+def test_bold_model_score_reports_slide_gap(tmp_path, change, category, rule, score):
+    deck = tmp_path / "aula.pptx"
+    generated = run_cli("gerar", BOLD_EXAMPLE, deck, "--sem-conferir")
+    assert generated.returncode == 0, generated.stderr or generated.stdout
+    presentation = Presentation(deck)
+    slide = presentation.slides[0]
+    if change == "remove_logo":
+        logo = next(shape for shape in slide.shapes if shape.name == "!!logo")
+        logo._element.getparent().remove(logo._element)
+    else:
+        run = next(
+            run for shape in slide.shapes if shape.has_text_frame
+            for paragraph in shape.text_frame.paragraphs for run in paragraph.runs
+            if run.text.strip()
+        )
+        run.font.name = "Arial"
+    presentation.save(deck)
+
+    checked = run_cli("conferir", deck, "--estilo", "ousado", "--json")
+    assert checked.returncode == 1, checked.stderr or checked.stdout
+    report = json.loads(checked.stdout)
+    assert report["errors"] == 1
+    finding = next(item for item in report["findings"] if item["severity"] == "error")
+    assert (finding["slide"], finding["rule"]) == (1, rule)
+    assert report["scores"][0] == {
+        "slide": 1, "score": score,
+        "gaps": [{"category": category, "rule": rule, "message": finding["message"]}],
+    }
+    assert all(item["score"] == 100 for item in report["scores"][1:])
+    assert report["model_score"]["min"] == score
+    assert report["model_score"]["slides_below_100"] == 1
+
+    checked = run_cli("conferir", deck, "--estilo", "ousado")
+    assert checked.returncode == 1, checked.stderr or checked.stdout
+    total = len(presentation.slides)
+    score_lines = [line for line in checked.stdout.splitlines() if "Placar do modelo:" in line]
+    assert score_lines == [
+        f"Placar do modelo: {score}/100 ({total - 1} de {total} slides com 100)",
+        f"Slide 1 | Placar do modelo: {score}/100 | Categorias faltantes: {category}",
+    ]
 
 
 def test_bold_fallbacks_pass(tmp_path):
@@ -79,11 +132,17 @@ def test_reports_rejections_and_warnings_by_slide(tmp_path):
     presentation.save(deck)
     result = run_cli("conferir", deck, "--json")
     assert result.returncode == 1
-    findings = json.loads(result.stdout)["findings"]
+    report = json.loads(result.stdout)
+    findings = report["findings"]
     assert {(item["slide"], item["rule"], item["severity"]) for item in findings} == {
         (2, "font", "error"), (2, "text_color", "error"), (2, "fill_color", "error"),
         (2, "bounds", "error"), (2, "overflow", "error"), (2, "marker", "warning"),
     }
+    assert [item["score"] for item in report["scores"]] == [100, 28]
+    assert {gap["rule"] for gap in report["scores"][1]["gaps"]} == {
+        "font", "text_color", "fill_color", "bounds", "overflow",
+    }
+    assert report["model_score"] == {"min": 28, "mean": 64, "slides_below_100": 1}
 
 
 @pytest.mark.parametrize("name,geometry,auto_size,parts,reason", [
@@ -444,12 +503,18 @@ def test_preserved_warnings_are_grouped_by_slide_and_rule(tmp_path):
     for number in (1, 2):
         assert lines.count(f"Slide {number} | Aviso: conteúdo preservado com 2 estouros de texto.") == 1
     assert "1 aviso(s), 4 aviso(s) em conteúdo preservado" in lines[0]
-    assert len(lines[1:]) == 3
+    assert len(lines[1:]) == 4
+    assert "Placar do modelo: 100/100 (2 de 2 slides com 100)" in lines
 
     result = run_cli("conferir", deck, "--json")
     assert result.returncode == 0, result.stderr or result.stdout
     report = json.loads(result.stdout)
     assert (report["errors"], report["warnings"], report["preserved_warnings"]) == (0, 1, 4)
+    assert report["scores"] == [
+        {"slide": 1, "score": 100, "gaps": []},
+        {"slide": 2, "score": 100, "gaps": []},
+    ]
+    assert report["model_score"] == {"min": 100, "mean": 100, "slides_below_100": 0}
     assert [(item["shape"], item["rule"]) for item in report["findings"]] == [("Nota editorial", "marker")]
     details = report["preserved_findings"]
     assert len(details) == 4
@@ -493,8 +558,23 @@ def test_bold_rejects_missing_markers_and_motion(tmp_path):
 
     result = run_cli("conferir", deck, "--estilo", "ousado", "--json")
     assert result.returncode == 1
-    findings = json.loads(result.stdout)["findings"]
+    report = json.loads(result.stdout)
+    findings = report["findings"]
     assert sorted(item["rule"] for item in findings) == ["animation", "morph", "morph_shape", "morph_shape"]
+    assert report["scores"][0]["score"] == 50
+    assert {gap["category"] for gap in report["scores"][0]["gaps"]} == {
+        "animacao", "transicao", "elementos-base",
+    }
+
+
+def test_empty_deck_has_no_score_deductions(tmp_path):
+    deck = tmp_path / "vazio.pptx"
+    Presentation().save(deck)
+    result = run_cli("conferir", deck, "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    report = json.loads(result.stdout)
+    assert report["scores"] == []
+    assert report["model_score"] == {"min": 100, "mean": 100, "slides_below_100": 0}
 
 
 def test_preview_reports_missing_soffice(tmp_path):

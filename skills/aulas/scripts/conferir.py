@@ -4,7 +4,7 @@ import json
 import re
 import shutil
 import subprocess
-from collections import Counter
+from collections import Counter, defaultdict
 from functools import cached_property
 from itertools import combinations
 from pathlib import Path
@@ -36,6 +36,20 @@ PRESERVED_WARNING_LABELS = {
     "marker": ("marcador editorial pendente", "marcadores editoriais pendentes"),
     "outline_color": ("contorno fora da paleta", "contornos fora da paleta"),
     "overflow": ("estouro de texto", "estouros de texto"),
+}
+
+SCORE_CATEGORIES = {
+    "elementos-base": (20, ("morph_shape",)),
+    "transicao": (15, ("morph",)),
+    "animacao": (15, ("animation",)),
+    "fonte": (15, ("font",)),
+    "paleta": (15, ("fill_color", "outline_color", "text_color", "marker")),
+    "leitura": (20, ("bounds", "overflow", "text_overlap", "contrast")),
+}
+SCORE_CATEGORY_BY_RULE = {
+    rule: category
+    for category, (_, rules) in SCORE_CATEGORIES.items()
+    for rule in rules
 }
 
 
@@ -534,6 +548,37 @@ def check_shape(shape, theme, palette, add, slide_bottom, text_boxes, structural
             check_table(shape, theme, palette, finding, slide_bottom, background, preserved, strict, annotations)
 
 
+def score_slides(slide_count, style, findings):
+    weights = {
+        category: weight for category, (weight, _) in SCORE_CATEGORIES.items()
+        if style != "padrao" or category not in {"transicao", "animacao"}
+    }
+    total_weight = sum(weights.values())
+    gaps_by_slide = defaultdict(list)
+    for item in findings:
+        if item["severity"] == "error":
+            rule = item["rule"]
+            category = SCORE_CATEGORY_BY_RULE.get(rule, "leitura")
+            gaps_by_slide[item["slide"]].append({
+                "category": category, "rule": rule, "message": item["message"],
+            })
+
+    scores = []
+    for slide in range(1, slide_count + 1):
+        gaps = gaps_by_slide.get(slide, [])
+        missing = {gap["category"] for gap in gaps}
+        earned = sum(weight for category, weight in weights.items() if category not in missing)
+        scores.append({"slide": slide, "score": earned * 100 // total_weight, "gaps": gaps})
+
+    values = [item["score"] for item in scores]
+    model_score = {
+        "min": min(values, default=100),
+        "mean": sum(values) // slide_count if slide_count else 100,
+        "slides_below_100": slide_count - values.count(100),
+    }
+    return scores, model_score
+
+
 def inspect(path, style):
     deck = open_deck(path)
     palette = PALETTES[style]
@@ -586,7 +631,10 @@ def inspect(path, style):
                 severity = "warning" if MARKER_ONLY.fullmatch(upper.text.strip()) else "error"
                 add("text_overlap", f"Texto sobreposto: {upper.name} invade a caixa de {lower.name}.",
                     severity, upper.name)
-    return {"style": style, "slides": len(deck.slides), "findings": findings,
+    slide_count = len(deck.slides)
+    scores, model_score = score_slides(slide_count, style, findings)
+    return {"style": style, "slides": slide_count, "findings": findings,
+            "scores": scores, "model_score": model_score,
             "preserved_findings": preserved_findings, "preserved_warnings": len(preserved_findings),
             "errors": sum(item["severity"] == "error" for item in findings),
             "warnings": sum(item["severity"] == "warning" for item in findings)}
@@ -609,6 +657,15 @@ def report(path, style, *, as_json=False):
             singular, plural = PRESERVED_WARNING_LABELS[rule]
             label = singular if count == 1 else plural
             print(f"Slide {slide} | Aviso: conteúdo preservado com {count} {label}.")
+        model_score = result["model_score"]
+        total = result["slides"]
+        perfect = total - model_score["slides_below_100"]
+        print(f"Placar do modelo: {model_score['min']}/100 ({perfect} de {total} slides com 100)")
+        for item in result["scores"]:
+            if item["score"] < 100:
+                categories = ", ".join(sorted({gap["category"] for gap in item["gaps"]}))
+                print(f"Slide {item['slide']} | Placar do modelo: {item['score']}/100 | "
+                      f"Categorias faltantes: {categories}")
     return int(result["errors"] > 0)
 
 
