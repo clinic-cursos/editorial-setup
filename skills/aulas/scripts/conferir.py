@@ -795,6 +795,7 @@ def inspect(path, style, *, origin=None, origin_selection=None, omitted_images=f
     palette = PALETTES[style]
     findings = []
     preserved_findings = []
+    pending_image_slides = []
     for number, slide in enumerate(deck.slides, 1):
         def add(rule, message, severity="error", shape=None, *, preserved=False):
             target = preserved_findings if preserved else findings
@@ -819,6 +820,11 @@ def inspect(path, style, *, origin=None, origin_selection=None, omitted_images=f
                 add("animation", "Animação de forma ausente.")
         text_boxes = []
         roles = list(slide_shape_roles(slide.shapes, deck.slide_width * deck.slide_height))
+        # Cada quadro tem um cabeçalho, mesmo quando o estilo ousado renomeia suas formas.
+        pending_count = sum(shape.has_text_frame and shape.text.startswith("✦ PROMPT DE IMAGEM #")
+                            for shape, _, _ in roles)
+        if pending_count:
+            pending_image_slides.append({"slide": number, "count": pending_count})
         structural = {shape._element for shape, strict, _ in roles if strict}
         annotations = annotation_colors(roles, theme)
         surfaces = shape_surfaces(slide.shapes, theme, slide_surface(slide, theme))
@@ -847,6 +853,8 @@ def inspect(path, style, *, origin=None, origin_selection=None, omitted_images=f
     scores, model_score = score_slides(slide_count, style, findings)
     result = {"style": style, "slides": slide_count, "findings": findings,
               "scores": scores, "model_score": model_score,
+              "pending_images": {"total": sum(item["count"] for item in pending_image_slides),
+                                 "slides": pending_image_slides},
               "preserved_findings": preserved_findings, "preserved_warnings": len(preserved_findings)}
     if origin is not None:
         source = open_deck(origin)
@@ -904,6 +912,9 @@ def report(path, style, *, as_json=False, origin=None, origin_selection=None, om
             print(f"Fidelidade de conteúdo: {result['content']['fidelity_pct']:g}%")
             images = result["content"]["images"]
             print(f"Imagens de conteúdo: {images['kept']} de {images['origin']} ({images['omitted']} omitidas)")
+        pending = result["pending_images"]
+        if pending["total"]:
+            print(f"Imagens pendentes (quadros de prompt): {pending['total']} em {len(pending['slides'])} slides")
     return int(result["errors"] > 0)
 
 

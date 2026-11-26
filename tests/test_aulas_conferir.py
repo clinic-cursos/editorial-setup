@@ -359,6 +359,28 @@ def test_generated_deck_passes(tmp_path, style, script):
         for number in range(1, len(Presentation(deck).slides) + 1)
     ]
     assert report["model_score"] == {"min": 100, "mean": 100, "slides_below_100": 0}
+    if script == EXAMPLE:
+        assert report["pending_images"] == {"total": 0, "slides": []}
+        assert "Imagens pendentes (quadros de prompt)" not in generated.stdout
+
+
+def test_pending_images_match_generated_prompts(tmp_path):
+    deck = tmp_path / "aula.pptx"
+    generated = run_cli("gerar", BOLD_EXAMPLE, deck)
+    assert generated.returncode == 0, generated.stderr or generated.stdout
+    prompts = deck.with_name("aula - prompts de imagem.md").read_text(encoding="utf-8")
+    total = sum(line.startswith("## #") for line in prompts.splitlines())
+    assert total == 4
+
+    checked = run_cli("conferir", deck, "--estilo", "ousado", "--json")
+    assert checked.returncode == 0, checked.stderr or checked.stdout
+    report = json.loads(checked.stdout)
+    assert report["pending_images"] == {
+        "total": total,
+        "slides": [{"slide": number, "count": 1} for number in (5, 7, 10, 12)],
+    }
+    assert report["model_score"] == {"min": 100, "mean": 100, "slides_below_100": 0}
+    assert "Imagens pendentes (quadros de prompt): 4 em 4 slides" in generated.stdout.splitlines()
 
 
 @pytest.mark.parametrize("change,category,rule,score", [
