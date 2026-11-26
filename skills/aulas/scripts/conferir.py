@@ -613,6 +613,14 @@ def align_paragraph(tokens, slides):
     for slide in slides:
         matcher = SequenceMatcher(None, tokens, slide, autojunk=False)
         kept = sum(block.size for block in matcher.get_matching_blocks())
+        if kept == len(tokens):
+            inserted = [
+                token
+                for tag, start, _, output_start, output_end in matcher.get_opcodes()
+                if tag == "insert" and 0 < start < len(tokens)
+                for token in slide[output_start:output_end]
+            ]
+            return 0, [], inserted
         if kept <= best_kept:
             continue
         best_kept = kept
@@ -621,7 +629,7 @@ def align_paragraph(tokens, slides):
             if tag in {"delete", "replace"}:
                 missing.extend(tokens[start:end])
                 replaced_by.extend(slide[output_start:output_end])
-    return best_kept, missing or tokens, replaced_by
+    return best_kept, missing, replaced_by
 
 
 def compare_content(deck, origin, selection):
@@ -659,7 +667,7 @@ def compare_content(deck, origin, selection):
         "origin": str(origin),
         "origin_tokens": total,
         "kept_tokens": kept,
-        "fidelity_pct": round(100 * kept / total, 2) if total else 100,
+        "fidelity_pct": 100 if kept == total else min(round(100 * kept / total, 2), 99.99),
         "divergences": divergences,
     }
 
@@ -729,7 +737,9 @@ def inspect(path, style, *, origin=None, origin_selection=None):
             missing = " ".join(item["missing"])
             replacement = " ".join(item["replaced_by"])
             message = f"Trecho ausente ou fora de ordem: {missing}."
-            if replacement:
+            if not missing:
+                message = f"Trecho inserido: {replacement}."
+            elif replacement:
                 message = f"Trecho trocado: {missing} por {replacement}."
             findings.append({"slide": item["origin_slide"], "shape": None, "rule": "content",
                              "severity": "error", "message": message})

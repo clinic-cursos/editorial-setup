@@ -65,7 +65,8 @@ def save_content_deck(path, *slides):
     ("Os pacientes podem possuir sintomas", ("O paciente pode ter sintomas",), 1,
      ["os", "pacientes", "podem", "possuir"], ["o", "paciente", "pode", "ter"]),
     ("Primeiro. Uma frase inteira.", ("Primeiro.",), 1, ["uma", "frase", "inteira"], []),
-    ("Veja casos clínicos", ("Veja novos casos clínicos",), 3, ["veja", "casos", "clínicos"], []),
+    ("a b c", ("a x b c",), 0, [], ["x"]),
+    ("a b c", ("kicker a x b y c rodapé",), 0, [], ["x", "y"]),
 ])
 def test_content_fidelity(tmp_path, original, rewritten, kept, missing, replaced_by):
     origin = tmp_path / "original.pptx"
@@ -73,8 +74,9 @@ def test_content_fidelity(tmp_path, original, rewritten, kept, missing, replaced
     save_content_deck(origin, original)
     save_content_deck(deck, *rewritten)
 
+    diverged = bool(missing or replaced_by)
     result = run_cli("conferir", deck, "--origem", origin, "--json")
-    assert result.returncode == int(bool(missing)), result.stderr or result.stdout
+    assert result.returncode == int(diverged), result.stderr or result.stdout
     report = json.loads(result.stdout)
     total = len(original.split())
     assert report["content"] == {
@@ -82,12 +84,14 @@ def test_content_fidelity(tmp_path, original, rewritten, kept, missing, replaced
         "fidelity_pct": round(100 * kept / total, 2),
         "divergences": [{
             "origin_slide": 1, "paragraph": original, "missing": missing, "replaced_by": replaced_by,
-        }] if missing else [],
+        }] if diverged else [],
     }
-    assert report["errors"] == int(bool(missing))
+    assert report["errors"] == int(diverged)
     assert [(item["slide"], item["rule"], item["severity"]) for item in report["findings"]] == (
-        [(1, "content", "error")] if missing else []
+        [(1, "content", "error")] if diverged else []
     )
+    if replaced_by and not missing:
+        assert report["findings"][0]["message"] == f"Trecho inserido: {' '.join(replaced_by)}."
 
 
 @pytest.mark.parametrize("original,shapes,total", [
@@ -280,6 +284,19 @@ def test_bold_model_score_reports_slide_gap(tmp_path, change, category, rule, sc
         f"Placar do modelo: {score}/100 ({total - 1} de {total} slides com 100)",
         f"Slide 1 | Placar do modelo: {score}/100 | Categorias faltantes: {category}",
     ]
+
+
+def test_unknown_error_rule_reduces_readability_score(monkeypatch):
+    monkeypatch.syspath_prepend(str(SKILL / "scripts"))
+    from conferir import score_slides
+
+    finding = {"slide": 1, "severity": "error", "rule": "new_rule", "message": "Regra nova."}
+    scores, _ = score_slides(1, "ousado", [finding])
+
+    assert scores == [{
+        "slide": 1, "score": 80,
+        "gaps": [{"category": "leitura", "rule": "new_rule", "message": "Regra nova."}],
+    }]
 
 
 def test_bold_fallbacks_pass(tmp_path):
