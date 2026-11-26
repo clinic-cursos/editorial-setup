@@ -28,6 +28,8 @@ Trate como eliminatórios o placar abaixo de 100 em qualquer slide, qualquer div
 
 Elimine o uso de `preservado` em slides sem marcação desenhada sobre imagem, tabela ou composição de três ou mais imagens de conteúdo.
 
+Elimine qualquer imagem gerada para antes e depois, caso clínico, foto de paciente ou print de artigo. Imagem anatômica, de área de risco ou diagrama científico gerado sem o aviso `Imagem gerada por IA: conferir com atlas ou professor antes de usar.` nas notas do slide e sem estar listado como pendente de validação pelo professor também é eliminatória. Na prévia, confira se cada imagem gerada corresponde ao `prompt_imagem` e ao conteúdo do slide.
+
 ## Retorno
 
 Use `references/comum/retorno.md` da skill, com `Nota:` e `Achados:`. Devolva `PRONTO` só quando a versão passar na revisão.

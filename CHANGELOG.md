@@ -1,5 +1,9 @@
 # Histórico de versões
 
+## 0.3.1
+
+- `CLI-716`: as aulas geram imagens no próprio ambiente quando possível, com prompts como recuo e validação científica pendente para imagens anatômicas.
+
 ## 0.3.0
 
 - `9cdba2e`: o `conferir --origem` verifica a fidelidade das imagens de conteúdo, com opção para registrar omissões decididas pelo Editor-Chefe.

@@ -156,9 +156,9 @@ Em qualquer modo, só entregue quando `model_score.min` for 100. Abaixo de 100, 
 7. Monte o JSON do roteiro e siga a seção "Execução". Faça as correções no roteiro e gere uma nova versão.
 
 
-## Direção de imagens (prompts para o ChatGPT)
+## Direção e geração de imagens
 
-Você atua como diretor de arte. Para cada espaço de imagem, decida o que ilustra melhor aquele conteúdo e, quando o professor não mandar a imagem, escreva o prompt para ele gerar no ChatGPT. Não é você quem gera a imagem.
+Você atua como diretor de arte. Para cada espaço de imagem, decida o que ilustra melhor aquele conteúdo e, quando o professor não mandar a imagem, escreva o prompt em `prompt_imagem`.
 
 - **Como usar:** preencha `prompt_imagem` com a descrição da cena nos tipos com painel de imagem. Para o estilo ousado, consulte a tabela "Campos no estilo ousado".
   - `estilo_imagem: "foto"` serve para retratos e cenas realistas; o padrão é ilustração médica 3D.
@@ -171,10 +171,11 @@ Você atua como diretor de arte. Para cada espaço de imagem, decida o que ilust
 - **Como escrever o prompt:** em português, descrevendo a cena concreta: assunto, enquadramento, corte ou ângulo, o que está à esquerda e à direita e qual estrutura fica em vinho. Uma ideia por imagem.
 - **Sem texto na imagem:** rótulos e setas com nome ficam no slide, editáveis.
 - **Quando não usar imagem:** slides de número grande, frase, tabela e gráfico ficam limpos.
-- **Nunca gere prompt para:**
-  - antes e depois, caso clínico ou foto de paciente: precisam ser fotos reais, e o quadro só diz qual foto colocar;
-  - print de artigo.
-- **Anatomia, áreas de risco e diagramas científicos:** gere o prompt, mas sempre com `alerta_imagem` pedindo conferência com atlas ou professor. A IA erra trajetos de vasos e inserções musculares.
+- **Imagens proibidas:** nunca gere prompt nem imagem para antes e depois, caso clínico ou foto de paciente: precisam ser fotos reais, e o quadro só diz qual foto colocar. Não gere imagem para print de artigo; mantenha o espaço para o print fornecido. Não invente dados, preços, doses ou referências.
+- **Geração no ambiente:** depois do primeiro `gerar`, se o ambiente oferecer ferramenta de geração de imagem, gere uma imagem para cada slide com `prompt_imagem` e sem `imagem`. Use o prompt completo e o formato indicados no arquivo de prompts, salve cada imagem na pasta de trabalho (por exemplo, `img-geradas/`), preencha `imagem` no roteiro com o caminho do arquivo e rode `gerar` e `conferir` novamente. Inspecione a prévia atualizada. Se não houver ferramenta ou os arquivos gerados não chegarem à pasta onde o script roda, entregue o arquivo de prompts como hoje e informe essa limitação na entrega.
+- **Validação científica:** imagens de anatomia, áreas de risco e diagramas científicos podem ser geradas. Mantenha `alerta_imagem` e, quando a imagem estiver preenchida, escreva em `notas` do slide: `Imagem gerada por IA: conferir com atlas ou professor antes de usar.` Liste cada um desses slides na entrega como pendente de validação pelo professor. A validação científica é obrigatória antes do uso.
+- **Registro na entrega:** liste todas as imagens geradas por IA com número do slide e nome do arquivo, e todos os slides que ficaram apenas com prompt.
+- **Anatomia, áreas de risco e diagramas científicos:** pode gerar o prompt e a imagem, mas sempre mantenha `alerta_imagem`; para imagem preenchida, inclua também o aviso nas notas e a pendência de validação na entrega, conforme acima. A IA erra trajetos de vasos e inserções musculares.
 
 ## Arquivos (ficam na própria skill)
 
