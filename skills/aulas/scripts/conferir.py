@@ -7,10 +7,10 @@ import subprocess
 from collections import Counter, defaultdict
 from difflib import SequenceMatcher
 from functools import cached_property
-from itertools import combinations, groupby
+from itertools import combinations
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unicodedata import combining, normalize
+from unicodedata import combining, decimal, normalize
 
 from lxml import etree
 from pptx.dml.color import RGBColor
@@ -25,8 +25,8 @@ import bold_deck
 import clinic_deck
 from restyle import (
     PAINT_TAGS, annotation_colors, bounds, cell_fill, cell_outlines, contrast_ratio, fill_surface,
-    matches_annotation, open_deck, reading_order,
-    rgb_channels, shape_paint, shape_surfaces, slide_surface, solid_color, solid_fill_color,
+    matches_annotation, open_deck, rgb_channels, shape_paint, shape_surfaces, slide_surface,
+    solid_color, solid_fill_color,
     slide_numbers, slide_shape_roles, table_style, texts, visible_color,
 )
 
@@ -581,50 +581,85 @@ def score_slides(slide_count, style, findings):
     return scores, model_score
 
 
-def content_text(shapes):
-    for shape in reading_order(shapes):
+def content_paragraphs(shapes):
+    for shape in shapes:
         if shape.is_placeholder and shape.placeholder_format.type in CONTENT_METADATA:
             continue
         if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
-            yield from content_text(shape.shapes)
+            yield from content_paragraphs(shape.shapes)
+        elif shape.has_table:
+            for row in shape.table.rows:
+                for cell in row.cells:
+                    yield from (paragraph.text for paragraph in cell.text_frame.paragraphs)
+        elif shape.has_text_frame:
+            yield from (paragraph.text for paragraph in shape.text_frame.paragraphs)
         else:
-            yield from texts(shape)
+            for value in texts(shape):
+                yield from value.split("\n")
 
 
-def slide_tokens(slide):
-    for value in content_text(slide.shapes):
-        yield from re.findall(r"\w+", normalize("NFC", value).casefold())
+def content_tokens(value):
+    tokens = re.findall(r"\w+", normalize("NFC", value).casefold())
+    for index, token in enumerate(tokens):
+        if token.isdecimal():
+            first = next((pos for pos, digit in enumerate(token) if decimal(digit)), len(token) - 1)
+            tokens[index] = token[first:]
+    return tokens
+
+
+def align_paragraph(tokens, slides):
+    best_kept = 0
+    missing, replaced_by = tokens, []
+    for slide in slides:
+        matcher = SequenceMatcher(None, tokens, slide, autojunk=False)
+        kept = sum(block.size for block in matcher.get_matching_blocks())
+        if kept <= best_kept:
+            continue
+        best_kept = kept
+        missing, replaced_by = [], []
+        for tag, start, end, output_start, output_end in matcher.get_opcodes():
+            if tag in {"delete", "replace"}:
+                missing.extend(tokens[start:end])
+                replaced_by.extend(slide[output_start:output_end])
+    return best_kept, missing or tokens, replaced_by
 
 
 def compare_content(deck, origin, selection):
     source = open_deck(origin)
-    original = []
-    source_slides = []
-    for number in slide_numbers(selection, len(source.slides)):
-        tokens = list(slide_tokens(source.slides[number - 1]))
-        original.extend(tokens)
-        source_slides.extend([number] * len(tokens))
-    output = [token for slide in deck.slides for token in slide_tokens(slide)]
-    matcher = SequenceMatcher(None, original, output, autojunk=False)
-    kept = 0
+    output = [
+        [token for paragraph in content_paragraphs(slide.shapes) for token in content_tokens(paragraph)]
+        for slide in deck.slides
+    ]
+    # Os espaços delimitam tokens, inclusive nas extremidades do slide.
+    searchable = [f" {' '.join(tokens)} " for tokens in output]
+    cursor = total = kept = 0
     divergences = []
-    for tag, start, end, output_start, output_end in matcher.get_opcodes():
-        if tag == "equal":
-            kept += end - start
-        elif tag in {"delete", "replace"}:
-            replacement = output[output_start:output_end]
-            for number, positions in groupby(range(start, end), source_slides.__getitem__):
-                divergences.append({
-                    "origin_slide": number,
-                    "missing": [original[position] for position in positions],
-                    "replaced_by": replacement,
-                })
-    total = len(original)
+    for number in slide_numbers(selection, len(source.slides)):
+        earliest = len(output)
+        for paragraph in content_paragraphs(source.slides[number - 1].shapes):
+            tokens = content_tokens(paragraph)
+            if not tokens:
+                continue
+            total += len(tokens)
+            needle = f" {' '.join(tokens)} "
+            match = next((index for index in range(cursor, len(output)) if needle in searchable[index]), None)
+            if match is not None:
+                earliest = min(earliest, match)
+                kept += len(tokens)
+                continue
+            matched, missing, replaced_by = align_paragraph(tokens, output[cursor:cursor + 4])
+            kept += matched
+            divergences.append({
+                "origin_slide": number, "paragraph": paragraph,
+                "missing": missing, "replaced_by": replaced_by,
+            })
+        if earliest < len(output):
+            cursor = earliest
     return {
         "origin": str(origin),
         "origin_tokens": total,
         "kept_tokens": kept,
-        "fidelity_pct": kept * 10_000 // total / 100 if total else 100,
+        "fidelity_pct": round(100 * kept / total, 2) if total else 100,
         "divergences": divergences,
     }
 

@@ -33,13 +33,14 @@ def write_script(tmp_path, style, slides):
     return script
 
 
-def add_content_text(shapes, value):
-    box = shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(1))
-    run = box.text_frame.paragraphs[0].add_run()
-    run.text = value
-    run.font.name = "Montserrat"
-    run.font.size = Pt(16)
-    run.font.color.rgb = RGBColor.from_string("404040")
+def add_content_text(shapes, value, *, left=1, top=1, width=8):
+    box = shapes.add_textbox(Inches(left), Inches(top), Inches(width), Inches(1.5))
+    box.text = value
+    for paragraph in box.text_frame.paragraphs:
+        for run in paragraph.runs:
+            run.font.name = "Montserrat"
+            run.font.size = Pt(16)
+            run.font.color.rgb = RGBColor.from_string("404040")
     return box
 
 
@@ -51,32 +52,100 @@ def save_content_deck(path, *slides):
     deck.save(path)
 
 
-@pytest.mark.parametrize("rewritten,kept,divergence", [
-    (("ATE\u0301 **12** UNIDADES",), 3, None),
-    (("Até\u00a012",), 2, {"origin_slide": 1, "missing": ["unidades"], "replaced_by": []}),
-    (("Até 15 unidades",), 2, {"origin_slide": 1, "missing": ["12"], "replaced_by": ["15"]}),
-    (("unidades Até 12",), 2, {"origin_slide": 1, "missing": ["unidades"], "replaced_by": []}),
-    (("Kicker Até 12 unidades",), 3, None),
-    (("Até 12", "unidades"), 3, None),
+@pytest.mark.parametrize("original,rewritten,kept,missing,replaced_by", [
+    ("Até\u00a012 unidades", ("ATE\u0301 **12** UNIDADES",), 3, [], []),
+    ("Até\u00a012 unidades", ("Até\u00a012",), 2, ["unidades"], []),
+    ("Até\u00a012 unidades", ("Até 15 unidades",), 2, ["12"], ["15"]),
+    ("Até\u00a012 unidades", ("unidades Até 12",), 2, ["unidades"], []),
+    ("Até\u00a012 unidades", ("Kicker Até 12 unidades",), 3, [], []),
+    ("Até\u00a012 unidades", ("Até 12", "unidades"), 2, ["unidades"], []),
+    ("Até 12\nunidades", ("Até 12", "unidades"), 3, [], []),
+    ("Módulo 1", ("Módulo 01",), 2, [], []),
+    ("Veja ex clínicos", ("Veja exemplos clínicos",), 2, ["ex"], ["exemplos"]),
+    ("Os pacientes podem possuir sintomas", ("O paciente pode ter sintomas",), 1,
+     ["os", "pacientes", "podem", "possuir"], ["o", "paciente", "pode", "ter"]),
+    ("Primeiro. Uma frase inteira.", ("Primeiro.",), 1, ["uma", "frase", "inteira"], []),
+    ("Veja casos clínicos", ("Veja novos casos clínicos",), 3, ["veja", "casos", "clínicos"], []),
 ])
-def test_content_fidelity(tmp_path, rewritten, kept, divergence):
+def test_content_fidelity(tmp_path, original, rewritten, kept, missing, replaced_by):
     origin = tmp_path / "original.pptx"
     deck = tmp_path / "aula.pptx"
-    save_content_deck(origin, "Até\u00a012 unidades")
+    save_content_deck(origin, original)
     save_content_deck(deck, *rewritten)
 
     result = run_cli("conferir", deck, "--origem", origin, "--json")
-    assert result.returncode == int(divergence is not None), result.stderr or result.stdout
+    assert result.returncode == int(bool(missing)), result.stderr or result.stdout
     report = json.loads(result.stdout)
+    total = len(original.split())
     assert report["content"] == {
-        "origin": str(origin), "origin_tokens": 3, "kept_tokens": kept,
-        "fidelity_pct": 100 if kept == 3 else pytest.approx(200 / 3, abs=0.01),
-        "divergences": [divergence] if divergence else [],
+        "origin": str(origin), "origin_tokens": total, "kept_tokens": kept,
+        "fidelity_pct": round(100 * kept / total, 2),
+        "divergences": [{
+            "origin_slide": 1, "paragraph": original, "missing": missing, "replaced_by": replaced_by,
+        }] if missing else [],
     }
-    assert report["errors"] == int(divergence is not None)
+    assert report["errors"] == int(bool(missing))
     assert [(item["slide"], item["rule"], item["severity"]) for item in report["findings"]] == (
-        [(1, "content", "error")] if divergence else []
+        [(1, "content", "error")] if missing else []
     )
+
+
+@pytest.mark.parametrize("original,shapes,total", [
+    ("Introdução\nAnatomia\nPlanejamento\nPrática",
+     [("Introdução\nPlanejamento", 1, 1), ("Anatomia\nPrática", 5, 1)], 4),
+    ("Título principal\nVisão geral", [("Visão geral", 1, 1), ("Título principal", 1, 3)], 4),
+    ("Cuidados após o procedimento.", [("Cuidados após", 1, 1), ("o procedimento.", 1, 3)], 4),
+])
+def test_content_accepts_changes_in_layout(tmp_path, original, shapes, total):
+    origin = tmp_path / "original.pptx"
+    deck = tmp_path / "aula.pptx"
+    save_content_deck(origin, original)
+    output = Presentation()
+    slide = output.slides.add_slide(output.slide_layouts[6])
+    for value, left, top in shapes:
+        add_content_text(slide.shapes, value, left=left, top=top, width=3.5)
+    output.save(deck)
+
+    result = run_cli("conferir", deck, "--origem", origin, "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    content = json.loads(result.stdout)["content"]
+    assert content["origin_tokens"] == content["kept_tokens"] == total
+    assert content["fidelity_pct"] == 100
+    assert content["divergences"] == []
+
+
+def test_content_cursor_uses_earliest_match_and_does_not_move_back(tmp_path):
+    origin = tmp_path / "original.pptx"
+    deck = tmp_path / "aula.pptx"
+    save_content_deck(origin, "Terceiro\nPrimeiro", "Segundo", "Ausente", "Início")
+    save_content_deck(deck, "Início", "Primeiro", "Segundo", "Terceiro")
+
+    result = run_cli("conferir", deck, "--origem", origin, "--json")
+    assert result.returncode == 1, result.stderr or result.stdout
+    content = json.loads(result.stdout)["content"]
+    assert content["origin_tokens"] == 5
+    assert content["kept_tokens"] == 3
+    assert content["divergences"] == [
+        {"origin_slide": 3, "paragraph": "Ausente", "missing": ["ausente"], "replaced_by": []},
+        {"origin_slide": 4, "paragraph": "Início", "missing": ["início"], "replaced_by": []},
+    ]
+
+
+def test_content_aligns_with_best_slide_in_cursor_window(tmp_path):
+    origin = tmp_path / "original.pptx"
+    deck = tmp_path / "aula.pptx"
+    save_content_deck(origin, "Abertura", "Veja riscos e benefícios clínicos")
+    save_content_deck(deck, "Veja riscos e prazos clínicos", "Abertura", "Veja riscos",
+                      "Outro assunto", "Veja riscos e critérios", "Veja riscos e benefícios gerais")
+
+    result = run_cli("conferir", deck, "--origem", origin, "--json")
+    assert result.returncode == 1, result.stderr or result.stdout
+    content = json.loads(result.stdout)["content"]
+    assert content["kept_tokens"] == 4
+    assert content["divergences"] == [{
+        "origin_slide": 2, "paragraph": "Veja riscos e benefícios clínicos",
+        "missing": ["benefícios", "clínicos"], "replaced_by": ["critérios"],
+    }]
 
 
 def test_content_reads_nested_groups_and_tables_without_notes_or_metadata(tmp_path):
@@ -86,7 +155,7 @@ def test_content_reads_nested_groups_and_tables_without_notes_or_metadata(tmp_pa
     slide = source.slides.add_slide(source.slide_layouts[6])
     box = add_content_text(slide.shapes, "Primeira")
     table = slide.shapes.add_table(1, 2, Inches(1), Inches(3), Inches(4), Inches(1))
-    table.table.cell(0, 0).text = "Segunda"
+    table.table.cell(0, 0).text = "Segunda\nQuarta"
     table.table.cell(0, 1).text = "Terceira"
     inner = slide.shapes.add_group_shape([box, table])
     slide.shapes.add_group_shape([inner])
@@ -96,12 +165,12 @@ def test_content_reads_nested_groups_and_tables_without_notes_or_metadata(tmp_pa
         properties = box._element.find(f"{qn('p:nvSpPr')}/{qn('p:nvPr')}")
         properties.append(parse_xml(f'<p:ph {nsdecls("p")} type="{placeholder}"/>'))
     source.save(origin)
-    save_content_deck(deck, "Primeira Segunda Terceira")
+    save_content_deck(deck, "Primeira Segunda Terceira Quarta")
 
     result = run_cli("conferir", deck, "--origem", origin, "--json")
     assert result.returncode == 0, result.stderr or result.stdout
     content = json.loads(result.stdout)["content"]
-    assert content["origin_tokens"] == content["kept_tokens"] == 3
+    assert content["origin_tokens"] == content["kept_tokens"] == 4
     assert content["divergences"] == []
 
 
@@ -116,8 +185,8 @@ def test_content_selection_reports_actual_origin_slide_numbers(tmp_path):
     report = json.loads(result.stdout)
     assert report["content"]["origin_tokens"] == 3
     assert report["content"]["divergences"] == [
-        {"origin_slide": 3, "missing": ["segundo"], "replaced_by": []},
-        {"origin_slide": 4, "missing": ["terceiro"], "replaced_by": []},
+        {"origin_slide": 3, "paragraph": "Segundo", "missing": ["segundo"], "replaced_by": []},
+        {"origin_slide": 4, "paragraph": "Terceiro", "missing": ["terceiro"], "replaced_by": []},
     ]
     assert report["errors"] == 2
     assert report["model_score"]["min"] == 100
