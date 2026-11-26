@@ -36,4 +36,4 @@ Depois do merge, rodar de novo o `conferir` nos mesmos decks do teste (deck estr
 - Feito: C5 no PR #19; C1, C2, C3, C1b, C4 e C6 no PR #20; C7 (tamanho relativo da imagem, falso alarme achado na medição) no PR #21; release 0.3.0 publicada em 26/11/2026. Medição final: HOF 0.2.8 com 93,2% do texto e 110 de 132 imagens de conteúdo; refatoração v3 com 100% do texto e 2 de 3 imagens mais 1 omitida. Limites conhecidos: imagem no layout do PowerPoint (fora do slide) não é conferida; imagem de exatos 2% com rotação pode ser classificada como ícone.
 - Em andamento: nada.
 - Travado: nada.
-- Próximo passo: a Paula atualiza para a 0.3.0; geração de imagem por API só depois do Fluxo 1, se o Alify aprovar.
+- Próximo passo: a Paula atualiza para a 0.3.1 (PR #23, publicada em 26/11/2026), que gera as imagens das aulas no próprio app, sem API paga (decisão do Alify em 26/11/2026), e confirma na primeira aula se a imagem gerada chega ao slide ou volta como prompt.
