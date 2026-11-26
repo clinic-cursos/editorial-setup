@@ -822,3 +822,38 @@ def test_preview_requires_pngs_for_every_slide(tmp_path, converter_available):
         assert result.returncode == 2
         assert "pdftoppm" in result.stderr
         assert not destination.exists()
+
+
+def test_content_repeated_title_must_match_its_own_slide(tmp_path):
+    # Título repetido em slides seguidos: a troca no primeiro não pode casar com a cópia do slide seguinte.
+    origin = tmp_path / "original.pptx"
+    deck = tmp_path / "aula.pptx"
+    save_content_deck(origin, "Rugas ou sulcos\nSulco profundo", "Rugas ou sulcos\nRuga superficial",
+                      "Rugas ou sulcos\nRugas dinâmicas")
+    save_content_deck(deck, "Rugas e sulcos\nSulco profundo", "Rugas ou sulcos\nRuga superficial",
+                      "Rugas ou sulcos\nRugas dinâmicas")
+
+    result = run_cli("conferir", deck, "--origem", origin, "--json")
+    assert result.returncode == 1, result.stderr or result.stdout
+    content = json.loads(result.stdout)["content"]
+    assert content["origin_tokens"] == 15
+    assert content["kept_tokens"] == 14
+    assert content["divergences"] == [{
+        "origin_slide": 1, "paragraph": "Rugas ou sulcos", "missing": ["ou"], "replaced_by": ["e"],
+    }]
+
+
+def test_content_accepts_title_repeated_on_split_slides(tmp_path):
+    # Refatoração: um slide do original vira dois, com o título repetido de propósito.
+    origin = tmp_path / "original.pptx"
+    deck = tmp_path / "aula.pptx"
+    save_content_deck(origin, "Rugas ou sulcos\nSulco profundo\nRuga superficial",
+                      "Rugas ou sulcos\nRugas dinâmicas\nRugas estáticas")
+    save_content_deck(deck, "Rugas ou sulcos\nSulco profundo", "Rugas ou sulcos\nRuga superficial",
+                      "Rugas ou sulcos\nRugas dinâmicas", "Rugas ou sulcos\nRugas estáticas")
+
+    result = run_cli("conferir", deck, "--origem", origin, "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    content = json.loads(result.stdout)["content"]
+    assert content["origin_tokens"] == content["kept_tokens"] == 14
+    assert content["divergences"] == []
