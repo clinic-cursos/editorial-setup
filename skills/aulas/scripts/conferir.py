@@ -8,12 +8,14 @@ from bisect import bisect_right
 from collections import Counter, defaultdict
 from difflib import SequenceMatcher
 from functools import cached_property
+from io import BytesIO
 from itertools import combinations
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unicodedata import combining, decimal, normalize
 
 from lxml import etree
+from PIL import Image, UnidentifiedImageError
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE_TYPE, PP_PLACEHOLDER
 from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
@@ -25,8 +27,9 @@ from pptx.util import Emu, Inches, Pt
 import bold_deck
 import clinic_deck
 from restyle import (
-    PAINT_TAGS, annotation_colors, bounds, cell_fill, cell_outlines, contrast_ratio, fill_surface,
-    matches_annotation, open_deck, rgb_channels, shape_paint, shape_surfaces, slide_surface,
+    PAINT_TAGS, annotation_colors, background_picture, bounds, cell_fill, cell_outlines, contrast_ratio,
+    fill_surface, matches_annotation, open_deck, reading_order, rgb_channels, shape_paint, shape_surfaces,
+    sized_images, slide_surface,
     solid_color, solid_fill_color,
     slide_numbers, slide_shape_roles, table_style, texts, visible_color,
 )
@@ -633,8 +636,7 @@ def align_paragraph(tokens, slides):
     return best_kept, missing, replaced_by
 
 
-def compare_content(deck, origin, selection):
-    source = open_deck(origin)
+def compare_content(deck, source, numbers):
     output = [
         [token for paragraph in content_paragraphs(slide.shapes) for token in content_tokens(paragraph)]
         for slide in deck.slides
@@ -647,7 +649,7 @@ def compare_content(deck, origin, selection):
 
     slides = []
     paragraph_counts = Counter()
-    for number in slide_numbers(selection, len(source.slides)):
+    for number in numbers:
         paragraphs = []
         for paragraph in content_paragraphs(source.slides[number - 1].shapes):
             tokens = content_tokens(paragraph)
@@ -698,7 +700,6 @@ def compare_content(deck, origin, selection):
                 "missing": missing, "replaced_by": replaced_by,
             })
     return {
-        "origin": str(origin),
         "origin_tokens": total,
         "kept_tokens": kept,
         "fidelity_pct": 100 if kept == total else min(round(100 * kept / total, 2), 99.99),
@@ -706,7 +707,90 @@ def compare_content(deck, origin, selection):
     }
 
 
-def inspect(path, style, *, origin=None, origin_selection=None):
+def slide_images(slide, width, height):
+    shapes = list(slide.shapes)
+    backdrop = background_picture(slide, width, height)
+    if backdrop is not None:
+        shapes.insert(0, backdrop)
+    # Replica a enumeração do extrair antes da ordenação por área.
+    for shape in reading_order(shapes):
+        yield from sized_images(shape)
+
+
+def image_signature(part, crop=None):
+    cropped = crop is not None and any((crop.l, crop.t, crop.r, crop.b))
+    try:
+        with Image.open(BytesIO(part.blob), formats=("PNG", "JPEG", "GIF", "BMP", "TIFF", "WEBP")) as image:
+            if cropped:
+                width, height = image.size
+                box = (round(width * crop.l), round(height * crop.t),
+                       round(width * (1 - crop.r)), round(height * (1 - crop.b)))
+                if box[2] <= box[0] or box[3] <= box[1]:
+                    raise ValueError("o recorte não contém pixels")
+                image = image.crop(box)
+            pixels = image.convert("L").resize((9, 8), Image.Resampling.LANCZOS).tobytes()
+    except UnidentifiedImageError:
+        # Formatos vetoriais sem recorte ainda podem ser conferidos por igualdade binária.
+        return None if cropped else part.sha1
+    except (OSError, ValueError, Image.DecompressionBombError) as exc:
+        raise ValueError(f"imagem {part.partname}: não foi possível calcular a fidelidade: {exc}") from exc
+    digest = 0
+    for start in range(0, len(pixels), 9):
+        row = pixels[start:start + 9]
+        for left, right in zip(row[:-1], row[1:], strict=True):
+            digest = (digest << 1) | (left > right)
+    return digest
+
+
+def compare_images(deck, source, numbers, omitted_images, findings):
+    width, height = source.slide_width, source.slide_height
+    slide_area = width * height
+    images = {"origin": 0, "kept": 0, "omitted": 0, "missing": []}
+    candidates = []
+    unknown = set(omitted_images)
+    for number in numbers:
+        for index, (part, crop, w, h) in enumerate(slide_images(source.slides[number - 1], width, height), 1):
+            key = (number, index)
+            unknown.discard(key)
+            area = w * h
+            if area < slide_area * 0.02:
+                continue
+            background = area >= slide_area * 0.90
+            images["origin"] += not background
+            if key in omitted_images:
+                images["omitted"] += not background
+            else:
+                item = {"origin_slide": number, "index": index,
+                        "width_pct": round(100 * w / width, 2), "height_pct": round(100 * h / height, 2)}
+                candidates.append((part, crop, background, item))
+    if unknown:
+        invalid = ", ".join(f"{slide}:{index}" for slide, index in sorted(unknown))
+        raise ValueError(f"--imagens-omitidas: imagem inexistente na seleção da origem: {invalid}")
+    if not candidates:
+        return images
+
+    output_parts = {part for slide in deck.slides
+                    for part, _, _, _ in slide_images(slide, deck.slide_width, deck.slide_height)}
+    output = {image_signature(part) for part in output_parts}
+    hashes = [digest for digest in output if isinstance(digest, int)]
+    for part, crop, background, item in candidates:
+        signature = image_signature(part, crop)
+        found = signature in output or (
+            isinstance(signature, int) and any((signature ^ digest).bit_count() <= 10 for digest in hashes)
+        )
+        if found:
+            images["kept"] += not background
+            continue
+        if not background:
+            images["missing"].append(item)
+        label = "Imagem de fundo" if background else "Imagem"
+        findings.append({"slide": item["origin_slide"], "shape": None, "rule": "content_image",
+                         "severity": "warning" if background else "error",
+                         "message": f"{label} {item['index']} ausente."})
+    return images
+
+
+def inspect(path, style, *, origin=None, origin_selection=None, omitted_images=frozenset()):
     deck = open_deck(path)
     palette = PALETTES[style]
     findings = []
@@ -765,7 +849,9 @@ def inspect(path, style, *, origin=None, origin_selection=None):
               "scores": scores, "model_score": model_score,
               "preserved_findings": preserved_findings, "preserved_warnings": len(preserved_findings)}
     if origin is not None:
-        content = compare_content(deck, origin, origin_selection)
+        source = open_deck(origin)
+        numbers = slide_numbers(origin_selection, len(source.slides))
+        content = {"origin": str(origin), **compare_content(deck, source, numbers)}
         result["content"] = content
         for item in content["divergences"]:
             missing = " ".join(item["missing"])
@@ -777,13 +863,18 @@ def inspect(path, style, *, origin=None, origin_selection=None):
                 message = f"Trecho trocado: {missing} por {replacement}."
             findings.append({"slide": item["origin_slide"], "shape": None, "rule": "content",
                              "severity": "error", "message": message})
+        images = compare_images(deck, source, numbers, omitted_images, findings)
+        content["images"] = images
+        expected = images["origin"] - images["omitted"]
+        kept = images["kept"]
+        content["image_fidelity_pct"] = 100 if kept == expected else min(round(100 * kept / expected, 2), 99.99)
     result["errors"] = sum(item["severity"] == "error" for item in findings)
     result["warnings"] = sum(item["severity"] == "warning" for item in findings)
     return result
 
 
-def report(path, style, *, as_json=False, origin=None, origin_selection=None):
-    result = inspect(path, style, origin=origin, origin_selection=origin_selection)
+def report(path, style, *, as_json=False, origin=None, origin_selection=None, omitted_images=frozenset()):
+    result = inspect(path, style, origin=origin, origin_selection=origin_selection, omitted_images=omitted_images)
     if as_json:
         print(json.dumps(result, ensure_ascii=False))
     else:
@@ -793,7 +884,7 @@ def report(path, style, *, as_json=False, origin=None, origin_selection=None):
         for item in result["findings"]:
             severity = "Reprovação" if item["severity"] == "error" else "Aviso"
             shape = f" ({item['shape']})" if item["shape"] else ""
-            source = " da origem" if item["rule"] == "content" else ""
+            source = " da origem" if item["rule"] in {"content", "content_image"} else ""
             print(f"Slide {item['slide']}{source}{shape} | {severity}: {item['message']}")
         counts = Counter((item["slide"], item["rule"]) for item in result["preserved_findings"])
         for (slide, rule), count in sorted(counts.items()):
@@ -811,6 +902,8 @@ def report(path, style, *, as_json=False, origin=None, origin_selection=None):
                       f"Categorias faltantes: {categories}")
         if "content" in result:
             print(f"Fidelidade de conteúdo: {result['content']['fidelity_pct']:g}%")
+            images = result["content"]["images"]
+            print(f"Imagens de conteúdo: {images['kept']} de {images['origin']} ({images['omitted']} omitidas)")
     return int(result["errors"] > 0)
 
 

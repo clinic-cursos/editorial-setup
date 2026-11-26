@@ -1,9 +1,11 @@
+from io import BytesIO
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
 
+from PIL import Image
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_THEME_COLOR
@@ -82,6 +84,8 @@ def test_content_fidelity(tmp_path, original, rewritten, kept, missing, replaced
     assert report["content"] == {
         "origin": str(origin), "origin_tokens": total, "kept_tokens": kept,
         "fidelity_pct": round(100 * kept / total, 2),
+        "images": {"origin": 0, "kept": 0, "omitted": 0, "missing": []},
+        "image_fidelity_pct": 100,
         "divergences": [{
             "origin_slide": 1, "paragraph": original, "missing": missing, "replaced_by": replaced_by,
         }] if diverged else [],
@@ -92,6 +96,123 @@ def test_content_fidelity(tmp_path, original, rewritten, kept, missing, replaced
     )
     if replaced_by and not missing:
         assert report["findings"][0]["message"] == f"Trecho inserido: {' '.join(replaced_by)}."
+
+
+def save_image_deck(path, mode):
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    # O recorte pega uma faixa crescente e o recorte da saída pega só o trecho decrescente.
+    image = Image.new("L", (160, 80))
+    row = [x * 3 for x in range(64)] + [(128 - x) * 3 for x in range(64, 80)]
+    row += [(159 - x) * 3 for x in range(80, 160)]
+    image.putdata(row * 80)
+
+    def add_picture(shapes, pixels, left, top, width, height):
+        stream = BytesIO()
+        pixels.save(stream, "PNG")
+        stream.seek(0)
+        return shapes.add_picture(stream, Inches(left), Inches(top), Inches(width), Inches(height))
+
+    if mode == "background":
+        add_picture(slide.shapes, image, 0, 0, 9, 7.5)
+    elif mode in {"origin", "group", "icons"}:
+        # A ordem do extrair segue a posição, mesmo com os objetos empilhados ao contrário.
+        if mode == "group":
+            group = slide.shapes.add_group_shape()
+            picture = add_picture(group.shapes, image, 1, 1, 1, 1)
+            group.width, group.height = Inches(4), Inches(3)
+        elif mode == "origin":
+            picture = add_picture(slide.shapes, image, 1, 1, 4, 3)
+        if mode != "icons":
+            picture.crop_right = 0.5
+        add_picture(slide.shapes, image, 0, 0, 1, 1)
+    elif mode in {"kept", "recropped", "different", "uncropped"}:
+        crop = {
+            "different": (80, 0, 160, 80),
+            "uncropped": (0, 0, 160, 80),
+        }.get(mode, (0, 0, 80, 80))
+        picture = add_picture(slide.shapes, image.crop(crop), 1, 1, 4, 3)
+        if mode == "recropped":
+            picture.crop_left = 0.9
+    presentation.save(path)
+
+
+@pytest.mark.parametrize("source, output, severity", [
+    ("origin", "kept", None),
+    ("origin", "recropped", None),
+    ("origin", "different", "error"),
+    ("origin", "uncropped", "error"),
+    ("origin", "empty", "error"),
+    ("group", "empty", "error"),
+    ("icons", "empty", None),
+    ("background", "empty", "warning"),
+])
+def test_content_image_fidelity(tmp_path, source, output, severity):
+    origin, deck = tmp_path / "original.pptx", tmp_path / "aula.pptx"
+    save_image_deck(origin, source)
+    save_image_deck(deck, output)
+
+    result = run_cli("conferir", deck, "--origem", origin, "--json")
+    assert result.returncode == int(severity == "error"), result.stderr or result.stdout
+    report = json.loads(result.stdout)
+    total = int(source in {"origin", "group"})
+    missing = [{"origin_slide": 1, "index": 2, "width_pct": 40, "height_pct": 40}]
+    assert report["content"]["images"] == {
+        "origin": total, "kept": total - int(severity == "error"), "omitted": 0,
+        "missing": missing if severity == "error" else [],
+    }
+    assert report["content"]["image_fidelity_pct"] == (0 if severity == "error" else 100)
+    assert [(item["rule"], item["severity"]) for item in report["findings"]] == (
+        [("content_image", severity)] if severity else []
+    )
+
+
+def test_content_image_omission_uses_extracted_index(tmp_path):
+    origin, deck = tmp_path / "original.pptx", tmp_path / "aula.pptx"
+    save_image_deck(origin, "origin")
+    save_image_deck(deck, "empty")
+    extracted = tmp_path / "extraido"
+    result = run_cli("extrair", origin, extracted)
+    assert result.returncode == 0, result.stderr
+    assert (extracted / "img/slide-1-2.png").is_file()
+
+    result = run_cli("conferir", deck, "--origem", origin)
+    assert "Imagens de conteúdo: 0 de 1 (0 omitidas)" in result.stdout
+    assert "Slide 1 da origem | Reprovação: Imagem 2 ausente." in result.stdout
+
+    result = run_cli("conferir", deck, "--origem", origin, "--imagens-omitidas", "1:1,1:2", "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    content = json.loads(result.stdout)["content"]
+    assert content["images"] == {"origin": 1, "kept": 0, "omitted": 1, "missing": []}
+    assert content["image_fidelity_pct"] == 100
+
+    result = run_cli("conferir", deck, "--json")
+    assert result.returncode == 0, result.stderr
+    assert "content" not in json.loads(result.stdout)
+
+
+@pytest.mark.parametrize("selection, message", [
+    ("1:3", "imagem inexistente"),
+    ("2:1", "imagem inexistente"),
+    ("1:0", "use slide:índice"),
+    ("1-2", "use slide:índice"),
+])
+def test_content_image_omission_rejects_invalid_index(tmp_path, selection, message):
+    deck = tmp_path / "original.pptx"
+    save_image_deck(deck, "origin")
+    result = run_cli("conferir", deck, "--origem", deck, "--imagens-omitidas", selection)
+    assert result.returncode == 2
+    assert "--imagens-omitidas" in result.stderr
+    assert selection in result.stderr
+    assert message in result.stderr
+
+
+def test_content_image_omission_requires_origin(tmp_path):
+    deck = tmp_path / "aula.pptx"
+    save_image_deck(deck, "empty")
+    result = run_cli("conferir", deck, "--imagens-omitidas", "1:2")
+    assert result.returncode == 2
+    assert "--imagens-omitidas exige --origem" in result.stderr
 
 
 @pytest.mark.parametrize("original,shapes,total", [
