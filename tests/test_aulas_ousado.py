@@ -687,6 +687,40 @@ def test_bold_text_image_contains_picture_in_available_content(tmp_path, image_s
         assert 2 * photo.left + photo.width == pytest.approx(deck.slide_width, abs=2)
 
 
+@pytest.mark.parametrize("mode", ["sangrar", "conter"])
+@pytest.mark.parametrize("panel", [{}, {"imagem": "foto.png"}, {"prompt_imagem": "Cena de teste"}],
+                         ids=["text-only", "picture", "placeholder"])
+def test_bold_text_image_reference_matches_pillars(tmp_path, mode, panel):
+    Image.new("RGB", (100, 400)).save(tmp_path / "foto.png")
+    reference = "Material bibliográfico da oficina de planejamento de aulas."
+    path = write_script(tmp_path, [
+        {"tipo": "pilares", "titulo": "Roteiro", "referencia": reference, **panel},
+        {"tipo": "texto_imagem", "titulo": "Roteiro", "texto": "Confira o roteiro.",
+         "referencia": reference, "imagem_modo": mode, **panel},
+    ])
+    out = tmp_path / "aula.pptx"
+    result = generate(path, out)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Placar do modelo: 100/100 (2 de 2 slides com 100)" in result.stdout
+
+    pillars, text_image = Presentation(out).slides
+    expected, actual = [
+        next((shape for shape in slide.shapes if shape.has_text_frame and shape.text == reference), None)
+        for slide in (pillars, text_image)
+    ]
+    assert expected is not None
+    assert actual is not None, "A referência deve aparecer no slide de texto e imagem"
+    assert (actual.left, actual.top, actual.width, actual.height) == (
+        expected.left, expected.top, expected.width, expected.height,
+    )
+    assert run_fingerprint(actual.text_frame.paragraphs[0].runs[0]) == run_fingerprint(
+        expected.text_frame.paragraphs[0].runs[0],
+    )
+    if panel:
+        picture = next(shape for shape in text_image.shapes if shape.name == "!!foto")
+        assert picture.top + picture.height <= actual.top
+
+
 @pytest.mark.parametrize("image_size,heading,at_floor", [
     ((160, 90), "Leitura e interpretação das informações do diagrama", False),
     ((300, 100), "Leitura e interpretação das informações do diagrama", False),

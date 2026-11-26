@@ -30,6 +30,7 @@ KICKER_SIZE = 8.5
 MIN_LIST_BODY_SIZE = 8
 MAX_TEXT_ONLY_BODY_SIZE = 18
 TEXT_ONLY_ITEM_TITLE_SCALE = 1.2
+REFERENCE_TOP = H - 0.4
 
 P14 = "http://schemas.microsoft.com/office/powerpoint/2010/main"
 P159 = "http://schemas.microsoft.com/office/powerpoint/2015/09/main"
@@ -286,6 +287,11 @@ def s_quote(prs, s, d):
     morph(s); an.build()
 
 
+def reference_footer(s, value, panel):
+    text(s, 4.75 if panel else M, REFERENCE_TOP, 4.8 if panel else W - 2 * M,
+         0.25, value, size=6.5, color=CINZA)
+
+
 def s_pillars(prs, s, d):
     an = Anim(s)
     bg(s, NOITE)
@@ -365,7 +371,7 @@ def s_pillars(prs, s, d):
             an.add(b, gap=200)
     if badge_text:
         badge(s, badge_text, badge_left, H - 0.7, w=badge_width, color=VINHO_ESC)
-    text(s, x, H - 0.4, 4.8 if panel else full_width, 0.25, d.get("referencia", ""), size=6.5, color=CINZA)
+    reference_footer(s, d.get("referencia", ""), panel)
     morph(s); an.build()
 
 
@@ -504,6 +510,7 @@ def s_text_image(prs, s, d):
     an = Anim(s)
     bg(s, CREME)
     panel = has_image_panel(d)
+    reference = d.get("referencia")
     contain = panel and image_mode == "conter"
     heading = d.get("titulo", "")
     label = d.get("kicker", "")
@@ -545,7 +552,7 @@ def s_text_image(prs, s, d):
         photo(s, d, image_left, body_top, W - M - image_left, body_height, contain=True)
         arrow_x, arrow_top, arrow_bottom = image_left - gutter / 2, body_top, H - M - 0.17
     elif panel:
-        photo(s, d, W - 3, 0, 3, H)
+        photo(s, d, W - 3, 0, 3, REFERENCE_TOP if reference else H)
         title_height = 1.8
         title_size = text_image_font_size([heading], title_width, title_height, 46, 18, spacing=0.9)
     else:
@@ -585,6 +592,8 @@ def s_text_image(prs, s, d):
             if content:
                 paragraphs.append(content)
             an.add(text(s, M, y, title_width, height, paragraphs, size=size, color=TEXTO), eff="up")
+    if reference:
+        reference_footer(s, reference, panel)
     morph(s); an.build()
 
 
