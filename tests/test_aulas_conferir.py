@@ -120,6 +120,10 @@ def save_image_deck(path, mode):
     elif mode in {"miniature", "off_slide_miniature"}:
         left, width = (1, 1) if mode == "miniature" else (-3, 4)
         add_picture(slide.shapes, image.crop((0, 0, 80, 80)), left, 1, width, 1)
+    elif mode in {"small_content", "half_size", "quarter_size"}:
+        # Em um slide de 75 pol², as áreas são 2,4%, 1,2% e 0,6%.
+        width = {"small_content": 1.8, "half_size": 0.9, "quarter_size": 0.45}[mode]
+        add_picture(slide.shapes, image.crop((0, 0, 80, 80)), 1, 1, width, 1)
     elif mode == "rotated_miniature":
         picture = add_picture(slide.shapes, image.crop((0, 0, 80, 80)), 2, 3, 6, 0.2)
         picture.rotation = 45
@@ -190,6 +194,8 @@ def test_content_image_fidelity(tmp_path, source, output, severity):
 
 
 @pytest.mark.parametrize("source, output, total, missing_count", [
+    ("small_content", "half_size", 1, 0),
+    ("small_content", "quarter_size", 1, 0),
     ("origin", "miniature", 1, 1),
     ("origin", "off_slide_miniature", 1, 1),
     ("origin", "rotated_miniature", 1, 1),

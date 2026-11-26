@@ -783,10 +783,10 @@ def image_signature(part, crop=None):
 
 def match_image_occurrences(origins, output, origin_order):
     matches = []
-    for signature in origins:
+    for signature, minimum_area in origins:
         matches.append([
-            index for index, signatures in enumerate(output)
-            if any(signature == digest or (
+            index for index, (signatures, area) in enumerate(output)
+            if area >= minimum_area and any(signature == digest or (
                 isinstance(signature, int) and isinstance(digest, int)
                 and (signature ^ digest).bit_count() <= 10
             ) for digest in signatures)
@@ -831,7 +831,7 @@ def compare_images(deck, source, numbers, omitted_images, findings):
             else:
                 item = {"origin_slide": number, "index": index,
                         "width_pct": round(100 * w / width, 2), "height_pct": round(100 * h / height, 2)}
-                candidates.append((part, crop, background, item))
+                candidates.append((part, crop, area * 0.25, background, item))
     if unknown:
         invalid = ", ".join(f"{slide}:{index}" for slide, index in sorted(unknown))
         raise ValueError(f"--imagens-omitidas: imagem inexistente na seleção da origem: {invalid}")
@@ -840,7 +840,7 @@ def compare_images(deck, source, numbers, omitted_images, findings):
 
     output = []
     full_signature = cache(image_signature)
-    output_min_area = deck.slide_width * deck.slide_height * 0.02
+    output_min_area = min(minimum_area for _, _, minimum_area, _, _ in candidates)
     for slide in deck.slides:
         for part, crop, _, _, area in slide_images(slide, deck.slide_width, deck.slide_height):
             if area < output_min_area:
@@ -850,13 +850,14 @@ def compare_images(deck, source, numbers, omitted_images, findings):
                 signature = image_signature(part, crop)
                 if signature is not None:
                     signatures.add(signature)
-            output.append(signatures)
+            output.append((signatures, area))
 
     # A falta de conteúdo reprova, por isso o pareamento de fundos tem menor prioridade.
-    origin_order = sorted(range(len(candidates)), key=lambda index: candidates[index][2])
-    signatures = [image_signature(part, crop) for part, crop, _, _ in candidates]
-    matched = match_image_occurrences(signatures, output, origin_order)
-    for index, (_, _, background, item) in enumerate(candidates):
+    origin_order = sorted(range(len(candidates)), key=lambda index: candidates[index][3])
+    origins = [(image_signature(part, crop), minimum_area)
+               for part, crop, minimum_area, _, _ in candidates]
+    matched = match_image_occurrences(origins, output, origin_order)
+    for index, (_, _, _, background, item) in enumerate(candidates):
         if index in matched:
             images["kept"] += not background
             continue
