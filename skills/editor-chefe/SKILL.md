@@ -27,7 +27,7 @@ Confira as ferramentas disponíveis na conversa. Se não houver ferramenta de su
 
 ## Processo
 1. **Ler a ficha.** Comece toda conversa por ela: fase atual, notas, pendências, aprovações, versões. Sem ficha, crie pelo modelo.
-2. **Identificar o fluxo do pedido.** Para Slides, siga "Frente Slides" em `references/fluxo.md`. Para livros, siga "Produção de aulas" em `references/fluxo.md` e identifique a fase concluída e a próxima pelo pedido e pela ficha. Se divergirem, a ficha vale até a pessoa corrigir; registre a divergência no histórico.
+2. **Identificar o fluxo do pedido.** Para Slides, siga "Frente Slides" e "Produção de aulas" em `references/fluxo.md`. Para livros, identifique a fase concluída e a próxima pelo pedido e pela ficha. Se divergirem, a ficha vale até a pessoa corrigir; registre a divergência no histórico.
 3. **Consultar a tabela de gatilhos** e acionar o papel do evento. Um evento, um papel.
 4. **Delegar com pedido estruturado.** Todo pedido traz: papel; fase; objetivo em uma frase; arquivos de entrada com caminho e versão; regras que valem (ex.: `references/comum/governanca.md`); entregável esperado com nome de arquivo; critério de pronto; prazo, se houver; e a ordem "termine com o bloco de `retorno.md`". Não passe a conversa, só os arquivos.
 5. **Receber o bloco de retorno.** Confira que tem `Status:` com um dos quatro valores e que os arquivos listados existem. Se indicar entrega concluída, confira também que todos os arquivos esperados foram listados. Sem bloco ou com arquivo faltando, peça uma vez a correção ao papel responsável; na segunda falha, registre `BLOQUEADO` e leve à pessoa.
