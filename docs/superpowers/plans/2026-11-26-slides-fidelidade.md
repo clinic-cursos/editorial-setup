@@ -92,7 +92,7 @@ Com Docker para a prévia: deck "cagado" de propósito, gerado a partir do rotei
 
 ## Status
 
-- Feito: cartões 1 a 4 executados pelo Codex (placar, `--origem`, textos e versão 0.2.9, comparação por parágrafo); suíte completa verde no cartão 3. Ensaio no HOF real: o deck gerado do roteiro do modelo tira 100 nos 16 slides; o HOF refeito à mão (fora do modelo) tira média 28; o HOF aprovado na 0.2.8 (nota 91) tira 100 no placar mas só 92,67% de conteúdo preservado, com 67 parágrafos cortados ou alterados.
-- Em andamento: revisão única pelo `cross-reviewer`.
+- Feito: PR #16 (cartões 1 a 7, versão 0.2.9) e PR #17 (correção de parágrafo repetido, achada no teste de ponta a ponta) mergeados em 26/11/2026. Teste de ponta a ponta: deck estragado pego nos três defeitos; slides 4, 8 e 18 do HOF refeitos em 7 slides com placar 100 e conteúdo 100% (revisor: v2 bloqueada com 88, v3 aprovada com 94); ajuste pontual reprova só a troca pedida. O HOF aprovado na 0.2.8 preserva 92,67% do texto original.
+- Em andamento: nada.
 - Travado: nada.
-- Próximo passo: PR, integrate, merge, teste de ponta a ponta e aviso à Paula sobre o HOF 0.2.8.
+- Próximo passo: publicar a release 0.2.9 para a Paula; avaliar campo de referência no `texto_imagem` do ousado e checagem de imagens no `--origem` (hoje só texto).
