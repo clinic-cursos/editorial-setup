@@ -33,7 +33,7 @@ Depois do merge, rodar de novo o `conferir` nos mesmos decks do teste (deck estr
 
 ## Status
 
-- Feito: C5 (`referencia` no `texto_imagem`) mergeado no PR #19. C1, C2, C3, C1b, C4 e C6 na branch do PR #20; o C6 foi redespachado depois de um reinício da máquina, a partir do patch parcial salvo. Limite conhecido: imagem no layout do PowerPoint (fora do slide) não é conferida.
-- Em andamento: 2ª rodada de revisão do PR #20.
+- Feito: C5 no PR #19; C1, C2, C3, C1b, C4 e C6 no PR #20; C7 (tamanho relativo da imagem, falso alarme achado na medição) no PR #21; release 0.3.0 publicada em 26/11/2026. Medição final: HOF 0.2.8 com 93,2% do texto e 110 de 132 imagens de conteúdo; refatoração v3 com 100% do texto e 2 de 3 imagens mais 1 omitida. Limites conhecidos: imagem no layout do PowerPoint (fora do slide) não é conferida; imagem de exatos 2% com rotação pode ser classificada como ícone.
+- Em andamento: nada.
 - Travado: nada.
-- Próximo passo: merge do PR #20, medição final das notas e release 0.3.0 para a Paula.
+- Próximo passo: a Paula atualiza para a 0.3.0; geração de imagem por API só depois do Fluxo 1, se o Alify aprovar.
